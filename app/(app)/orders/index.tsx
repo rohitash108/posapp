@@ -78,8 +78,17 @@ export default function OrdersScreen() {
 
   const filtered = activeFilter === 'all' ? orders : orders.filter(o => o.status === activeFilter);
 
+  const SOURCE_COLORS: Record<string, { color: string; bg: string }> = {
+    zomato: { color: '#d00000', bg: '#fff0f0' },
+    swiggy: { color: '#fc8019', bg: '#fff7ed' },
+    qr:     { color: '#7c3aed', bg: '#f5f3ff' },
+    pos:    { color: '#1A2B1A', bg: '#f0f2f0' },
+  };
+
   const OrderCard = ({ o }: { o: Order }) => {
     const cfg = STATUS_CONFIG[o.status] ?? { color: '#94A3B8', bg: '#F8FAFC', border: '#E2E8F0', icon: 'ellipse-outline', label: o.status };
+    const src = o.source ?? 'pos';
+    const srcCfg = SOURCE_COLORS[src] ?? SOURCE_COLORS.pos;
     return (
       <View style={[cs.card, { borderLeftColor: cfg.color }, isDesktop && cs.cardDesktop]}>
         {/* Card top */}
@@ -89,6 +98,11 @@ export default function OrdersScreen() {
             <View style={[cs.typeBadge, { backgroundColor: '#F1F5F9' }]}>
               <Text style={cs.typeText}>{o.order_type?.replace('_', ' ').toUpperCase() ?? 'DINE IN'}</Text>
             </View>
+            {src !== 'pos' && (
+              <View style={[cs.typeBadge, { backgroundColor: srcCfg.bg }]}>
+                <Text style={[cs.typeText, { color: srcCfg.color }]}>{src.toUpperCase()}</Text>
+              </View>
+            )}
           </View>
           <View style={[cs.statusBadge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
             <Ionicons name={cfg.icon as any} size={12} color={cfg.color} />

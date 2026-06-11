@@ -71,7 +71,39 @@ export interface Customer {
   phone?: string;
   email?: string;
   address?: string;
+  balance?: number;
+  notes?: string;
   updated_at?: string;
+}
+
+export interface Reservation {
+  id: number;
+  customer_name: string;
+  customer_phone?: string;
+  guest_count: number;
+  restaurant_table_id?: number;
+  table_name?: string;
+  reserved_at: string;
+  status: 'pending' | 'confirmed' | 'seated' | 'cancelled' | 'no_show';
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Expense {
+  id: number;
+  title: string;
+  amount: number;
+  category_id?: number;
+  category_name?: string;
+  expense_date: string;
+  notes?: string;
+  created_at?: string;
+}
+
+export interface ExpenseCategory {
+  id: number;
+  name: string;
 }
 
 export interface Tax {
@@ -80,6 +112,7 @@ export interface Tax {
   rate: number;
 }
 
+export type OrderSource = 'pos' | 'zomato' | 'swiggy' | 'qr';
 export type OrderType = 'dine_in' | 'takeaway' | 'delivery';
 export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
 export type PaymentStatus = 'unpaid' | 'paid' | 'pending';
@@ -101,13 +134,17 @@ export interface Order {
   id: number;
   order_number: string;
   order_type: OrderType;
+  source?: OrderSource;
+  external_id?: string;
   status: OrderStatus;
   payment_status: PaymentStatus;
   payment_method?: PaymentMethod;
   restaurant_table_id?: number;
+  table_name?: string;
   customer_id?: number;
   customer_name?: string;
   customer_phone?: string;
+  delivery_address?: string;
   subtotal: number;
   tax_amount: number;
   discount_amount: number;
@@ -151,4 +188,21 @@ export interface SyncQueueItem {
   payload: string;
   created_at: string;
   retries: number;
+}
+
+// Aggregator action codes (DynoAPIs / DAMS protocol)
+export type AggregatorAction = 'accept' | 'reject' | 'ready';
+export const AGGREGATOR_STATUS_CODES: Record<AggregatorAction, number> = {
+  accept: 1,
+  reject: 2,
+  ready:  3,
+};
+
+export interface DashboardStats {
+  today_sales: number;
+  today_orders: number;
+  pending_orders: number;
+  preparing_orders: number;
+  zomato_orders: number;
+  swiggy_orders: number;
 }

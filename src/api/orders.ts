@@ -1,7 +1,8 @@
 import client from './client';
 
 export const ordersApi = {
-  list: (page = 1) => client.get('/orders', { params: { page } }),
+  list: (params?: { page?: number; status?: string; source?: string; per_page?: number }) =>
+    client.get('/orders', { params }),
   show: (id: number) => client.get(`/orders/${id}`),
   create: (payload: any) => client.post('/orders', payload),
   updateStatus: (id: number, status: string) =>
