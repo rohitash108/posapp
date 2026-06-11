@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -16,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
@@ -24,6 +27,13 @@ jobs:
 
       - name: Build Expo web app
         run: npx expo export -p web
+
+      - name: Copy PWA files
+        run: |
+          copy public\manifest.json dist\
+          copy public\sw.js dist\
+          copy public\icon-192.png dist\
+          copy public\icon-512.png dist\
 
       - name: Build Windows portable exe
         run: npx electron-builder --win portable
