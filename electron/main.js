@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, session } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -12,16 +12,38 @@ const MIME = {
   '.css': 'text/css',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
   '.ico': 'image/x-icon',
   '.json': 'application/json',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.svg': 'image/svg+xml',
 };
 
 function getDistPath() {
   return app.isPackaged
     ? path.join(process.resourcesPath, 'dist')
     : path.join(__dirname, '..', 'dist');
+}
+
+function setupCORS() {
+  // Allow all API requests from localhost to the backend server
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const headers = Object.assign({}, details.responseHeaders);
+    headers['Access-Control-Allow-Origin'] = ['*'];
+    headers['Access-Control-Allow-Methods'] = ['GET, POST, PUT, PATCH, DELETE, OPTIONS'];
+    headers['Access-Control-Allow-Headers'] = ['Content-Type, Authorization, Accept, X-Requested-With'];
+    headers['Access-Control-Allow-Credentials'] = ['true'];
+    callback({ responseHeaders: headers });
+  });
+
+  // Handle OPTIONS preflight requests
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    const headers = Object.assign({}, details.requestHeaders);
+    headers['Origin'] = 'https://restaurant.softwar.in';
+    callback({ requestHeaders: headers });
+  });
 }
 
 function startServer(onReady) {
@@ -82,6 +104,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: false,
     },
   });
 
@@ -91,6 +114,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  setupCORS();
   startServer(() => {
     createWindow();
   });

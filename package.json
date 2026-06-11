@@ -53,25 +53,7 @@
     },
     "files": ["main.js", "package.json"],
     "extraResources": [
-      { "from": "dist", "to": "dist" },
-      { "from": "node_modules/express", "to": "node_modules/express" },
-      { "from": "node_modules/mime-types", "to": "node_modules/mime-types" },
-      { "from": "node_modules/mime-db", "to": "node_modules/mime-db" },
-      { "from": "node_modules/send", "to": "node_modules/send" },
-      { "from": "node_modules/serve-static", "to": "node_modules/serve-static" },
-      { "from": "node_modules/finalhandler", "to": "node_modules/finalhandler" },
-      { "from": "node_modules/on-finished", "to": "node_modules/on-finished" },
-      { "from": "node_modules/ms", "to": "node_modules/ms" },
-      { "from": "node_modules/range-parser", "to": "node_modules/range-parser" },
-      { "from": "node_modules/escape-html", "to": "node_modules/escape-html" },
-      { "from": "node_modules/etag", "to": "node_modules/etag" },
-      { "from": "node_modules/fresh", "to": "node_modules/fresh" },
-      { "from": "node_modules/destroy", "to": "node_modules/destroy" },
-      { "from": "node_modules/depd", "to": "node_modules/depd" },
-      { "from": "node_modules/statuses", "to": "node_modules/statuses" },
-      { "from": "node_modules/inherits", "to": "node_modules/inherits" },
-      { "from": "node_modules/encodeurl", "to": "node_modules/encodeurl" },
-      { "from": "node_modules/setprototypeof", "to": "node_modules/setprototypeof" }
+      { "from": "dist", "to": "dist" }
     ],
     "win": {
       "target": "portable"
