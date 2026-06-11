@@ -12,10 +12,24 @@ import { useCartStore } from '@/store/cartStore';
 import { useAppStore } from '@/store/appStore';
 import { ordersApi } from '@/api/orders';
 import client from '@/api/client';
-import type { Category, Item } from '@/types';
+import type { Category, Item, Variation } from '@/types';
 
 const FOOD_COLORS: Record<string, string> = { veg: '#22c55e', non_veg: '#ef4444', egg: '#f59e0b' };
 const FOOD_LABELS: Record<string, string> = { veg: 'VEG', non_veg: 'NON-VEG', egg: 'EGG' };
+
+function getItemDisplayPrice(item: Item): string {
+  if (item.variations && item.variations.length > 0) {
+    const prices = item.variations.map(v => v.price);
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    return min === max ? `₹${min.toFixed(2)}` : `₹${min.toFixed(2)} - ₹${max.toFixed(2)}`;
+  }
+  return `₹${(item.price || 0).toFixed(2)}`;
+}
+
+function hasVariations(item: Item): boolean {
+  return item.variations && item.variations.length > 0;
+}
 
 export default function POSScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -24,6 +38,7 @@ export default function POSScreen() {
   const [search, setSearch] = useState('');
   const [showCart, setShowCart] = useState(false);
   const [placing, setPlacing] = useState(false);
+  const [variationItem, setVariationItem] = useState<Item | null>(null);
   const { cart, addItem, updateQuantity, clearCart, getSubtotal, getTotal } = useCartStore();
   const { isOnline, taxes } = useAppStore();
   const defaultTaxRate = taxes[0]?.rate ?? 0;
@@ -33,12 +48,10 @@ export default function POSScreen() {
 
   const loadData = useCallback(async () => {
     if (Platform.OS === 'web') {
-      // Try API first; fall back to IndexedDB if offline
       try {
         const res = await client.get('/sync/pull');
         const cats: Category[] = res.data.categories ?? [];
         const items: Item[] = res.data.items ?? [];
-        // Save to IndexedDB so offline works next time
         webSaveCategories(cats).catch(console.warn);
         webSaveItems(items).catch(console.warn);
         setCategories(cats);
@@ -46,7 +59,6 @@ export default function POSScreen() {
         if (cats.length > 0) setActiveCategoryId(cats[0].id);
         useAppStore.getState().setTaxes(res.data.taxes ?? []);
       } catch {
-        // Offline — load from IndexedDB cache
         const hasData = await webHasData();
         if (hasData) {
           const cats = await webGetCategories();
@@ -76,17 +88,42 @@ export default function POSScreen() {
   useEffect(() => { loadItems(); }, [activeCategoryId]);
 
   const displayItems = Platform.OS === 'web'
-    ? allItems.filter(i => (!activeCategoryId || i.category_id === activeCategoryId) && (!search.trim() || i.name.toLowerCase().includes(search.toLowerCase())))
-    : search.trim() ? allItems.filter(i => i.name.toLowerCase().includes(search.toLowerCase())) : allItems;
+    ? allItems.filter(i =>
+        (!activeCategoryId || i.category_id === activeCategoryId) &&
+        (!search.trim() || i.name.toLowerCase().includes(search.toLowerCase()))
+      )
+    : search.trim()
+      ? allItems.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+      : allItems;
 
-  function handleAdd(item: Item) {
-    const existing = cart.items.find(i => i.item_id === item.id);
+  function addToCart(item: Item, variation?: Variation) {
+    const price = variation ? variation.price : (item.price || 0);
+    const variationName = variation ? variation.name : undefined;
+    const existing = cart.items.find(i =>
+      i.item_id === item.id && i.variation === variationName
+    );
     if (existing) {
       updateQuantity(existing.uuid, existing.quantity + 1);
     } else {
-      addItem({ item_id: item.id, name: item.name, addons: [], quantity: 1, unit_price: item.price, total_price: item.price });
+      addItem({
+        item_id: item.id,
+        name: item.name,
+        variation: variationName,
+        addons: [],
+        quantity: 1,
+        unit_price: price,
+        total_price: price,
+      });
     }
-    if (!isDesktop) Toast.show({ type: 'success', text1: `${item.name} added`, visibilityTime: 700 });
+    if (!isDesktop) Toast.show({ type: 'success', text1: `${item.name}${variationName ? ` (${variationName})` : ''} added`, visibilityTime: 700 });
+  }
+
+  function handleAdd(item: Item) {
+    if (hasVariations(item)) {
+      setVariationItem(item);
+    } else {
+      addToCart(item);
+    }
   }
 
   async function handlePlaceOrder() {
@@ -117,8 +154,7 @@ export default function POSScreen() {
         } catch (apiErr: any) {
           if (!apiErr?.response) { savedOffline = true; }
           else {
-            const errData = apiErr?.response?.data;
-            Alert.alert('Order Failed', errData?.message ?? `Server error ${apiErr?.response?.status}`);
+            Alert.alert('Order Failed', apiErr?.response?.data?.message ?? `Server error ${apiErr?.response?.status}`);
             setPlacing(false); return;
           }
         }
@@ -143,6 +179,40 @@ export default function POSScreen() {
   const subtotal = getSubtotal();
   const taxAmount = parseFloat(((subtotal * defaultTaxRate) / 100).toFixed(2));
   const total = getTotal(defaultTaxRate);
+
+  // Variation selection modal
+  const VariationModal = () => (
+    <Modal visible={!!variationItem} transparent animationType="fade" onRequestClose={() => setVariationItem(null)}>
+      <View style={vm.overlay}>
+        <View style={vm.sheet}>
+          <View style={vm.sheetHeader}>
+            <View>
+              <Text style={vm.sheetTitle}>{variationItem?.name}</Text>
+              <Text style={vm.sheetSub}>Select a variation</Text>
+            </View>
+            <TouchableOpacity onPress={() => setVariationItem(null)} style={vm.closeBtn}>
+              <Ionicons name="close" size={20} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={vm.varList}>
+            {variationItem?.variations.map((v) => (
+              <TouchableOpacity
+                key={v.id}
+                style={vm.varRow}
+                onPress={() => { addToCart(variationItem!, v); setVariationItem(null); }}
+              >
+                <View style={vm.varLeft}>
+                  <View style={vm.varDot} />
+                  <Text style={vm.varName}>{v.name}</Text>
+                </View>
+                <Text style={vm.varPrice}>₹{v.price.toFixed(2)}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
 
   const CartPanel = () => (
     <View style={ds.cartPanel}>
@@ -175,7 +245,10 @@ export default function POSScreen() {
             <View key={item.uuid} style={ds.cartItem}>
               <View style={ds.cartItemInfo}>
                 <Text style={ds.cartItemName} numberOfLines={1}>{item.name}</Text>
-                <Text style={ds.cartItemPrice}>₹{item.unit_price.toFixed(2)}</Text>
+                {item.variation && (
+                  <Text style={ds.cartVariation}>{item.variation}</Text>
+                )}
+                <Text style={ds.cartItemPrice}>₹{item.unit_price.toFixed(2)} each</Text>
               </View>
               <View style={ds.qtyControl}>
                 <TouchableOpacity style={ds.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity - 1)}>
@@ -216,6 +289,8 @@ export default function POSScreen() {
   if (isDesktop) {
     return (
       <View style={ds.container}>
+        <VariationModal />
+
         {/* Categories sidebar */}
         <View style={ds.catSidebar}>
           <Text style={ds.catSidebarTitle}>CATEGORIES</Text>
@@ -255,20 +330,31 @@ export default function POSScreen() {
             contentContainerStyle={ds.itemGrid}
             renderItem={({ item }) => {
               const inCart = cart.items.find(c => c.item_id === item.id);
+              const isVariation = hasVariations(item);
               return (
                 <TouchableOpacity style={[ds.itemCard, inCart && ds.itemCardActive]} onPress={() => handleAdd(item)}>
-                  {item.food_type && (
-                    <View style={[ds.foodBadge, { backgroundColor: FOOD_COLORS[item.food_type] + '20' }]}>
-                      <View style={[ds.foodDot, { backgroundColor: FOOD_COLORS[item.food_type] }]} />
-                      <Text style={[ds.foodLabel, { color: FOOD_COLORS[item.food_type] }]}>{FOOD_LABELS[item.food_type]}</Text>
-                    </View>
-                  )}
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+                    {item.food_type ? (
+                      <View style={[ds.foodBadge, { backgroundColor: FOOD_COLORS[item.food_type] + '20' }]}>
+                        <View style={[ds.foodDot, { backgroundColor: FOOD_COLORS[item.food_type] }]} />
+                        <Text style={[ds.foodLabel, { color: FOOD_COLORS[item.food_type] }]}>{FOOD_LABELS[item.food_type]}</Text>
+                      </View>
+                    ) : <View />}
+                    {isVariation && (
+                      <View style={ds.varBadge}>
+                        <Text style={ds.varBadgeText}>{item.variations.length} var</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={ds.itemName} numberOfLines={2}>{item.name}</Text>
                   <View style={ds.itemBottom}>
-                    <Text style={ds.itemPrice}>₹{item.price.toFixed(2)}</Text>
+                    <View>
+                      <Text style={ds.itemPrice}>{getItemDisplayPrice(item)}</Text>
+                      {isVariation && <Text style={ds.tapToSelect}>Tap to select</Text>}
+                    </View>
                     {inCart && (
                       <View style={ds.inCartBadge}>
-                        <Text style={ds.inCartText}>{inCart.quantity}</Text>
+                        <Text style={ds.inCartText}>{cart.items.filter(c => c.item_id === item.id).reduce((s, c) => s + c.quantity, 0)}</Text>
                       </View>
                     )}
                   </View>
@@ -293,6 +379,7 @@ export default function POSScreen() {
   // Mobile layout
   return (
     <View style={ms.container}>
+      <VariationModal />
       <View style={ms.searchRow}>
         <Ionicons name="search" size={16} color="#aaa" style={{ marginRight: 8 }} />
         <TextInput style={ms.searchInput} placeholder="Search items..." value={search} onChangeText={setSearch} placeholderTextColor="#aaa" />
@@ -311,7 +398,8 @@ export default function POSScreen() {
           <TouchableOpacity style={ms.itemCard} onPress={() => handleAdd(item)}>
             {item.food_type && <View style={[ms.dot, { backgroundColor: FOOD_COLORS[item.food_type] }]} />}
             <Text style={ms.itemName} numberOfLines={2}>{item.name}</Text>
-            <Text style={ms.itemPrice}>₹{item.price.toFixed(2)}</Text>
+            <Text style={ms.itemPrice}>{getItemDisplayPrice(item)}</Text>
+            {hasVariations(item) && <Text style={ms.varHint}>Tap to select</Text>}
           </TouchableOpacity>
         )}
       />
@@ -333,6 +421,7 @@ export default function POSScreen() {
               <View style={ms.cartItem}>
                 <View style={{ flex: 1 }}>
                   <Text style={ms.cartName}>{item.name}</Text>
+                  {item.variation && <Text style={ms.cartVariation}>{item.variation}</Text>}
                   <Text style={ms.cartUnit}>₹{item.unit_price.toFixed(2)} each</Text>
                 </View>
                 <View style={ms.qtyRow}>
@@ -358,11 +447,25 @@ export default function POSScreen() {
   );
 }
 
+// Variation modal styles
+const vm = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  sheet: { backgroundColor: '#fff', borderRadius: 20, width: '100%', maxWidth: 420, maxHeight: '70%', overflow: 'hidden' },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 20, backgroundColor: '#1A2B1A' },
+  sheetTitle: { fontSize: 17, fontWeight: '800', color: '#fff' },
+  sheetSub: { fontSize: 12, color: '#4A6A4A', marginTop: 3 },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+  varList: { padding: 12 },
+  varRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, marginBottom: 8, backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E8F0' },
+  varLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  varDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#C9A52A' },
+  varName: { fontSize: 15, fontWeight: '600', color: '#0F172A' },
+  varPrice: { fontSize: 17, fontWeight: '800', color: '#C9A52A' },
+});
+
 // Desktop styles
 const ds = StyleSheet.create({
   container: { flex: 1, flexDirection: 'row', backgroundColor: '#F4F6F4' },
-
-  // Category sidebar
   catSidebar: { width: 200, backgroundColor: '#1A2B1A', paddingTop: 12, overflow: 'hidden' },
   catSidebarTitle: { color: '#2D4A2D', fontSize: 9, fontWeight: '700', letterSpacing: 2, paddingHorizontal: 16, marginBottom: 8, marginTop: 4 },
   catSidebarItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, marginHorizontal: 8, borderRadius: 10, marginBottom: 2, gap: 10, position: 'relative', overflow: 'hidden' },
@@ -372,28 +475,27 @@ const ds = StyleSheet.create({
   catIconBoxActive: { backgroundColor: 'rgba(201,165,42,0.15)' },
   catSidebarText: { color: '#4A6A4A', fontSize: 13, fontWeight: '500', flex: 1 },
   catSidebarTextActive: { color: '#fff', fontWeight: '700' },
-
-  // Items area
   itemsArea: { flex: 1, display: 'flex', flexDirection: 'column' },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', margin: 14, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1.5, borderColor: '#E2E8F0', gap: 10, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
   searchInput: { flex: 1, fontSize: 15, color: '#0F172A' },
   itemCount: { color: '#94A3B8', fontSize: 12, paddingHorizontal: 16, marginBottom: 6, fontWeight: '500' },
   itemRow: { paddingHorizontal: 12, gap: 10 },
   itemGrid: { paddingBottom: 24, gap: 10, paddingHorizontal: 12 },
-  itemCard: { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1.5, borderColor: '#E2E8F0', minHeight: 115, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
+  itemCard: { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1.5, borderColor: '#E2E8F0', minHeight: 120, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
   itemCardActive: { borderColor: '#C9A52A', backgroundColor: '#FFFDF5', shadowColor: '#C9A52A', shadowOpacity: 0.12, shadowRadius: 8, elevation: 3 },
-  foodBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start', marginBottom: 8 },
+  foodBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start' },
   foodDot: { width: 6, height: 6, borderRadius: 3 },
   foodLabel: { fontSize: 9, fontWeight: '700' },
-  itemName: { fontSize: 14, fontWeight: '600', color: '#0F172A', flex: 1, marginBottom: 10, lineHeight: 20 },
-  itemBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  itemPrice: { fontSize: 16, fontWeight: '800', color: '#C9A52A' },
+  varBadge: { backgroundColor: '#EFF6FF', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  varBadgeText: { fontSize: 9, fontWeight: '700', color: '#3B82F6' },
+  itemName: { fontSize: 14, fontWeight: '600', color: '#0F172A', marginBottom: 10, lineHeight: 20 },
+  itemBottom: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  itemPrice: { fontSize: 15, fontWeight: '800', color: '#C9A52A' },
+  tapToSelect: { fontSize: 10, color: '#94A3B8', marginTop: 2 },
   inCartBadge: { backgroundColor: '#1A2B1A', borderRadius: 12, width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
   inCartText: { color: '#C9A52A', fontSize: 12, fontWeight: '800' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
   emptyText: { color: '#CBD5E1', fontSize: 16, marginTop: 12 },
-
-  // Cart panel
   cartPanel: { width: 310, backgroundColor: '#fff', borderLeftWidth: 1, borderLeftColor: '#E2E8F0', display: 'flex', flexDirection: 'column', shadowColor: '#1A2B1A', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: -2, height: 0 }, elevation: 4 },
   cartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#1A2B1A' },
   cartTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
@@ -405,7 +507,8 @@ const ds = StyleSheet.create({
   cartItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#F8FAFC', gap: 8 },
   cartItemInfo: { flex: 1 },
   cartItemName: { fontSize: 13, fontWeight: '600', color: '#0F172A' },
-  cartItemPrice: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  cartVariation: { fontSize: 11, color: '#C9A52A', fontWeight: '600', marginTop: 1 },
+  cartItemPrice: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
   qtyControl: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   qtyBtn: { width: 28, height: 28, backgroundColor: '#F8FAFC', borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
   qtyText: { fontSize: 14, fontWeight: '700', color: '#0F172A', minWidth: 22, textAlign: 'center' },
@@ -437,6 +540,7 @@ const ms = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, marginBottom: 6 },
   itemName: { fontSize: 14, fontWeight: '600', color: '#1a1a1a', marginBottom: 6 },
   itemPrice: { fontSize: 15, fontWeight: '700', color: '#C9A52A' },
+  varHint: { fontSize: 10, color: '#94A3B8', marginTop: 2 },
   fab: { position: 'absolute', bottom: 16, right: 16, left: 16, backgroundColor: '#1A2B1A', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', elevation: 8 },
   badge: { backgroundColor: '#C9A52A', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, marginLeft: 8 },
   badgeText: { color: '#1A2B1A', fontWeight: '800', fontSize: 13 },
@@ -446,6 +550,7 @@ const ms = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
   cartItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
   cartName: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
+  cartVariation: { fontSize: 12, color: '#C9A52A', fontWeight: '600', marginTop: 1 },
   cartUnit: { fontSize: 13, color: '#888', marginTop: 2 },
   qtyRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 10 },
   qtyBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' },
