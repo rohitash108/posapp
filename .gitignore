@@ -1,0 +1,6 @@
+node_modules/
+electron-dist/
+.expo/
+*.log
+.env
+.env.local

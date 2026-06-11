@@ -1,0 +1,83 @@
+{
+  "name": "cspos-mobile",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "build:web": "npx expo export -p web",
+    "electron:dev": "npm run build:web && electron electron/main.js",
+    "electron:build:win": "npm run build:web && electron-builder --win portable"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.3",
+    "@react-native-community/netinfo": "11.4.1",
+    "axios": "^1.7.7",
+    "date-fns": "^3.6.0",
+    "expo": "~54.0.0",
+    "expo-asset": "~12.0.13",
+    "expo-linking": "^56.0.14",
+    "expo-router": "~6.0.24",
+    "expo-secure-store": "~15.0.8",
+    "expo-sqlite": "~16.0.10",
+    "expo-status-bar": "~3.0.9",
+    "express": "^4.18.2",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "react-native-toast-message": "^2.2.1",
+    "react-native-uuid": "^2.0.2",
+    "react-native-web": "^0.21.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@types/react": "~18.3.0",
+    "babel-plugin-module-resolver": "^5.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "~5.3.3"
+  },
+  "build": {
+    "appId": "com.gtc.pos",
+    "productName": "GTC POS",
+    "copyright": "© 2025 Global Tea Cafe",
+    "directories": {
+      "app": "electron",
+      "output": "electron-dist",
+      "buildResources": "assets"
+    },
+    "files": ["main.js", "package.json"],
+    "extraResources": [
+      { "from": "dist", "to": "dist" },
+      { "from": "node_modules/express", "to": "node_modules/express" },
+      { "from": "node_modules/mime-types", "to": "node_modules/mime-types" },
+      { "from": "node_modules/mime-db", "to": "node_modules/mime-db" },
+      { "from": "node_modules/send", "to": "node_modules/send" },
+      { "from": "node_modules/serve-static", "to": "node_modules/serve-static" },
+      { "from": "node_modules/finalhandler", "to": "node_modules/finalhandler" },
+      { "from": "node_modules/on-finished", "to": "node_modules/on-finished" },
+      { "from": "node_modules/ms", "to": "node_modules/ms" },
+      { "from": "node_modules/range-parser", "to": "node_modules/range-parser" },
+      { "from": "node_modules/escape-html", "to": "node_modules/escape-html" },
+      { "from": "node_modules/etag", "to": "node_modules/etag" },
+      { "from": "node_modules/fresh", "to": "node_modules/fresh" },
+      { "from": "node_modules/destroy", "to": "node_modules/destroy" },
+      { "from": "node_modules/depd", "to": "node_modules/depd" },
+      { "from": "node_modules/statuses", "to": "node_modules/statuses" },
+      { "from": "node_modules/inherits", "to": "node_modules/inherits" },
+      { "from": "node_modules/encodeurl", "to": "node_modules/encodeurl" },
+      { "from": "node_modules/setprototypeof", "to": "node_modules/setprototypeof" }
+    ],
+    "win": {
+      "target": "portable"
+    },
+    "portable": {
+      "requestExecutionLevel": "user"
+    }
+  }
+}

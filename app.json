@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "csPos Mobile",
+    "slug": "cspos-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cspos.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/gtc-logo.png",
+        "backgroundColor": "#1A2B1A"
+      },
+      "package": "com.cspos.mobile"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/gtc-logo.png",
+      "name": "GTC POS — Global Tea Cafe",
+      "shortName": "GTC POS",
+      "description": "Restaurant POS System for Global Tea Cafe",
+      "backgroundColor": "#1A2B1A",
+      "themeColor": "#1A2B1A",
+      "display": "standalone",
+      "orientation": "any",
+      "startUrl": "/"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      ["expo-sqlite", { "enableFTS": true }]
+    ],
+    "scheme": "cspos"
+  }
+}
