@@ -6,26 +6,26 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import uuid from 'react-native-uuid';
-import Toast from 'react-native-toast-message';
 import { getCategories, getItems, addToSyncQueue, createLocalOrder } from '@/database/repositories';
-import { webGetCategories, webGetItems, webSaveOrder, webAddSyncQueue, webHasData, webSaveCategories, webSaveItems } from '@/utils/webDb';
+import { webGetItems, webSaveOrder, webAddSyncQueue, webHasData, webSaveCategories, webSaveItems, webGetCategories } from '@/utils/webDb';
 import { useCartStore } from '@/store/cartStore';
 import { useAppStore } from '@/store/appStore';
 import { ordersApi } from '@/api/orders';
 import client, { API_BASE_URL } from '@/api/client';
-import type { Category, Item, Variation, RestaurantTable } from '@/types';
+import type { Category, Item, Variation, RestaurantTable, Customer } from '@/types';
 
 const SERVER_URL = API_BASE_URL.replace('/api/mobile', '');
 const FOOD_COLORS: Record<string, string> = { veg: '#10b981', non_veg: '#ef4444', egg: '#f59e0b' };
+
 const PAYMENT_METHODS = [
-  { key: 'cash',  label: 'Cash',  icon: 'cash-outline' as const },
-  { key: 'card',  label: 'Card',  icon: 'card-outline' as const },
-  { key: 'upi',   label: 'UPI',   icon: 'qr-code-outline' as const },
+  { key: 'cash', label: 'Cash', icon: 'cash-outline' as const },
+  { key: 'card', label: 'Card', icon: 'card-outline' as const },
+  { key: 'upi',  label: 'UPI',  icon: 'qr-code-outline' as const },
 ];
 const ORDER_TYPES = [
-  { key: 'dine_in',   label: 'Dine In',   icon: 'restaurant-outline' as const },
-  { key: 'takeaway',  label: 'Takeaway',  icon: 'bag-handle-outline' as const },
-  { key: 'delivery',  label: 'Delivery',  icon: 'bicycle-outline' as const },
+  { key: 'dine_in',  label: 'Dine In',  icon: 'restaurant-outline' as const },
+  { key: 'takeaway', label: 'Takeaway', icon: 'bag-handle-outline'  as const },
+  { key: 'delivery', label: 'Delivery', icon: 'bicycle-outline'     as const },
 ];
 
 function itemImageUrl(img?: string) {
@@ -45,56 +45,65 @@ function getDisplayPrice(item: Item): string {
 }
 
 export default function POSScreen() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [allItems, setAllItems] = useState<Item[]>([]);
-  const [tables, setTables] = useState<RestaurantTable[]>([]);
-  const [activeCatId, setActiveCatId] = useState<number | null>(null);
-  const [search, setSearch] = useState('');
-  const [foodFilter, setFoodFilter] = useState<Record<string, boolean>>({ veg: true, non_veg: true, egg: true });
+  const [categories, setCategories]     = useState<Category[]>([]);
+  const [allItems, setAllItems]         = useState<Item[]>([]);
+  const [tables, setTables]             = useState<RestaurantTable[]>([]);
+  const [customers, setCustomers]       = useState<Customer[]>([]);
+  const [activeCatId, setActiveCatId]   = useState<number | null>(null);
+  const [search, setSearch]             = useState('');
+  const [foodFilter, setFoodFilter]     = useState<Record<string, boolean>>({ veg: true, non_veg: true, egg: true });
   const [variationItem, setVariationItem] = useState<Item | null>(null);
-  const [showCart, setShowCart] = useState(false);
-  const [placing, setPlacing] = useState(false);
+  const [showCart, setShowCart]         = useState(false);
+  const [showCustPicker, setShowCustPicker] = useState(false);
+  const [placing, setPlacing]           = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [walkInName, setWalkInName] = useState('');
+  const [walkInName, setWalkInName]     = useState('');
+  const [custSearch, setCustSearch]     = useState('');
 
-  const { cart, addItem, updateQuantity, clearCart, getSubtotal, getTotal, setOrderType, setTable, setCustomer } = useCartStore();
+  const { cart, addItem, updateQuantity, clearCart, getSubtotal, getTotal,
+          setOrderType, setTable, setCustomer } = useCartStore();
   const { isOnline, taxes } = useAppStore();
   const taxRate = taxes[0]?.rate ?? 0;
   const { width } = useWindowDimensions();
   const isDesktop = width >= 900;
   const cols = width >= 1400 ? 5 : width >= 1100 ? 4 : width >= 768 ? 3 : 2;
 
+  // ── Load data ──────────────────────────────────────────────
   const loadData = useCallback(async () => {
     if (Platform.OS === 'web') {
       try {
         const res = await client.get('/sync/pull');
         const cats: Category[] = res.data.categories ?? [];
-        const items: Item[] = res.data.items ?? [];
+        const items: Item[]    = res.data.items ?? [];
         const tbls: RestaurantTable[] = res.data.tables ?? [];
         webSaveCategories(cats).catch(console.warn);
         webSaveItems(items).catch(console.warn);
         setCategories(cats);
         setAllItems(items);
         setTables(tbls);
-        if (cats.length > 0) setActiveCatId(cats[0].id);
+        if (cats.length > 0) setActiveCatId(null);
         useAppStore.getState().setTaxes(res.data.taxes ?? []);
       } catch {
         const hasData = await webHasData();
         if (hasData) {
-          const cats = await webGetCategories();
+          const cats  = await webGetCategories();
           const items = await webGetItems();
           setCategories(cats);
           setAllItems(items);
-          if (cats.length > 0) setActiveCatId(cats[0].id);
         } else {
-          Alert.alert('Offline', 'No cached data. Connect to internet once to load menu.');
+          Alert.alert('Offline', 'No cached data. Connect to internet to load menu.');
         }
       }
     } else {
       const cats = await getCategories();
       setCategories(cats);
-      if (cats.length > 0) setActiveCatId(cats[0].id);
     }
+    // Load customers for picker
+    try {
+      const res = await client.get('/customers');
+      const data = res.data?.data ?? res.data ?? [];
+      setCustomers(Array.isArray(data) ? data : []);
+    } catch { /* ignore */ }
   }, []);
 
   const loadItems = useCallback(async () => {
@@ -107,28 +116,25 @@ export default function POSScreen() {
   useEffect(() => { loadData(); }, []);
   useEffect(() => { loadItems(); }, [activeCatId]);
 
+  // ── Filtered items ─────────────────────────────────────────
   const displayItems = (() => {
     let items = Platform.OS === 'web'
       ? allItems.filter(i => !activeCatId || i.category_id === activeCatId)
       : allItems;
-    if (search.trim()) {
-      items = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
-    }
-    items = items.filter(i => {
-      const ft = i.food_type || 'veg';
-      return foodFilter[ft] !== false;
-    });
+    if (search.trim()) items = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+    items = items.filter(i => foodFilter[i.food_type || 'veg'] !== false);
     return items;
   })();
 
+  // ── Cart helpers ───────────────────────────────────────────
   function addToCart(item: Item, variation?: Variation) {
     const price = variation ? variation.price : (item.price || 0);
-    const variationName = variation ? variation.name : undefined;
-    const existing = cart.items.find(i => i.item_id === item.id && i.variation === variationName);
+    const varName = variation?.name;
+    const existing = cart.items.find(i => i.item_id === item.id && i.variation === varName);
     if (existing) {
       updateQuantity(existing.uuid, existing.quantity + 1);
     } else {
-      addItem({ item_id: item.id, name: item.name, variation: variationName, addons: [], quantity: 1, unit_price: price, total_price: price });
+      addItem({ item_id: item.id, name: item.name, variation: varName, addons: [], quantity: 1, unit_price: price, total_price: price });
     }
   }
 
@@ -137,7 +143,6 @@ export default function POSScreen() {
       setVariationItem(item);
     } else {
       addToCart(item);
-      if (!isDesktop) Toast.show({ type: 'success', text1: `${item.name} added`, visibilityTime: 600 });
     }
   }
 
@@ -145,98 +150,122 @@ export default function POSScreen() {
     return cart.items.filter(c => c.item_id === item.id).reduce((s, c) => s + c.quantity, 0);
   }
 
+  // ── Place order ────────────────────────────────────────────
   async function handlePlaceOrder() {
-    if (cart.items.length === 0) { Alert.alert('Cart empty', 'Add items first.'); return; }
+    if (cart.items.length === 0) {
+      Alert.alert('Cart empty', 'Please add items before placing an order.');
+      return;
+    }
     setPlacing(true);
-    const localUuid = uuid.v4() as string;
-    const subtotal = getSubtotal();
-    const taxAmount = parseFloat(((subtotal * taxRate) / 100).toFixed(2));
-    const total = getTotal(taxRate);
-    if (walkInName) setCustomer(undefined, walkInName, undefined);
-    const payload = {
-      local_uuid: localUuid, order_type: cart.order_type, status: 'pending',
-      payment_status: 'unpaid', payment_method: paymentMethod,
-      restaurant_table_id: cart.table_id,
-      customer_name: walkInName || cart.customer_name || 'Walk-in',
-      customer_phone: cart.customer_phone,
-      subtotal, tax_amount: taxAmount,
-      discount_amount: cart.discount_amount, total, received_amount: 0, notes: cart.notes,
-      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      items: cart.items.map(i => ({
-        item_id: i.item_id, name: i.name, variation: i.variation,
-        addons: i.addons, quantity: i.quantity, unit_price: i.unit_price, total_price: i.total_price,
-      })),
-    };
     try {
-      let savedOffline = false;
+      const localUuid  = uuid.v4() as string;
+      const subtotal   = getSubtotal();
+      const taxAmount  = parseFloat(((subtotal * taxRate) / 100).toFixed(2));
+      const total      = getTotal(taxRate);
+      const custName   = walkInName.trim() || cart.customer_name || 'Walk-in';
+
+      const payload = {
+        local_uuid:           localUuid,
+        order_type:           cart.order_type,
+        status:               'pending',
+        payment_status:       'unpaid',
+        payment_method:       paymentMethod,
+        restaurant_table_id:  cart.table_id ?? null,
+        customer_id:          cart.customer_id ?? null,
+        customer_name:        custName,
+        customer_phone:       cart.customer_phone ?? null,
+        subtotal,
+        tax_amount:           taxAmount,
+        discount_amount:      cart.discount_amount ?? 0,
+        total,
+        received_amount:      0,
+        notes:                cart.notes ?? null,
+        items: cart.items.map(i => ({
+          item_id:     i.item_id,
+          name:        i.name,
+          variation:   i.variation ?? null,
+          quantity:    i.quantity,
+          unit_price:  i.unit_price,
+          total_price: i.total_price,
+        })),
+      };
+
       if (isOnline) {
         try {
           await ordersApi.create(payload);
-          Toast.show({ type: 'success', text1: 'Order placed!', text2: 'Synced to server.' });
+          Alert.alert('Order Placed!', `Order for ${custName} has been sent to kitchen.`);
+          clearCart();
+          setWalkInName('');
+          setShowCart(false);
+          return;
         } catch (apiErr: any) {
-          if (!apiErr?.response) { savedOffline = true; }
-          else {
-            Alert.alert('Order Failed', apiErr?.response?.data?.message ?? `Server error ${apiErr?.response?.status}`);
-            setPlacing(false); return;
+          const status  = apiErr?.response?.status;
+          const message = apiErr?.response?.data?.message
+            ?? apiErr?.response?.data?.error
+            ?? (apiErr?.message || 'Network error');
+
+          if (status) {
+            // Server returned a real HTTP error — show it and stop
+            Alert.alert(`Order Failed (${status})`, message);
+            return;
           }
+          // No response — network issue, fall through to offline save
+          Alert.alert(
+            'Network Issue',
+            'Could not reach server. Saving offline — will sync when connection returns.',
+            [{ text: 'OK' }]
+          );
         }
-      } else { savedOffline = true; }
-      if (savedOffline) {
-        if (Platform.OS === 'web') {
-          await webSaveOrder({ ...payload, local_uuid: localUuid });
-          await webAddSyncQueue({ id: localUuid, action: 'create_order', payload: JSON.stringify(payload), created_at: new Date().toISOString() });
-        } else {
-          await createLocalOrder({ ...payload, items: payload.items as any } as any);
-          await addToSyncQueue({ id: localUuid, action: 'create_order', payload: JSON.stringify(payload), created_at: new Date().toISOString() });
-        }
-        Toast.show({ type: 'info', text1: 'Saved offline', text2: 'Will sync when online.' });
       }
-      clearCart(); setWalkInName(''); setShowCart(false);
+
+      // Offline save
+      if (Platform.OS === 'web') {
+        await webSaveOrder({ ...payload });
+        await webAddSyncQueue({
+          id: localUuid, action: 'create_order',
+          payload: JSON.stringify(payload), created_at: new Date().toISOString(),
+        });
+      } else {
+        await createLocalOrder({ ...payload, items: payload.items as any } as any);
+        await addToSyncQueue({
+          id: localUuid, action: 'create_order',
+          payload: JSON.stringify(payload), created_at: new Date().toISOString(),
+        });
+      }
+      Alert.alert('Saved Offline', 'Order saved locally and will sync when back online.');
+      clearCart();
+      setWalkInName('');
+      setShowCart(false);
+
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Unknown error');
-    } finally { setPlacing(false); }
+      Alert.alert('Error', e?.message || 'An unexpected error occurred. Please try again.');
+    } finally {
+      setPlacing(false);
+    }
   }
 
+  // ── Computed ───────────────────────────────────────────────
   const cartCount = cart.items.reduce((s, i) => s + i.quantity, 0);
-  const subtotal = getSubtotal();
+  const subtotal  = getSubtotal();
   const taxAmount = parseFloat(((subtotal * taxRate) / 100).toFixed(2));
-  const total = getTotal(taxRate);
+  const total     = getTotal(taxRate);
 
-  // Variation modal
-  const VariationModal = () => (
-    <Modal visible={!!variationItem} transparent animationType="fade" onRequestClose={() => setVariationItem(null)}>
-      <View style={st.vmOverlay}>
-        <View style={st.vmSheet}>
-          <View style={st.vmHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={st.vmTitle}>{variationItem?.name}</Text>
-              <Text style={st.vmSub}>Select variation</Text>
-            </View>
-            <TouchableOpacity onPress={() => setVariationItem(null)} style={st.vmClose}>
-              <Ionicons name="close" size={18} color="#6b7280" />
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={{ padding: 10 }}>
-            {variationItem?.variations.map((v) => (
-              <TouchableOpacity key={v.id} style={st.vmRow} onPress={() => { addToCart(variationItem!, v); setVariationItem(null); }}>
-                <View style={st.vmDot} />
-                <Text style={st.vmName}>{v.name}</Text>
-                <Text style={st.vmPrice}>₹{v.price.toFixed(2)}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
+  const filteredCustomers = customers.filter(c =>
+    !custSearch || c.name.toLowerCase().includes(custSearch.toLowerCase()) ||
+    (c.phone ?? '').includes(custSearch)
   );
 
-  // Cart panel (right side on desktop, modal on mobile)
-  const CartContent = () => (
+  // ── Inline cart JSX — NOT a sub-component (avoids remount on each keystroke) ──
+  const cartJSX = (
     <View style={{ flex: 1 }}>
       {/* Order type tabs */}
       <View style={st.orderTabs}>
         {ORDER_TYPES.map(t => (
-          <TouchableOpacity key={t.key} style={[st.orderTab, cart.order_type === t.key && st.orderTabActive]} onPress={() => setOrderType(t.key as any)}>
+          <TouchableOpacity
+            key={t.key}
+            style={[st.orderTab, cart.order_type === t.key && st.orderTabActive]}
+            onPress={() => setOrderType(t.key as any)}
+          >
             <Ionicons name={t.icon} size={13} color={cart.order_type === t.key ? '#1A2B1A' : '#6b7280'} />
             <Text style={[st.orderTabText, cart.order_type === t.key && st.orderTabTextActive]}>{t.label}</Text>
           </TouchableOpacity>
@@ -245,26 +274,55 @@ export default function POSScreen() {
 
       {/* Customer + Table */}
       <View style={st.customerRow}>
+        {/* Customer name / picker */}
         <View style={st.customerField}>
           <Text style={st.fieldLabel}>Customer</Text>
-          <View style={st.fieldInput}>
-            <Ionicons name="person-outline" size={14} color="#9ca3af" />
-            <TextInput
-              style={st.fieldText}
-              placeholder="Walk-in"
-              value={walkInName}
-              onChangeText={setWalkInName}
-              placeholderTextColor="#9ca3af"
-            />
+          <View style={st.fieldInputRow}>
+            <View style={[st.fieldInput, { flex: 1 }]}>
+              <Ionicons name="person-outline" size={14} color="#9ca3af" />
+              <TextInput
+                style={st.fieldText}
+                placeholder={cart.customer_name ? cart.customer_name : 'Walk-in'}
+                value={walkInName}
+                onChangeText={setWalkInName}
+                placeholderTextColor="#9ca3af"
+                returnKeyType="done"
+              />
+              {(walkInName || cart.customer_name) && (
+                <TouchableOpacity onPress={() => { setWalkInName(''); setCustomer(undefined, undefined, undefined); }}>
+                  <Ionicons name="close-circle" size={15} color="#9ca3af" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity style={st.custPickerBtn} onPress={() => setShowCustPicker(true)}>
+              <Ionicons name="people" size={15} color="#0D76E1" />
+            </TouchableOpacity>
           </View>
+          {cart.customer_name && !walkInName && (
+            <Text style={st.custSelected}>
+              <Ionicons name="checkmark-circle" size={11} color="#10b981" /> {cart.customer_name}
+            </Text>
+          )}
         </View>
+
+        {/* Table selector (dine in only) */}
         {cart.order_type === 'dine_in' && tables.length > 0 && (
           <View style={st.customerField}>
             <Text style={st.fieldLabel}>Table</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
               <View style={{ flexDirection: 'row', gap: 6 }}>
+                <TouchableOpacity
+                  style={[st.tableChip, !cart.table_id && st.tableChipActive]}
+                  onPress={() => setTable(undefined)}
+                >
+                  <Text style={[st.tableChipText, !cart.table_id && st.tableChipTextActive]}>None</Text>
+                </TouchableOpacity>
                 {tables.map(t => (
-                  <TouchableOpacity key={t.id} style={[st.tableChip, cart.table_id === t.id && st.tableChipActive]} onPress={() => setTable(t.id)}>
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[st.tableChip, cart.table_id === t.id && st.tableChipActive]}
+                    onPress={() => setTable(t.id)}
+                  >
                     <Text style={[st.tableChipText, cart.table_id === t.id && st.tableChipTextActive]}>{t.name}</Text>
                   </TouchableOpacity>
                 ))}
@@ -289,26 +347,24 @@ export default function POSScreen() {
             <Text style={st.emptyCartText}>Cart is empty</Text>
             <Text style={st.emptyCartSub}>Tap items to add them here</Text>
           </View>
-        ) : (
-          cart.items.map(item => (
-            <View key={item.uuid} style={st.cartRow}>
-              <View style={{ flex: 1, marginRight: 4 }}>
-                <Text style={st.cartRowName} numberOfLines={1}>{item.name}</Text>
-                {item.variation && <Text style={st.cartRowVar}>{item.variation}</Text>}
-              </View>
-              <View style={st.qtyRow}>
-                <TouchableOpacity style={st.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity - 1)}>
-                  <Ionicons name="remove" size={12} color="#374151" />
-                </TouchableOpacity>
-                <Text style={st.qtyNum}>{item.quantity}</Text>
-                <TouchableOpacity style={st.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity + 1)}>
-                  <Ionicons name="add" size={12} color="#374151" />
-                </TouchableOpacity>
-              </View>
-              <Text style={st.cartRowPrice}>₹{item.total_price.toFixed(2)}</Text>
+        ) : cart.items.map(item => (
+          <View key={item.uuid} style={st.cartRow}>
+            <View style={{ flex: 1, marginRight: 4 }}>
+              <Text style={st.cartRowName} numberOfLines={1}>{item.name}</Text>
+              {item.variation && <Text style={st.cartRowVar}>{item.variation}</Text>}
             </View>
-          ))
-        )}
+            <View style={st.qtyRow}>
+              <TouchableOpacity style={st.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity - 1)}>
+                <Ionicons name="remove" size={12} color="#374151" />
+              </TouchableOpacity>
+              <Text style={st.qtyNum}>{item.quantity}</Text>
+              <TouchableOpacity style={st.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity + 1)}>
+                <Ionicons name="add" size={12} color="#374151" />
+              </TouchableOpacity>
+            </View>
+            <Text style={st.cartRowPrice}>₹{item.total_price.toFixed(2)}</Text>
+          </View>
+        ))}
       </ScrollView>
 
       {/* Summary */}
@@ -322,7 +378,11 @@ export default function POSScreen() {
       {/* Payment method */}
       <View style={st.payRow}>
         {PAYMENT_METHODS.map(pm => (
-          <TouchableOpacity key={pm.key} style={[st.payBtn, paymentMethod === pm.key && st.payBtnActive]} onPress={() => setPaymentMethod(pm.key)}>
+          <TouchableOpacity
+            key={pm.key}
+            style={[st.payBtn, paymentMethod === pm.key && st.payBtnActive]}
+            onPress={() => setPaymentMethod(pm.key)}
+          >
             <Ionicons name={pm.icon} size={15} color={paymentMethod === pm.key ? '#fff' : '#374151'} />
             <Text style={[st.payBtnText, paymentMethod === pm.key && st.payBtnTextActive]}>{pm.label}</Text>
           </TouchableOpacity>
@@ -331,18 +391,27 @@ export default function POSScreen() {
 
       {/* Checkout buttons */}
       <View style={st.checkoutRow}>
-        <TouchableOpacity style={[st.checkoutBtn, st.checkoutBtnSave, (placing || cartCount === 0) && { opacity: 0.45 }]} onPress={handlePlaceOrder} disabled={placing || cartCount === 0}>
-          {placing ? <ActivityIndicator color="#fff" size="small" /> : (
-            <>
-              <Ionicons name="checkmark-circle" size={18} color="#fff" />
-              <View style={{ marginLeft: 6 }}>
-                <Text style={st.checkoutBtnLabel}>{isOnline ? 'Place Order' : 'Save Offline'}</Text>
-                {cartCount > 0 && <Text style={st.checkoutBtnTotal}>₹{total.toFixed(2)}</Text>}
-              </View>
-            </>
-          )}
+        <TouchableOpacity
+          style={[st.checkoutBtn, st.checkoutBtnSave, (placing || cartCount === 0) && { opacity: 0.45 }]}
+          onPress={handlePlaceOrder}
+          disabled={placing || cartCount === 0}
+        >
+          {placing
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <>
+                <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                <View style={{ marginLeft: 6 }}>
+                  <Text style={st.checkoutBtnLabel}>{isOnline ? 'Place Order' : 'Save Offline'}</Text>
+                  {cartCount > 0 && <Text style={st.checkoutBtnTotal}>₹{total.toFixed(2)}</Text>}
+                </View>
+              </>
+          }
         </TouchableOpacity>
-        <TouchableOpacity style={[st.checkoutBtn, st.checkoutBtnKot, (cartCount === 0) && { opacity: 0.45 }]} onPress={clearCart} disabled={cartCount === 0}>
+        <TouchableOpacity
+          style={[st.checkoutBtn, st.checkoutBtnClear, cartCount === 0 && { opacity: 0.45 }]}
+          onPress={() => { clearCart(); setWalkInName(''); }}
+          disabled={cartCount === 0}
+        >
           <Ionicons name="trash-outline" size={16} color="#fff" />
           <Text style={[st.checkoutBtnLabel, { marginLeft: 6 }]}>Clear</Text>
         </TouchableOpacity>
@@ -350,25 +419,25 @@ export default function POSScreen() {
     </View>
   );
 
-  // ─── Item card ───
-  const ItemCard = ({ item }: { item: Item }) => {
-    const qty = getCartQty(item);
+  // ── Item card ──────────────────────────────────────────────
+  function renderItemCard(item: Item) {
+    const qty    = getCartQty(item);
     const imgUrl = itemImageUrl(item.image);
-    const ft = item.food_type;
+    const ft     = item.food_type;
     return (
-      <TouchableOpacity style={[st.itemCard, qty > 0 && st.itemCardActive]} onPress={() => handleAdd(item)} activeOpacity={0.82}>
-        {qty > 0 && (
-          <View style={st.inCartBadge}><Text style={st.inCartBadgeText}>×{qty}</Text></View>
-        )}
+      <TouchableOpacity
+        key={item.id}
+        style={[st.itemCard, qty > 0 && st.itemCardActive]}
+        onPress={() => handleAdd(item)}
+        activeOpacity={0.82}
+      >
+        {qty > 0 && <View style={st.inCartBadge}><Text style={st.inCartBadgeText}>×{qty}</Text></View>}
         {ft && <View style={[st.foodDot, { backgroundColor: FOOD_COLORS[ft] }]} />}
         <View style={st.itemImgWrap}>
-          {imgUrl ? (
-            <Image source={{ uri: imgUrl }} style={st.itemImg} resizeMode="cover" />
-          ) : (
-            <View style={st.itemImgPlaceholder}>
-              <Ionicons name="restaurant-outline" size={22} color="#d1d5db" />
-            </View>
-          )}
+          {imgUrl
+            ? <Image source={{ uri: imgUrl }} style={st.itemImg} resizeMode="cover" />
+            : <View style={st.itemImgPlaceholder}><Ionicons name="restaurant-outline" size={22} color="#d1d5db" /></View>
+          }
         </View>
         <Text style={st.itemName} numberOfLines={2}>{item.name}</Text>
         <View style={st.itemBottom}>
@@ -377,14 +446,121 @@ export default function POSScreen() {
         </View>
       </TouchableOpacity>
     );
-  };
+  }
 
+  // ── Variation modal ────────────────────────────────────────
+  const variationModal = (
+    <Modal visible={!!variationItem} transparent animationType="fade" onRequestClose={() => setVariationItem(null)}>
+      <View style={st.vmOverlay}>
+        <View style={st.vmSheet}>
+          <View style={st.vmHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={st.vmTitle}>{variationItem?.name}</Text>
+              <Text style={st.vmSub}>Select size / variation</Text>
+            </View>
+            <TouchableOpacity onPress={() => setVariationItem(null)} style={st.vmClose}>
+              <Ionicons name="close" size={18} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={{ padding: 10 }}>
+            {variationItem?.variations.map(v => (
+              <TouchableOpacity
+                key={v.id}
+                style={st.vmRow}
+                onPress={() => { addToCart(variationItem!, v); setVariationItem(null); }}
+              >
+                <View style={st.vmDot} />
+                <Text style={st.vmName}>{v.name}</Text>
+                <Text style={st.vmPrice}>₹{v.price.toFixed(2)}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // ── Customer picker modal ──────────────────────────────────
+  const custPickerModal = (
+    <Modal visible={showCustPicker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCustPicker(false)}>
+      <View style={{ flex: 1, backgroundColor: '#f5f6f8' }}>
+        <View style={st.cpHeader}>
+          <Text style={st.cpTitle}>Select Customer</Text>
+          <TouchableOpacity onPress={() => setShowCustPicker(false)}>
+            <Ionicons name="close" size={22} color="#374151" />
+          </TouchableOpacity>
+        </View>
+        <View style={st.cpSearch}>
+          <Ionicons name="search" size={16} color="#9ca3af" />
+          <TextInput
+            style={st.cpSearchInput}
+            placeholder="Search by name or phone..."
+            value={custSearch}
+            onChangeText={setCustSearch}
+            placeholderTextColor="#9ca3af"
+            autoFocus
+          />
+        </View>
+        {/* Walk-in option */}
+        <TouchableOpacity
+          style={st.cpRow}
+          onPress={() => { setCustomer(undefined, undefined, undefined); setWalkInName(''); setShowCustPicker(false); setCustSearch(''); }}
+        >
+          <View style={[st.cpAvatar, { backgroundColor: '#6b7280' }]}>
+            <Ionicons name="person-outline" size={16} color="#fff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={st.cpName}>Walk-in Customer</Text>
+            <Text style={st.cpPhone}>No account</Text>
+          </View>
+        </TouchableOpacity>
+        <ScrollView>
+          {filteredCustomers.map(c => (
+            <TouchableOpacity
+              key={c.id}
+              style={st.cpRow}
+              onPress={() => {
+                setCustomer(c.id, c.name, c.phone);
+                setWalkInName('');
+                setShowCustPicker(false);
+                setCustSearch('');
+              }}
+            >
+              <View style={st.cpAvatar}>
+                <Text style={st.cpAvatarText}>{c.name.charAt(0).toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={st.cpName}>{c.name}</Text>
+                {c.phone && <Text style={st.cpPhone}>{c.phone}</Text>}
+              </View>
+              {cart.customer_id === c.id && <Ionicons name="checkmark-circle" size={20} color="#10b981" />}
+            </TouchableOpacity>
+          ))}
+          {filteredCustomers.length === 0 && custSearch.length > 0 && (
+            <View style={{ padding: 30, alignItems: 'center' }}>
+              <Text style={{ color: '#9ca3af', fontSize: 14 }}>No customers found</Text>
+              <TouchableOpacity style={st.cpAddNew} onPress={() => {
+                setWalkInName(custSearch);
+                setShowCustPicker(false);
+                setCustSearch('');
+              }}>
+                <Text style={st.cpAddNewText}>Use "{custSearch}" as walk-in name</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+
+  // ── Desktop layout ─────────────────────────────────────────
   if (isDesktop) {
     return (
       <View style={st.shell}>
-        <VariationModal />
+        {variationModal}
+        {custPickerModal}
 
-        {/* ── LEFT: Category rail ── */}
+        {/* LEFT: Category rail */}
         <View style={st.rail}>
           <Text style={st.railTitle}>Categories</Text>
           <ScrollView showsVerticalScrollIndicator={false} style={st.railScroll}>
@@ -393,7 +569,12 @@ export default function POSScreen() {
             ].map(c => {
               const active = activeCatId === c.id;
               return (
-                <TouchableOpacity key={c.id ?? 'all'} style={[st.railItem, active && st.railItemActive]} onPress={() => setActiveCatId(c.id)} activeOpacity={0.75}>
+                <TouchableOpacity
+                  key={String(c.id ?? 'all')}
+                  style={[st.railItem, active && st.railItemActive]}
+                  onPress={() => setActiveCatId(c.id)}
+                  activeOpacity={0.75}
+                >
                   <Ionicons name={c.id === null ? 'grid-outline' : 'pricetag-outline'} size={13} color={active ? '#0D76E1' : '#9ca3af'} />
                   <Text style={[st.railItemText, active && st.railItemTextActive]} numberOfLines={1}>{c.name}</Text>
                   <View style={[st.railCount, active && st.railCountActive]}>
@@ -405,34 +586,44 @@ export default function POSScreen() {
           </ScrollView>
         </View>
 
-        {/* ── CENTER: Items ── */}
+        {/* CENTER: Items */}
         <View style={st.main}>
-          {/* Search + filter chips */}
           <View style={st.topbar}>
             <View style={st.searchWrap}>
               <Ionicons name="search" size={16} color="#9ca3af" />
-              <TextInput style={st.searchInput} placeholder="Search items..." value={search} onChangeText={setSearch} placeholderTextColor="#9ca3af" />
+              <TextInput
+                style={st.searchInput}
+                placeholder="Search items..."
+                value={search}
+                onChangeText={setSearch}
+                placeholderTextColor="#9ca3af"
+              />
               {search ? <TouchableOpacity onPress={() => setSearch('')}><Ionicons name="close-circle" size={16} color="#9ca3af" /></TouchableOpacity> : null}
             </View>
             <View style={st.chips}>
               {(['veg', 'non_veg', 'egg'] as const).map(ft => (
-                <TouchableOpacity key={ft} style={[st.chip, foodFilter[ft] && st.chipActive]} onPress={() => setFoodFilter(p => ({ ...p, [ft]: !p[ft] }))}>
+                <TouchableOpacity
+                  key={ft}
+                  style={[st.chip, foodFilter[ft] && st.chipActive]}
+                  onPress={() => setFoodFilter(p => ({ ...p, [ft]: !p[ft] }))}
+                >
                   <View style={[st.chipDot, { backgroundColor: FOOD_COLORS[ft] }]} />
-                  <Text style={[st.chipText, foodFilter[ft] && st.chipTextActive]}>{ft === 'veg' ? 'Veg' : ft === 'non_veg' ? 'Non-Veg' : 'Egg'}</Text>
+                  <Text style={[st.chipText, foodFilter[ft] && st.chipTextActive]}>
+                    {ft === 'veg' ? 'Veg' : ft === 'non_veg' ? 'Non-Veg' : 'Egg'}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
-
           <Text style={st.itemCount}>{displayItems.length} items</Text>
-
           <FlatList
             data={displayItems}
             keyExtractor={i => String(i.id)}
-            numColumns={cols} key={`grid-${cols}`}
+            numColumns={cols}
+            key={`grid-${cols}`}
             columnWrapperStyle={{ gap: 10, paddingHorizontal: 12 }}
             contentContainerStyle={{ gap: 10, paddingHorizontal: 12, paddingBottom: 20 }}
-            renderItem={({ item }) => <ItemCard item={item} />}
+            renderItem={({ item }) => renderItemCard(item)}
             ListEmptyComponent={
               <View style={st.emptyGrid}>
                 <Ionicons name="restaurant-outline" size={36} color="#e5e7eb" />
@@ -442,57 +633,61 @@ export default function POSScreen() {
           />
         </View>
 
-        {/* ── RIGHT: Cart ── */}
+        {/* RIGHT: Cart — inline JSX, not a sub-component */}
         <View style={st.cart}>
           <View style={st.cartHeader}>
             <Ionicons name="receipt-outline" size={16} color="#fff" />
             <Text style={st.cartHeaderTitle}>Order</Text>
             {cartCount > 0 && (
-              <View style={st.cartHeaderBadge}><Text style={st.cartHeaderBadgeText}>{cartCount}</Text></View>
+              <View style={st.cartHeaderBadge}>
+                <Text style={st.cartHeaderBadgeText}>{cartCount}</Text>
+              </View>
             )}
             {cartCount > 0 && (
-              <TouchableOpacity style={st.cartClearBtn} onPress={clearCart}>
+              <TouchableOpacity style={st.cartClearBtn} onPress={() => { clearCart(); setWalkInName(''); }}>
                 <Ionicons name="trash-outline" size={14} color="#fff" />
               </TouchableOpacity>
             )}
           </View>
-          <CartContent />
+          {cartJSX}
         </View>
       </View>
     );
   }
 
-  // ── MOBILE ──
+  // ── Mobile layout ──────────────────────────────────────────
   return (
     <View style={st.mShell}>
-      <VariationModal />
+      {variationModal}
+      {custPickerModal}
 
-      {/* Category chips row */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.mCatRow} contentContainerStyle={{ paddingHorizontal: 10, gap: 6 }}>
         {[{ id: null, name: 'All' }, ...categories.map(c => ({ id: c.id, name: c.name }))].map(c => (
-          <TouchableOpacity key={c.id ?? 'all'} style={[st.mCatChip, activeCatId === c.id && st.mCatChipActive]} onPress={() => setActiveCatId(c.id)}>
+          <TouchableOpacity
+            key={String(c.id ?? 'all')}
+            style={[st.mCatChip, activeCatId === c.id && st.mCatChipActive]}
+            onPress={() => setActiveCatId(c.id)}
+          >
             <Text style={[st.mCatChipText, activeCatId === c.id && st.mCatChipTextActive]}>{c.name}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
 
-      {/* Search */}
       <View style={st.mSearchRow}>
         <Ionicons name="search" size={15} color="#9ca3af" />
         <TextInput style={st.mSearchInput} placeholder="Search..." value={search} onChangeText={setSearch} placeholderTextColor="#9ca3af" />
       </View>
 
-      {/* Items grid */}
       <FlatList
         data={displayItems}
         keyExtractor={i => String(i.id)}
-        numColumns={2} key="mobile-2"
+        numColumns={2}
+        key="mobile-2"
         columnWrapperStyle={{ gap: 8, paddingHorizontal: 10 }}
         contentContainerStyle={{ gap: 8, paddingHorizontal: 10, paddingBottom: 100, paddingTop: 6 }}
-        renderItem={({ item }) => <ItemCard item={item} />}
+        renderItem={({ item }) => renderItemCard(item)}
       />
 
-      {/* FAB */}
       {cartCount > 0 && (
         <TouchableOpacity style={st.mFab} onPress={() => setShowCart(true)}>
           <Ionicons name="cart" size={22} color="#fff" />
@@ -501,7 +696,7 @@ export default function POSScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Cart modal */}
+      {/* Mobile cart modal — inline cartJSX, not a sub-component */}
       <Modal visible={showCart} animationType="slide" presentationStyle="pageSheet">
         <View style={{ flex: 1, backgroundColor: '#fff' }}>
           <View style={st.cartHeader}>
@@ -512,7 +707,7 @@ export default function POSScreen() {
               <Ionicons name="close" size={22} color="#fff" />
             </TouchableOpacity>
           </View>
-          <CartContent />
+          {cartJSX}
         </View>
       </Modal>
     </View>
@@ -522,14 +717,12 @@ export default function POSScreen() {
 const TEAL = '#0f8f73';
 
 const st = StyleSheet.create({
-  // Shell
   shell: { flex: 1, flexDirection: 'row', backgroundColor: '#f0f2f7' },
 
-  // Category rail (white, left)
   rail: { width: 160, backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: '#e5e7eb', flexDirection: 'column' },
   railTitle: { fontSize: 9.5, fontWeight: '700', color: '#6b7280', letterSpacing: 1.2, textTransform: 'uppercase', padding: 12, paddingBottom: 6 },
   railScroll: { flex: 1 },
-  railItem: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 10, paddingVertical: 9, marginHorizontal: 6, marginBottom: 1, borderRadius: 8, backgroundColor: 'transparent' },
+  railItem: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 10, paddingVertical: 9, marginHorizontal: 6, marginBottom: 1, borderRadius: 8 },
   railItemActive: { backgroundColor: 'rgba(13,118,225,0.09)' },
   railItemText: { flex: 1, fontSize: 12.5, fontWeight: '500', color: '#374151' },
   railItemTextActive: { color: '#0D76E1', fontWeight: '700' },
@@ -538,7 +731,6 @@ const st = StyleSheet.create({
   railCountText: { fontSize: 10, color: '#6b7280', fontWeight: '600' },
   railCountTextActive: { color: '#0D76E1' },
 
-  // Main center
   main: { flex: 1, flexDirection: 'column', overflow: 'hidden' },
   topbar: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, flexWrap: 'wrap' },
   searchWrap: { flex: 1, minWidth: 160, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, gap: 8 },
@@ -551,7 +743,6 @@ const st = StyleSheet.create({
   chipTextActive: { color: '#1d4ed8' },
   itemCount: { fontSize: 11.5, color: '#9ca3af', fontWeight: '500', paddingHorizontal: 14, marginBottom: 4 },
 
-  // Item card
   itemCard: { flex: 1, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', padding: 8, overflow: 'hidden', position: 'relative' },
   itemCardActive: { borderColor: '#93c5fd', shadowColor: '#0D76E1', shadowOpacity: 0.1, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   inCartBadge: { position: 'absolute', top: 8, left: 8, zIndex: 3, backgroundColor: '#0D76E1', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 },
@@ -567,7 +758,6 @@ const st = StyleSheet.create({
   emptyGrid: { alignItems: 'center', paddingTop: 60, gap: 10 },
   emptyGridText: { color: '#d1d5db', fontSize: 14 },
 
-  // Cart panel
   cart: { width: 340, backgroundColor: '#fff', borderLeftWidth: 1, borderLeftColor: '#e5e7eb', flexDirection: 'column' },
   cartHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: TEAL },
   cartHeaderTitle: { fontSize: 14, fontWeight: '700', color: '#fff', flex: 1 },
@@ -575,25 +765,25 @@ const st = StyleSheet.create({
   cartHeaderBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   cartClearBtn: { width: 28, height: 28, borderRadius: 7, backgroundColor: 'rgba(239,68,68,0.3)', alignItems: 'center', justifyContent: 'center' },
 
-  // Order type tabs
   orderTabs: { flexDirection: 'row', backgroundColor: '#f5f6f8', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  orderTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10, borderRadius: 0 },
+  orderTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10 },
   orderTabActive: { backgroundColor: '#fff', borderBottomWidth: 2, borderBottomColor: '#0D76E1' },
   orderTabText: { fontSize: 11.5, fontWeight: '600', color: '#6b7280' },
   orderTabTextActive: { color: '#0D76E1' },
 
-  // Customer + table
   customerRow: { padding: 10, gap: 8, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  customerField: {},
-  fieldLabel: { fontSize: 11, color: '#6b7280', fontWeight: '500', marginBottom: 4 },
+  customerField: { gap: 4 },
+  fieldLabel: { fontSize: 11, color: '#6b7280', fontWeight: '500' },
+  fieldInputRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   fieldInput: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f5f6f8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e5e7eb' },
   fieldText: { flex: 1, fontSize: 13.5, color: '#111827' },
+  custPickerBtn: { width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(13,118,225,0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#93c5fd' },
+  custSelected: { fontSize: 11, color: '#10b981', fontWeight: '600', marginTop: 3 },
   tableChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
   tableChipActive: { backgroundColor: 'rgba(13,118,225,0.1)', borderColor: '#93c5fd' },
   tableChipText: { fontSize: 12, color: '#374151', fontWeight: '500' },
   tableChipTextActive: { color: '#0D76E1', fontWeight: '700' },
 
-  // Cart list
   cartCols: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#f5f6f8', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
   cartColText: { fontSize: 10, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 },
   cartList: { flex: 1 },
@@ -609,7 +799,6 @@ const st = StyleSheet.create({
   emptyCartText: { fontSize: 14, fontWeight: '600', color: '#374151' },
   emptyCartSub: { fontSize: 12, color: '#9ca3af' },
 
-  // Summary
   summary: { padding: 10, borderTopWidth: 1, borderTopColor: '#e5e7eb', backgroundColor: '#f5f6f8', gap: 4 },
   sumRow: { flexDirection: 'row', justifyContent: 'space-between' },
   sumLabel: { fontSize: 12.5, color: '#6b7280' },
@@ -618,22 +807,19 @@ const st = StyleSheet.create({
   totalLabel: { fontSize: 15, fontWeight: '800', color: '#111827' },
   totalVal: { fontSize: 17, fontWeight: '800', color: '#0D76E1' },
 
-  // Payment
   payRow: { flexDirection: 'row', gap: 6, padding: 10, borderTopWidth: 1, borderTopColor: '#e5e7eb' },
   payBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 8, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
   payBtnActive: { backgroundColor: '#0D76E1', borderColor: '#0D76E1' },
   payBtnText: { fontSize: 12, fontWeight: '600', color: '#374151' },
   payBtnTextActive: { color: '#fff' },
 
-  // Checkout
   checkoutRow: { flexDirection: 'row', gap: 8, padding: 10, borderTopWidth: 1, borderTopColor: '#e5e7eb' },
   checkoutBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 13, borderRadius: 10 },
   checkoutBtnSave: { backgroundColor: '#C9A52A', shadowColor: '#C9A52A', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
-  checkoutBtnKot: { backgroundColor: TEAL, maxWidth: 90 },
+  checkoutBtnClear: { backgroundColor: TEAL, maxWidth: 90 },
   checkoutBtnLabel: { fontSize: 13, fontWeight: '800', color: '#fff' },
   checkoutBtnTotal: { fontSize: 14, fontWeight: '800', color: 'rgba(255,255,255,0.85)', marginTop: 1 },
 
-  // Variation modal
   vmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   vmSheet: { backgroundColor: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, maxHeight: '65%', overflow: 'hidden' },
   vmHeader: { flexDirection: 'row', alignItems: 'flex-start', padding: 16, backgroundColor: TEAL, gap: 10 },
@@ -645,7 +831,18 @@ const st = StyleSheet.create({
   vmName: { flex: 1, fontSize: 14.5, fontWeight: '600', color: '#111827' },
   vmPrice: { fontSize: 15, fontWeight: '800', color: '#0D76E1' },
 
-  // Mobile
+  cpHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  cpTitle: { fontSize: 17, fontWeight: '800', color: '#111827' },
+  cpSearch: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  cpSearchInput: { flex: 1, fontSize: 15, color: '#111827' },
+  cpRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: '#fff' },
+  cpAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#0f8f73', alignItems: 'center', justifyContent: 'center' },
+  cpAvatarText: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  cpName: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  cpPhone: { fontSize: 12.5, color: '#6b7280', marginTop: 2 },
+  cpAddNew: { marginTop: 12, backgroundColor: '#0D76E1', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
+  cpAddNewText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+
   mShell: { flex: 1, backgroundColor: '#f0f2f7' },
   mCatRow: { maxHeight: 44, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
   mCatChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', alignSelf: 'center' },
