@@ -526,6 +526,9 @@ export default function OrdersScreen() {
   const { restaurant } = useAppStore();
   const { width }  = useWindowDimensions();
   const isDesktop  = width >= 1024;
+  // Subtract sidebar (220px) so columns fill only the content pane
+  const contentW   = isDesktop ? width - 220 : width;
+  const numCols    = contentW >= 2200 ? 5 : contentW >= 1700 ? 4 : contentW >= 1200 ? 3 : contentW >= 700 ? 2 : 1;
 
   // ── Data loading ──────────────────────────────────────────────────────────
   const load = useCallback(async (silent = false) => {
@@ -640,6 +643,7 @@ export default function OrdersScreen() {
     <View style={s.shell}>
       <ScrollView
         style={{ flex: 1 }}
+        contentContainerStyle={{ flexGrow: 1 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={GOLD} />}
         showsVerticalScrollIndicator={false}
       >
@@ -740,9 +744,9 @@ export default function OrdersScreen() {
             </Text>
           </View>
         ) : viewMode === 'grid' ? (
-          <View style={[s.grid, isDesktop && s.gridDesktop]}>
+          <View style={[s.grid, numCols > 1 && s.gridRow]}>
             {filtered.map(o => (
-              <View key={o.id} style={[s.gridItem, isDesktop && (width >= 1400 ? s.gridItem3 : s.gridItem2)]}>
+              <View key={o.id} style={{ width: `${100 / numCols}%` as any, padding: 6 }}>
                 <OrderCard order={o} {...actionProps} />
               </View>
             ))}
@@ -833,12 +837,9 @@ const s = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#9ca3af' },
   emptySub:   { fontSize: 12.5, color: '#d1d5db', textAlign: 'center', paddingHorizontal: 40 },
 
-  // Grid
-  grid:       { padding: 12, gap: 12 },
-  gridDesktop:{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
-  gridItem:   { width: '100%' },
-  gridItem2:  { width: '50%', paddingHorizontal: 4 },
-  gridItem3:  { width: '33.33%', paddingHorizontal: 4 },
+  // Grid — fills full content width, columns determined by contentW
+  grid:    { padding: 6, width: '100%' },
+  gridRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', width: '100%' },
 
   // List
   listWrap:   { margin: 12, backgroundColor: '#fff', borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb' },
