@@ -42,14 +42,16 @@ const STATUS_CARDS = [
   { key: 'cancelled', label: 'Cancelled',  icon: 'person-remove-outline',  bg: '#fff1f2', color: '#dc2626' },
 ] as const;
 
-type TabKey = 'all' | 'pending' | 'inprogress' | 'completed' | 'cancelled';
+type TabKey = 'all' | 'pending' | 'inprogress' | 'completed' | 'cancelled' | 'paid' | 'unpaid';
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'all',        label: 'All Orders'  },
-  { key: 'pending',    label: 'Pending'     },
-  { key: 'inprogress', label: 'In Progress' },
-  { key: 'completed',  label: 'Completed'   },
-  { key: 'cancelled',  label: 'Cancelled'   },
+const TABS: { key: TabKey; label: string; icon?: any }[] = [
+  { key: 'all',        label: 'All Orders'   },
+  { key: 'pending',    label: 'Pending'      },
+  { key: 'inprogress', label: 'In Progress'  },
+  { key: 'completed',  label: 'Completed'    },
+  { key: 'cancelled',  label: 'Cancelled'    },
+  { key: 'paid',       label: 'Paid'         },
+  { key: 'unpaid',     label: 'Unpaid'       },
 ];
 
 const DATE_RANGES = [
@@ -99,7 +101,17 @@ function matchTab(o: Order, t: TabKey) {
   if (t === 'inprogress') return IN_PROGRESS.includes(o.status);
   if (t === 'completed')  return o.status === 'completed';
   if (t === 'cancelled')  return o.status === 'cancelled';
+  if (t === 'paid')       return o.payment_status === 'paid';
+  if (t === 'unpaid')     return o.payment_status !== 'paid' && o.status !== 'cancelled';
   return true;
+}
+
+function srcLabel(source?: string | null): string | null {
+  if (!source || source === 'pos') return null;
+  if (source === 'zomato') return 'Zomato';
+  if (source === 'swiggy') return 'Swiggy';
+  if (source === 'qr')     return 'QR';
+  return source.toUpperCase();
 }
 
 function printReceipt(order: Order, restaurant: any) {
@@ -249,9 +261,9 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={card.numRow}>
             <Text style={card.num} numberOfLines={1}>Order {order.order_number}</Text>
-            {order.source && order.source !== 'pos' && (
+            {srcLabel(order.source) && (
               <View style={[card.srcBadge, { backgroundColor: sc.bg }]}>
-                <Text style={[card.srcText, { color: sc.text }]}>{order.source.toUpperCase()}</Text>
+                <Text style={[card.srcText, { color: sc.text }]}>{srcLabel(order.source)}</Text>
               </View>
             )}
           </View>
@@ -405,9 +417,9 @@ function OrderListRow({ order, onStatusChange, onPaymentChange, onMarkPaid, onPr
       <View style={row.c1}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
           <Text style={row.orderNum}>Order {order.order_number}</Text>
-          {order.source && order.source !== 'pos' && (
+          {srcLabel(order.source) && (
             <View style={[row.srcBadge, { backgroundColor: sc.bg }]}>
-              <Text style={[row.srcText, { color: sc.text }]}>{order.source.toUpperCase()}</Text>
+              <Text style={[row.srcText, { color: sc.text }]}>{srcLabel(order.source)}</Text>
             </View>
           )}
         </View>
@@ -611,13 +623,15 @@ export default function OrdersScreen() {
   }), [orders, tab, search]);
 
   const tabCounts = useMemo(() => {
-    const c: Record<TabKey, number> = { all: 0, pending: 0, inprogress: 0, completed: 0, cancelled: 0 };
+    const c: Record<TabKey, number> = { all: 0, pending: 0, inprogress: 0, completed: 0, cancelled: 0, paid: 0, unpaid: 0 };
     for (const o of orders) {
       c.all++;
       if (o.status === 'pending')              c.pending++;
       if (IN_PROGRESS.includes(o.status))      c.inprogress++;
       if (o.status === 'completed')            c.completed++;
       if (o.status === 'cancelled')            c.cancelled++;
+      if (o.payment_status === 'paid')         c.paid++;
+      if (o.payment_status !== 'paid' && o.status !== 'cancelled') c.unpaid++;
     }
     return c;
   }, [orders]);
@@ -672,10 +686,17 @@ export default function OrdersScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabsRow}>
             {TABS.map(t => {
               const active = tab === t.key;
+              const accentColor = t.key === 'paid' ? '#16a34a' : t.key === 'unpaid' ? '#d97706' : PRIMARY;
               return (
-                <TouchableOpacity key={t.key} style={[s.tab, active && s.tabActive]} onPress={() => setTab(t.key)}>
-                  <Text style={[s.tabText, active && s.tabTextActive]}>
-                    {t.label} ({tabCounts[t.key]})
+                <TouchableOpacity key={t.key}
+                  style={[s.tab, active && { ...s.tabActive, borderBottomColor: accentColor }]}
+                  onPress={() => setTab(t.key)}
+                >
+                  <Text style={[s.tabText, active && { ...s.tabTextActive, color: accentColor }]}>
+                    {t.label}
+                    {tabCounts[t.key] > 0 && (
+                      <Text style={{ fontWeight: '600' }}> ({tabCounts[t.key]})</Text>
+                    )}
                   </Text>
                 </TouchableOpacity>
               );

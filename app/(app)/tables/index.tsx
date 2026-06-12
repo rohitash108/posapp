@@ -24,19 +24,28 @@ export default function TablesScreen() {
 
   const load = useCallback(async () => {
     if (Platform.OS === 'web') {
-      // Always try API first; fall back to IndexedDB cache
+      // Primary: dedicated tables endpoint (always fresh, includes newly added tables)
+      try {
+        const res = await client.get('/tables');
+        const tbls: RestaurantTable[] = res.data?.data ?? res.data ?? [];
+        if (Array.isArray(tbls) && tbls.length > 0) {
+          await webSaveTables(tbls);
+          setTables(tbls);
+          return;
+        }
+      } catch { /* fall through to sync/pull */ }
+      // Fallback: sync/pull (also returns tables)
       try {
         const res = await client.get('/sync/pull');
-        const tbls = res.data?.tables ?? [];
+        const tbls: RestaurantTable[] = res.data?.tables ?? [];
         if (tbls.length > 0) {
           await webSaveTables(tbls);
           setTables(tbls);
-        } else {
-          setTables(await webGetTables());
+          return;
         }
-      } catch {
-        setTables(await webGetTables());
-      }
+      } catch { /* fall through to cache */ }
+      // Last resort: IndexedDB cache
+      setTables(await webGetTables());
     } else {
       setTables(await getTables());
     }
@@ -59,7 +68,9 @@ export default function TablesScreen() {
       } else {
         await updateTableStatus(table.id, next);
       }
-      if (isOnline) await client.patch(`/tables/${table.id}/status`, { status: next });
+      if (isOnline) {
+        await client.patch(`/tables/${table.id}/status`, { status: next });
+      }
       await load();
     } catch { Alert.alert('Error', 'Could not update table status.'); }
   }

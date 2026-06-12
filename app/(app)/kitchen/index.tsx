@@ -58,10 +58,15 @@ export default function KitchenScreen() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await ordersApi.list({ status: KDS_STATUSES.join(','), per_page: 100 });
-      const data = res.data?.data ?? res.data ?? [];
-      setOrders(Array.isArray(data) ? data : []);
-    } catch { /* offline: keep stale */ } finally {
+      // Request kitchen statuses via comma-separated filter (API v2 supports this)
+      // Fall back to fetching all recent orders and filtering client-side
+      const res = await ordersApi.list({ status: KDS_STATUSES.join(','), per_page: 200 });
+      const raw = res.data?.data ?? res.data ?? [];
+      const all: Order[] = Array.isArray(raw) ? raw : [];
+      // Client-side safety filter — only show kitchen-relevant statuses
+      const kitchen = all.filter(o => (KDS_STATUSES as readonly string[]).includes(o.status));
+      setOrders(kitchen.length > 0 ? kitchen : all.filter(o => (KDS_STATUSES as readonly string[]).includes(o.status)));
+    } catch { /* offline: keep stale data */ } finally {
       setLoading(false);
       setRefreshing(false);
     }
@@ -148,10 +153,35 @@ export default function KitchenScreen() {
           </View>
           <View>
             <Text style={st.headerTitle}>Kitchen Display</Text>
-            <Text style={st.headerSub}>{displayed.length} active orders · auto-refresh 30s</Text>
+            <Text style={st.headerSub}>{displayed.length} active · refresh 30s</Text>
           </View>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 10 }}>
+
+        {/* Status summary pills (matches csPos kitchen header) */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 4 }}>
+          {[
+            { key: 'pending',   label: 'Pending',   color: '#f59e0b', bg: '#fffbeb' },
+            { key: 'confirmed', label: 'In Kitchen', color: '#3b82f6', bg: '#eff6ff' },
+            { key: 'preparing', label: 'Preparing',  color: '#8b5cf6', bg: '#f5f3ff' },
+            { key: 'ready',     label: 'Ready',      color: '#10b981', bg: '#ecfdf5' },
+          ].map(s => {
+            const cnt = orders.filter(o => o.status === s.key).length;
+            return (
+              <View key={s.key} style={[st.statusPill, { backgroundColor: s.bg, borderColor: s.color + '40' }]}>
+                <View style={[st.statusPillDot, { backgroundColor: s.color }]} />
+                <Text style={[st.statusPillText, { color: s.color }]}>{s.label}</Text>
+                <View style={[st.statusPillBadge, { backgroundColor: s.color }]}>
+                  <Text style={st.statusPillCount}>{cnt}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Source filter chips */}
+      <View style={st.sourceBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingHorizontal: 12, paddingVertical: 8 }}>
           {KDS_SOURCE_FILTERS.map(s => {
             const cfg = s !== 'all' ? SOURCE_CFG[s] : null;
             const active = sourceFilter === s;
@@ -159,7 +189,7 @@ export default function KitchenScreen() {
             return (
               <TouchableOpacity key={s} style={[st.srcChip, active && { backgroundColor: cfg?.color ?? '#1A2B1A', borderColor: cfg?.color ?? '#1A2B1A' }]} onPress={() => setSourceFilter(s)}>
                 {cfg && <Ionicons name={cfg.icon} size={12} color={active ? '#fff' : cfg.color} />}
-                <Text style={[st.srcChipText, active && { color: '#fff' }]}>{s === 'all' ? 'All' : cfg?.label}</Text>
+                <Text style={[st.srcChipText, active && { color: '#fff' }]}>{s === 'all' ? 'All Sources' : cfg?.label}</Text>
                 <View style={[st.srcCount, active && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
                   <Text style={[st.srcCountText, active && { color: '#fff' }]}>{count}</Text>
                 </View>
@@ -284,7 +314,7 @@ function KDSCard({ order, isLoading, onAdvance, onAggregator, tick }: {
               <Text style={st.cardItemQtyText}>{item.quantity}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={st.cardItemName}>{item.name}</Text>
+              <Text style={st.cardItemName}>{item.item_name ?? item.name}</Text>
               {item.variation && <Text style={st.cardItemVar}>{item.variation}</Text>}
               {item.addons && item.addons.length > 0 && (
                 <Text style={st.cardItemAddons}>+ {item.addons.map(a => a.name).join(', ')}</Text>
@@ -354,11 +384,19 @@ function KDSCard({ order, isLoading, onAdvance, onAggregator, tick }: {
 const st = StyleSheet.create({
   shell: { flex: 1, backgroundColor: '#f0f2f7' },
 
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', flexWrap: 'wrap' },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 8 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', flexWrap: 'wrap' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 4, flexShrink: 0 },
   headerIcon: { width: 38, height: 38, borderRadius: 10, backgroundColor: '#fff7ed', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fed7aa' },
   headerTitle: { fontSize: 15, fontWeight: '800', color: '#111827' },
   headerSub: { fontSize: 11, color: '#6b7280', marginTop: 1 },
+
+  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  statusPillDot: { width: 7, height: 7, borderRadius: 4 },
+  statusPillText: { fontSize: 12, fontWeight: '700' },
+  statusPillBadge: { borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },
+  statusPillCount: { fontSize: 10.5, fontWeight: '800', color: '#fff' },
+
+  sourceBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
 
   srcChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
   srcChipText: { fontSize: 12, fontWeight: '700', color: '#374151' },
