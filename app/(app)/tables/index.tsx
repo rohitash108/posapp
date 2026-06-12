@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Alert, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
@@ -50,7 +51,7 @@ export default function TablesScreen() {
       setTables(await getTables());
     }
   }, []);
-  useEffect(() => { load(); }, []);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function handleRefresh() {
     setRefreshing(true);
