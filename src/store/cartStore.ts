@@ -10,15 +10,25 @@ interface CartState {
   setOrderType: (type: OrderType) => void;
   setTable: (tableId?: number) => void;
   setCustomer: (id?: number, name?: string, phone?: string) => void;
+  setWaiter: (id?: number, name?: string) => void;
   setDiscount: (amount: number) => void;
+  setCoupon: (code?: string, discount?: number) => void;
   setNotes: (notes: string) => void;
+  setKotPrinted: (v: boolean) => void;
+  setDraft: (v: boolean) => void;
   clearCart: () => void;
   getSubtotal: () => number;
   getTaxAmount: (rate: number) => number;
   getTotal: (taxRate?: number) => number;
 }
 
-const emptyCart = (): Cart => ({ order_type: 'dine_in', items: [], discount_amount: 0 });
+const emptyCart = (): Cart => ({
+  order_type: 'dine_in',
+  items: [],
+  discount_amount: 0,
+  kot_printed: false,
+  is_draft: false,
+});
 
 export const useCartStore = create<CartState>((set, get) => ({
   cart: emptyCart(),
@@ -41,10 +51,21 @@ export const useCartStore = create<CartState>((set, get) => ({
   setTable: (table_id) => set((s) => ({ cart: { ...s.cart, table_id } })),
   setCustomer: (customer_id, customer_name, customer_phone) =>
     set((s) => ({ cart: { ...s.cart, customer_id, customer_name, customer_phone } })),
+  setWaiter: (waiter_id, waiter_name) =>
+    set((s) => ({ cart: { ...s.cart, waiter_id, waiter_name } })),
   setDiscount: (discount_amount) => set((s) => ({ cart: { ...s.cart, discount_amount } })),
+  setCoupon: (coupon_code, coupon_discount) =>
+    set((s) => ({ cart: { ...s.cart, coupon_code, coupon_discount: coupon_discount ?? 0 } })),
   setNotes: (notes) => set((s) => ({ cart: { ...s.cart, notes } })),
+  setKotPrinted: (kot_printed) => set((s) => ({ cart: { ...s.cart, kot_printed } })),
+  setDraft: (is_draft) => set((s) => ({ cart: { ...s.cart, is_draft } })),
   clearCart: () => set({ cart: emptyCart() }),
   getSubtotal: () => get().cart.items.reduce((sum, i) => sum + i.total_price, 0),
   getTaxAmount: (rate) => parseFloat(((get().getSubtotal() * rate) / 100).toFixed(2)),
-  getTotal: (taxRate = 0) => Math.max(0, get().getSubtotal() + get().getTaxAmount(taxRate) - get().cart.discount_amount),
+  getTotal: (taxRate = 0) => {
+    const sub = get().getSubtotal();
+    const tax = get().getTaxAmount(taxRate);
+    const disc = (get().cart.discount_amount ?? 0) + (get().cart.coupon_discount ?? 0);
+    return Math.max(0, sub + tax - disc);
+  },
 }));

@@ -3,7 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Ale
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
 import { getTables, updateTableStatus } from '@/database/repositories';
-import { webGetTables, webUpdateTableStatus } from '@/utils/webDb';
+import { webGetTables, webUpdateTableStatus, webSaveTables } from '@/utils/webDb';
 import { syncService } from '@/sync/SyncService';
 import { useAppStore } from '@/store/appStore';
 import client from '@/api/client';
@@ -23,7 +23,23 @@ export default function TablesScreen() {
   const cols = width >= 1024 ? 4 : width >= 768 ? 3 : 2;
 
   const load = useCallback(async () => {
-    setTables(Platform.OS === 'web' ? await webGetTables() : await getTables());
+    if (Platform.OS === 'web') {
+      // Always try API first; fall back to IndexedDB cache
+      try {
+        const res = await client.get('/sync/pull');
+        const tbls = res.data?.tables ?? [];
+        if (tbls.length > 0) {
+          await webSaveTables(tbls);
+          setTables(tbls);
+        } else {
+          setTables(await webGetTables());
+        }
+      } catch {
+        setTables(await webGetTables());
+      }
+    } else {
+      setTables(await getTables());
+    }
   }, []);
   useEffect(() => { load(); }, []);
 

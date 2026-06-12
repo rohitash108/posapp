@@ -1,12 +1,14 @@
+import React, { useEffect } from 'react';
 import { Tabs, usePathname, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Image, TouchableOpacity, useWindowDimensions, ScrollView, StyleSheet, Platform } from 'react-native';
-import { useEffect } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { API_BASE_URL } from '@/api/client';
 import { webSyncService } from '@/sync/WebSyncService';
 
-const NAV_SECTIONS = [
+type NavItem = { name: string; route: string; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] };
+type NavSection = { label: string; items: NavItem[] };
+const NAV_SECTIONS: NavSection[] = [
   {
     label: 'OPERATIONS',
     items: [
@@ -18,22 +20,41 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    label: 'GUESTS',
+    label: 'MENU & STOCK',
     items: [
-      { name: 'customers/index',    route: '/(app)/customers',    label: 'Customers',    icon: 'people-outline'       as const },
-      { name: 'reservations/index', route: '/(app)/reservations', label: 'Reservations', icon: 'calendar-outline'     as const },
+      { name: 'menu/index',        route: '/(app)/menu',        label: 'Menu Items',  icon: 'restaurant-outline'   as const },
+      { name: 'categories/index',  route: '/(app)/categories',  label: 'Categories',  icon: 'folder-outline'       as const },
+      { name: 'items/index',       route: '/(app)/items',       label: 'Items',       icon: 'fast-food-outline'    as const },
+      { name: 'inventory/index',   route: '/(app)/inventory',   label: 'Inventory',   icon: 'cube-outline'         as const },
     ],
   },
   {
-    label: 'MENU & STOCK',
+    label: 'CUSTOMERS',
     items: [
-      { name: 'menu/index', route: '/(app)/menu', label: 'Menu Items', icon: 'restaurant-outline' as const },
+      { name: 'customers/index',    route: '/(app)/customers',    label: 'Customers',    icon: 'people-outline'       as const },
+      { name: 'reservations/index', route: '/(app)/reservations', label: 'Reservations', icon: 'calendar-outline'     as const },
+      { name: 'invoices/index',     route: '/(app)/invoices',     label: 'Invoices',     icon: 'document-text-outline' as const },
+      { name: 'payments/index',     route: '/(app)/payments',     label: 'Payments',     icon: 'card-outline'          as const },
+    ],
+  },
+  {
+    label: 'PROMOTIONS',
+    items: [
+      { name: 'coupons/index', route: '/(app)/coupons', label: 'Coupons', icon: 'pricetag-outline' as const },
     ],
   },
   {
     label: 'FINANCE',
     items: [
-      { name: 'expenses/index', route: '/(app)/expenses', label: 'Expenses', icon: 'wallet-outline' as const },
+      { name: 'expenses/index',       route: '/(app)/expenses',       label: 'Expenses',       icon: 'wallet-outline'   as const },
+      { name: 'expense-report/index', route: '/(app)/expense-report', label: 'Expense Report', icon: 'stats-chart-outline' as const },
+      { name: 'tickets/index',        route: '/(app)/tickets',        label: 'Tickets',        icon: 'print-outline'    as const },
+    ],
+  },
+  {
+    label: 'ANALYTICS',
+    items: [
+      { name: 'reports/index', route: '/(app)/reports', label: 'Reports', icon: 'bar-chart-outline' as const },
     ],
   },
   {
@@ -64,17 +85,46 @@ function SyncDot() {
   return <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: color }} />;
 }
 
+const NAV_BADGE_KEY: Record<string, string> = {
+  'orders/index': 'pending',
+  'kitchen/index': 'preparing,confirmed',
+};
+
 function Sidebar() {
   const restaurant = useAppStore((s) => s.restaurant);
-  const { isSyncing, isOnline } = useAppStore();
+  const { isSyncing, isOnline, clearAuth } = useAppStore();
   const pathname = usePathname();
   const logoUrl = restaurant?.logo
     ? (restaurant.logo.startsWith('http') ? restaurant.logo : `${API_BASE_URL.replace('/api/mobile', '')}/${restaurant.logo}`)
     : null;
+  const [logoError, setLogoError] = React.useState(false);
+
+  // Live order counts for nav badges
+  const [navCounts, setNavCounts] = React.useState<Record<string, number>>({});
+  useEffect(() => {
+    async function fetchCounts() {
+      try {
+        const { ordersApi } = await import('@/api/orders');
+        const res = await ordersApi.list({ per_page: 200 });
+        const data: any[] = res.data?.data ?? res.data ?? [];
+        const pending  = data.filter((o: any) => o.status === 'pending').length;
+        const kitchen  = data.filter((o: any) => ['preparing', 'confirmed'].includes(o.status)).length;
+        setNavCounts({ 'orders/index': pending, 'kitchen/index': kitchen });
+      } catch { /* offline */ }
+    }
+    fetchCounts();
+    const t = setInterval(fetchCounts, 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   function isActive(name: string) {
     const segment = name.replace('/index', '').split('/')[0];
     return pathname.includes(segment);
+  }
+
+  function handleLogout() {
+    clearAuth();
+    router.replace('/(auth)/login' as any);
   }
 
   return (
@@ -87,8 +137,12 @@ function Sidebar() {
         <View style={sb.logoWrap}>
           <View style={sb.ring1} />
           <View style={sb.ring2} />
-          {logoUrl ? (
-            <Image source={{ uri: logoUrl }} style={sb.logo} />
+          {logoUrl && !logoError ? (
+            <Image
+              source={{ uri: logoUrl }}
+              style={sb.logo}
+              onError={() => setLogoError(true)}
+            />
           ) : (
             <View style={sb.logoFallback}>
               <Ionicons name="restaurant" size={26} color="#C9A52A" />
@@ -124,6 +178,11 @@ function Sidebar() {
                   {active && item.name === 'pos/index' && (
                     <View style={{ marginLeft: 'auto' }}><SyncDot /></View>
                   )}
+                  {!active && navCounts[item.name] > 0 && (
+                    <View style={sb.navBadge}>
+                      <Text style={sb.navBadgeText}>{navCounts[item.name]}</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -133,11 +192,16 @@ function Sidebar() {
 
       {/* Status footer */}
       <View style={sb.footer}>
-        <View style={[sb.statusPill, { backgroundColor: isOnline ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)' }]}>
-          <View style={[sb.statusDot, { backgroundColor: isOnline ? '#22c55e' : '#ef4444' }]} />
-          <Text style={[sb.statusText, { color: isOnline ? '#4ade80' : '#f87171' }]}>
-            {isSyncing ? 'Syncing...' : isOnline ? 'Online' : 'Offline'}
-          </Text>
+        <View style={sb.footerTop}>
+          <View style={[sb.statusPill, { backgroundColor: isOnline ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)' }]}>
+            <View style={[sb.statusDot, { backgroundColor: isOnline ? '#22c55e' : '#ef4444' }]} />
+            <Text style={[sb.statusText, { color: isOnline ? '#4ade80' : '#f87171' }]}>
+              {isSyncing ? 'Syncing...' : isOnline ? 'Online' : 'Offline'}
+            </Text>
+          </View>
+          <TouchableOpacity style={sb.logoutBtn} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={16} color="#f87171" />
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -149,10 +213,11 @@ function RestaurantHeader() {
   const logoUrl = restaurant?.logo
     ? (restaurant.logo.startsWith('http') ? restaurant.logo : `${API_BASE_URL.replace('/api/mobile', '')}/${restaurant.logo}`)
     : null;
+  const [err, setErr] = React.useState(false);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-      {logoUrl ? (
-        <Image source={{ uri: logoUrl }} style={{ width: 34, height: 34, borderRadius: 17 }} />
+      {logoUrl && !err ? (
+        <Image source={{ uri: logoUrl }} style={{ width: 34, height: 34, borderRadius: 17 }} onError={() => setErr(true)} />
       ) : (
         <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#2D4A2D', alignItems: 'center', justifyContent: 'center' }}>
           <Ionicons name="restaurant" size={16} color="#C9A52A" />
@@ -173,6 +238,8 @@ export default function AppLayout() {
   const isLarge = width >= 768;
   const token = useAppStore((s) => s.token);
   const store = useAppStore();
+  const pathname = usePathname();
+  const isPOS = pathname.includes('/pos');
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -192,6 +259,9 @@ export default function AppLayout() {
     const handleOffline = () => store.setOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    // Initialise online state immediately — without this, isOnline stays false
+    // on first load and all orders fall through to offline-save incorrectly.
+    store.setOnline(navigator.onLine);
     if (navigator.onLine && token) webSyncService.sync().catch(console.warn);
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -209,19 +279,30 @@ export default function AppLayout() {
   if (isLarge) {
     return (
       <View style={{ flex: 1, flexDirection: 'row' }}>
-        <Sidebar />
+        {/* Hide sidebar on POS so the screen gets maximum width */}
+        {!isPOS && <Sidebar />}
         <View style={{ flex: 1 }}>
           <Tabs screenOptions={tabScreenOptions}>
             <Tabs.Screen name="dashboard/index" options={{ headerTitle: () => <RestaurantHeader />, headerRight: () => <View style={{ marginRight: 16 }}><SyncDot /></View> }} />
-            <Tabs.Screen name="pos/index" options={{ headerTitle: () => <RestaurantHeader />, headerRight: () => <View style={{ marginRight: 16 }}><SyncDot /></View> }} />
+            {/* On POS page: hide header too for full-screen real estate */}
+            <Tabs.Screen name="pos/index" options={{ headerShown: !isPOS, headerTitle: () => <RestaurantHeader />, headerRight: () => <View style={{ marginRight: 16 }}><SyncDot /></View> }} />
             <Tabs.Screen name="kitchen/index"    options={{ title: 'Kitchen Display' }} />
             <Tabs.Screen name="orders/index"     options={{ title: 'Orders' }} />
             <Tabs.Screen name="tables/index"     options={{ title: 'Tables' }} />
-            <Tabs.Screen name="customers/index"  options={{ title: 'Customers' }} />
-            <Tabs.Screen name="reservations/index" options={{ title: 'Reservations' }} />
-            <Tabs.Screen name="menu/index"       options={{ title: 'Menu Items' }} />
-            <Tabs.Screen name="expenses/index"   options={{ title: 'Expenses' }} />
-            <Tabs.Screen name="settings/index"   options={{ title: 'Settings' }} />
+            <Tabs.Screen name="customers/index"      options={{ title: 'Customers' }} />
+            <Tabs.Screen name="reservations/index"  options={{ title: 'Reservations' }} />
+            <Tabs.Screen name="menu/index"          options={{ title: 'Menu Items' }} />
+            <Tabs.Screen name="categories/index"    options={{ title: 'Categories' }} />
+            <Tabs.Screen name="items/index"         options={{ title: 'Items' }} />
+            <Tabs.Screen name="inventory/index"     options={{ title: 'Inventory' }} />
+            <Tabs.Screen name="invoices/index"      options={{ title: 'Invoices' }} />
+            <Tabs.Screen name="payments/index"      options={{ title: 'Payments' }} />
+            <Tabs.Screen name="coupons/index"       options={{ title: 'Coupons' }} />
+            <Tabs.Screen name="expenses/index"      options={{ title: 'Expenses' }} />
+            <Tabs.Screen name="expense-report/index" options={{ title: 'Expense Report' }} />
+            <Tabs.Screen name="tickets/index"       options={{ title: 'Tickets & Receipts' }} />
+            <Tabs.Screen name="reports/index"       options={{ title: 'Reports' }} />
+            <Tabs.Screen name="settings/index"      options={{ title: 'Settings' }} />
           </Tabs>
         </View>
       </View>
@@ -242,11 +323,20 @@ export default function AppLayout() {
       <Tabs.Screen name="kitchen/index" options={{ title: 'Kitchen', tabBarIcon: ({ color, size }) => <Ionicons name="flame-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="orders/index" options={{ title: 'Orders', tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="tables/index" options={{ title: 'Tables', tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" color={color} size={size} />, tabBarStyle: { display: 'none' } }} />
-      <Tabs.Screen name="customers/index" options={{ title: 'Customers', tabBarButton: () => null }} />
-      <Tabs.Screen name="reservations/index" options={{ title: 'Reservations', tabBarButton: () => null }} />
-      <Tabs.Screen name="menu/index" options={{ title: 'Menu', tabBarButton: () => null }} />
-      <Tabs.Screen name="expenses/index" options={{ title: 'Expenses', tabBarButton: () => null }} />
-      <Tabs.Screen name="settings/index" options={{ title: 'Settings', tabBarButton: () => null }} />
+      <Tabs.Screen name="customers/index"       options={{ title: 'Customers',      tabBarButton: () => null }} />
+      <Tabs.Screen name="reservations/index"   options={{ title: 'Reservations',   tabBarButton: () => null }} />
+      <Tabs.Screen name="menu/index"           options={{ title: 'Menu',           tabBarButton: () => null }} />
+      <Tabs.Screen name="categories/index"     options={{ title: 'Categories',     tabBarButton: () => null }} />
+      <Tabs.Screen name="items/index"          options={{ title: 'Items',          tabBarButton: () => null }} />
+      <Tabs.Screen name="inventory/index"      options={{ title: 'Inventory',      tabBarButton: () => null }} />
+      <Tabs.Screen name="invoices/index"       options={{ title: 'Invoices',       tabBarButton: () => null }} />
+      <Tabs.Screen name="payments/index"       options={{ title: 'Payments',       tabBarButton: () => null }} />
+      <Tabs.Screen name="coupons/index"        options={{ title: 'Coupons',        tabBarButton: () => null }} />
+      <Tabs.Screen name="expenses/index"       options={{ title: 'Expenses',       tabBarButton: () => null }} />
+      <Tabs.Screen name="expense-report/index" options={{ title: 'Expense Report', tabBarButton: () => null }} />
+      <Tabs.Screen name="tickets/index"        options={{ title: 'Tickets & Receipts', tabBarButton: () => null }} />
+      <Tabs.Screen name="reports/index"        options={{ title: 'Reports',        tabBarButton: () => null }} />
+      <Tabs.Screen name="settings/index"       options={{ title: 'Settings',       tabBarButton: () => null }} />
     </Tabs>
   );
 }
@@ -276,8 +366,12 @@ const sb = StyleSheet.create({
   navLabel: { fontSize: 13, fontWeight: '500', color: '#4A6A4A', flex: 1 },
   navLabelActive: { color: '#fff', fontWeight: '700' },
 
-  footer: { paddingHorizontal: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
-  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
-  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  footer:     { paddingHorizontal: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
+  footerTop:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusPill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
+  statusDot:  { width: 7, height: 7, borderRadius: 4 },
   statusText: { fontSize: 12, fontWeight: '600' },
+  logoutBtn:  { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(239,68,68,0.12)', alignItems: 'center', justifyContent: 'center' },
+  navBadge:   { marginLeft: 'auto', backgroundColor: '#C9A52A', borderRadius: 999, minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
+  navBadgeText: { fontSize: 9.5, fontWeight: '800', color: '#1A2B1A' },
 });

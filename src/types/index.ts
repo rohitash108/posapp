@@ -20,9 +20,13 @@ export interface Restaurant {
 export interface Category {
   id: number;
   name: string;
+  description?: string;
   image?: string;
+  image_url?: string;
+  color?: string;
   sort_order: number;
   is_active: boolean;
+  items_count?: number;
   updated_at?: string;
 }
 
@@ -141,16 +145,23 @@ export interface Order {
   payment_method?: PaymentMethod;
   restaurant_table_id?: number;
   table_name?: string;
+  restaurant_table?: { id: number; name: string };
   customer_id?: number;
   customer_name?: string;
   customer_phone?: string;
+  waiter_id?: number;
+  waiter_name?: string;
   delivery_address?: string;
   subtotal: number;
   tax_amount: number;
   discount_amount: number;
   total: number;
   received_amount: number;
+  coupon_code?: string;
+  coupon_discount?: number;
   notes?: string;
+  kot_printed?: boolean;
+  is_draft?: boolean;
   items: OrderItem[];
   created_at?: string;
   updated_at?: string;
@@ -174,10 +185,16 @@ export interface Cart {
   customer_id?: number;
   customer_name?: string;
   customer_phone?: string;
+  waiter_id?: number;
+  waiter_name?: string;
   order_type: OrderType;
   items: CartItem[];
   discount_amount: number;
+  coupon_code?: string;
+  coupon_discount?: number;
   notes?: string;
+  kot_printed?: boolean;
+  is_draft?: boolean;
 }
 
 export type SyncQueueAction = 'create_order' | 'update_status' | 'update_payment';
@@ -205,4 +222,117 @@ export interface DashboardStats {
   preparing_orders: number;
   zomato_orders: number;
   swiggy_orders: number;
+}
+
+export interface StaffMember {
+  id: number;
+  name: string;
+  email?: string;
+  phone?: string;
+  role: string;
+  is_active: boolean;
+}
+
+export interface Invoice {
+  id: number;
+  invoice_number: string;
+  order_id: number;
+  order_number?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  subtotal: number;
+  tax_amount: number;
+  discount_amount: number;
+  total: number;
+  payment_status: PaymentStatus;
+  payment_method?: PaymentMethod;
+  items?: OrderItem[];
+  notes?: string;
+  created_at?: string;
+}
+
+export interface Payment {
+  id: number;
+  order_id?: number;
+  order_number?: string;
+  customer_name?: string;
+  amount: number;
+  payment_method?: PaymentMethod;
+  method?: PaymentMethod;          // alias
+  reference_number?: string;
+  reference?: string;              // alias
+  status?: 'completed' | 'pending' | 'failed' | 'refunded';
+  notes?: string;
+  created_at?: string;
+}
+
+export interface InventoryItem {
+  id: number;
+  item_name: string;
+  name?: string;                   // alias
+  unit?: string;
+  quantity: number;
+  current_stock?: number;          // alias
+  min_quantity?: number;
+  minimum_stock?: number;          // alias
+  cost_per_unit?: number;
+  category_name?: string;
+  category?: string;               // alias
+  updated_at?: string;
+}
+
+export interface StockMovement {
+  id: number;
+  inventory_item_id: number;
+  type: 'in' | 'out' | 'adjustment';
+  quantity: number;
+  notes?: string;
+  created_at?: string;
+}
+
+export interface MenuItem {
+  id: number;
+  category_id?: number;
+  category_name?: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  image?: string;
+  price: number;
+  is_available: boolean;
+  is_veg?: boolean;
+  sort_order?: number;
+  updated_at?: string;
+}
+
+export interface Coupon {
+  id: number;
+  code: string;
+  name?: string;
+  discount_type: 'percentage' | 'fixed';
+  discount_value: number;
+  min_order_amount?: number;
+  minimum_order?: number;   // alias
+  max_uses?: number;
+  usage_limit?: number;     // alias
+  used_count?: number;
+  usage_count?: number;     // alias
+  is_active: boolean;
+  expires_at?: string;
+  created_at?: string;
+}
+
+export interface ExpenseReport {
+  category: string;
+  total: number;
+  count: number;
+}
+
+export interface SalesReport {
+  date: string;
+  total_sales: number;
+  total_orders: number;
+  cash: number;
+  card: number;
+  upi: number;
 }

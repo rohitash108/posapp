@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl, useWindowDimensions,
@@ -9,6 +9,8 @@ import { format } from 'date-fns';
 import { ordersApi } from '@/api/orders';
 import { useAppStore } from '@/store/appStore';
 import type { Order } from '@/types';
+
+const POLL_MS = 60_000;
 
 interface StatCard {
   label: string;
@@ -38,6 +40,7 @@ export default function DashboardScreen() {
   const isOnline = useAppStore(s => s.isOnline);
   const { width } = useWindowDimensions();
   const cols = width >= 900 ? 4 : width >= 600 ? 3 : 2;
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -47,23 +50,31 @@ export default function DashboardScreen() {
     } catch { /* offline */ }
   }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    pollRef.current = setInterval(load, POLL_MS);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
 
   const today = format(new Date(), 'yyyy-MM-dd');
-  const todayOrders = orders.filter(o => (o.created_at ?? '').startsWith(today));
-  const todaySales = todayOrders.reduce((s, o) => s + (o.total ?? 0), 0);
-  const pendingCount = orders.filter(o => o.status === 'pending').length;
-  const preparingCount = orders.filter(o => o.status === 'preparing').length;
-  const zomatoToday = todayOrders.filter(o => o.source === 'zomato').length;
-  const swiggyToday = todayOrders.filter(o => o.source === 'swiggy').length;
+  const todayOrders   = orders.filter(o => (o.created_at ?? '').startsWith(today));
+  const todaySales    = todayOrders.reduce((s, o) => s + (o.total ?? 0), 0);
+  const todayPaid     = todayOrders.filter(o => o.payment_status === 'paid').reduce((s, o) => s + (o.total ?? 0), 0);
+  const pendingCount  = orders.filter(o => o.status === 'pending').length;
+  const preparingCount= orders.filter(o => o.status === 'preparing').length;
+  const unpaidCount   = orders.filter(o => o.payment_status !== 'paid' && o.status !== 'cancelled').length;
+  const completedToday= todayOrders.filter(o => o.status === 'completed').length;
+  const avgOrder      = todayOrders.length > 0 ? todaySales / todayOrders.length : 0;
 
   const stats: StatCard[] = [
-    { label: "Today's Sales",   value: `₹${todaySales.toFixed(2)}`, sub: `${todayOrders.length} orders`, icon: 'cash-outline',          color: '#1A2B1A', bg: 'rgba(26,43,26,0.08)',      route: '/(app)/orders' },
-    { label: 'Pending Orders',  value: String(pendingCount),         sub: 'need attention',               icon: 'time-outline',           color: '#f59e0b', bg: 'rgba(245,158,11,0.1)',     route: '/(app)/kitchen' },
-    { label: 'In Kitchen',      value: String(preparingCount),       sub: 'preparing',                    icon: 'flame-outline',          color: '#ef4444', bg: 'rgba(239,68,68,0.1)',      route: '/(app)/kitchen' },
-    { label: 'Zomato Orders',   value: String(zomatoToday),          sub: 'today',                        icon: 'bicycle-outline',        color: '#d00000', bg: 'rgba(208,0,0,0.08)',       route: '/(app)/kitchen' },
-    { label: 'Swiggy Orders',   value: String(swiggyToday),          sub: 'today',                        icon: 'storefront-outline',     color: '#fc8019', bg: 'rgba(252,128,25,0.1)',     route: '/(app)/kitchen' },
-    { label: 'Total Orders',    value: String(orders.length),        sub: 'all time',                     icon: 'receipt-outline',        color: '#3b82f6', bg: 'rgba(59,130,246,0.1)',     route: '/(app)/orders' },
+    { label: "Today's Sales",  value: `₹${todaySales.toFixed(0)}`,  sub: `${todayOrders.length} orders`, icon: 'cash-outline',       color: '#1A2B1A', bg: 'rgba(26,43,26,0.08)',   route: '/(app)/orders' },
+    { label: 'Cash Collected', value: `₹${todayPaid.toFixed(0)}`,   sub: 'paid today',                   icon: 'wallet-outline',     color: '#16a34a', bg: 'rgba(22,163,74,0.08)',  route: '/(app)/orders' },
+    { label: 'Unpaid Orders',  value: String(unpaidCount),           sub: 'pending payment',              icon: 'alert-circle-outline', color: '#d97706', bg: 'rgba(217,119,6,0.1)', route: '/(app)/orders' },
+    { label: 'Pending',        value: String(pendingCount),          sub: 'need attention',               icon: 'time-outline',       color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', route: '/(app)/kitchen' },
+    { label: 'In Kitchen',     value: String(preparingCount),        sub: 'preparing now',                icon: 'flame-outline',      color: '#ef4444', bg: 'rgba(239,68,68,0.1)',  route: '/(app)/kitchen' },
+    { label: 'Completed',      value: String(completedToday),        sub: 'today',                        icon: 'checkmark-circle-outline', color: '#10b981', bg: 'rgba(16,185,129,0.1)', route: '/(app)/orders' },
+    { label: 'Avg Order',      value: `₹${avgOrder.toFixed(0)}`,    sub: 'today',                        icon: 'stats-chart-outline', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', route: '/(app)/orders' },
+    { label: 'Total Orders',   value: String(orders.length),         sub: 'all time',                     icon: 'receipt-outline',    color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', route: '/(app)/orders' },
   ];
 
   const recentOrders = orders.slice(0, 5);
@@ -130,23 +141,39 @@ export default function DashboardScreen() {
           </View>
           {recentOrders.map(o => {
             const srcColors: Record<string, string> = { pos: '#1A2B1A', zomato: '#d00000', swiggy: '#fc8019', qr: '#7c3aed' };
-            const src = o.source ?? 'pos';
+            const statusColors: Record<string, { color: string; bg: string }> = {
+              pending:   { color: '#d97706', bg: '#fef9ec' },
+              confirmed: { color: '#2563eb', bg: '#eff6ff' },
+              preparing: { color: '#7c3aed', bg: '#f5f3ff' },
+              ready:     { color: '#0891b2', bg: '#ecfeff' },
+              served:    { color: '#059669', bg: '#ecfdf5' },
+              completed: { color: '#16a34a', bg: '#f0fdf4' },
+              cancelled: { color: '#dc2626', bg: '#fff1f2' },
+            };
+            const src     = o.source ?? 'pos';
+            const scfg    = statusColors[o.status] ?? { color: '#6b7280', bg: '#f3f4f6' };
+            const isPaid  = o.payment_status === 'paid';
             return (
-              <View key={o.id} style={st.recentRow}>
+              <TouchableOpacity key={o.id} style={[st.recentRow, { borderLeftColor: scfg.color }]} onPress={() => router.push('/(app)/orders' as any)} activeOpacity={0.8}>
                 <View style={[st.recentSrc, { backgroundColor: (srcColors[src] ?? '#1A2B1A') + '15' }]}>
                   <Text style={[st.recentSrcText, { color: srcColors[src] ?? '#1A2B1A' }]}>{src.toUpperCase()}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={st.recentNum}>#{o.order_number}</Text>
-                  <Text style={st.recentCustomer}>{o.customer_name ?? 'Walk-in'} · {o.order_type?.replace('_', ' ')}</Text>
+                  <Text style={st.recentCustomer}>{o.customer_name ?? 'Walk-in'} · {(o.order_type ?? '').replace('_', ' ')}</Text>
                 </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={st.recentTotal}>₹{o.total?.toFixed(2)}</Text>
-                  <View style={[st.recentStatus, { backgroundColor: '#f3f4f6' }]}>
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#374151' }}>{o.status}</Text>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  <Text style={st.recentTotal}>₹{Number(o.total ?? 0).toFixed(2)}</Text>
+                  <View style={[st.recentStatus, { backgroundColor: scfg.bg }]}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: scfg.color }}>{o.status.toUpperCase()}</Text>
                   </View>
+                  {!isPaid && (
+                    <View style={[st.recentStatus, { backgroundColor: '#fef3c7' }]}>
+                      <Text style={{ fontSize: 9, fontWeight: '700', color: '#d97706' }}>UNPAID</Text>
+                    </View>
+                  )}
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
@@ -181,7 +208,7 @@ const st = StyleSheet.create({
   quickIcon: { width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   quickLabel: { fontSize: 12, fontWeight: '700', color: '#374151', textAlign: 'center' },
 
-  recentRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#e5e7eb' },
+  recentRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#e5e7eb', borderLeftWidth: 4 },
   recentSrc: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   recentSrcText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   recentNum: { fontSize: 14, fontWeight: '800', color: '#111827' },

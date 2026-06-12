@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SectionList, RefreshControl, TouchableOpacity, useWindowDimensions } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, SectionList, RefreshControl, TouchableOpacity, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getCategories, getItems } from '@/database/repositories';
 import { webGetCategories, webGetItems } from '@/utils/webDb';
 import { Platform } from 'react-native';
 import { syncService } from '@/sync/SyncService';
 import { useAppStore } from '@/store/appStore';
+import client from '@/api/client';
 import type { Item } from '@/types';
 
 const FOOD_CFG: Record<string, { color: string; bg: string; label: string }> = {
@@ -17,11 +18,12 @@ const FOOD_CFG: Record<string, { color: string; bg: string; label: string }> = {
 export default function MenuScreen() {
   const [sections, setSections] = useState<{ title: string; data: Item[]; id: number }[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [toggling, setToggling] = useState<Set<number>>(new Set());
   const { isOnline } = useAppStore();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
-  async function load() {
+  const load = useCallback(async () => {
     const cats = Platform.OS === 'web' ? await webGetCategories() : await getCategories();
     const result = [];
     for (const cat of cats) {
@@ -29,9 +31,36 @@ export default function MenuScreen() {
       if (items.length > 0) result.push({ title: cat.name, data: items, id: cat.id });
     }
     setSections(result);
-  }
+  }, []);
 
   useEffect(() => { load(); }, []);
+
+  async function toggleAvailability(item: Item) {
+    if (!isOnline) return;
+    if (toggling.has(item.id)) return;
+    const newVal = !item.is_available;
+    // Optimistic update
+    setSections(prev =>
+      prev.map(sec => ({
+        ...sec,
+        data: sec.data.map(i => i.id === item.id ? { ...i, is_available: newVal } : i),
+      }))
+    );
+    setToggling(prev => new Set(prev).add(item.id));
+    try {
+      await client.patch(`/items/${item.id}`, { is_available: newVal });
+    } catch {
+      // Revert on failure
+      setSections(prev =>
+        prev.map(sec => ({
+          ...sec,
+          data: sec.data.map(i => i.id === item.id ? { ...i, is_available: item.is_available } : i),
+        }))
+      );
+    } finally {
+      setToggling(prev => { const s = new Set(prev); s.delete(item.id); return s; });
+    }
+  }
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -101,12 +130,20 @@ export default function MenuScreen() {
                 </View>
                 <View style={s.itemRight}>
                   <Text style={s.itemPrice}>₹{item.price.toFixed(2)}</Text>
-                  <View style={[s.availChip, item.is_available ? s.availOn : s.availOff]}>
-                    <View style={[s.availDot, { backgroundColor: item.is_available ? '#16a34a' : '#dc2626' }]} />
+                  <TouchableOpacity
+                    style={[s.availChip, item.is_available ? s.availOn : s.availOff, !isOnline && { opacity: 0.5 }]}
+                    onPress={() => toggleAvailability(item)}
+                    disabled={!isOnline || toggling.has(item.id)}
+                    activeOpacity={0.75}
+                  >
+                    {toggling.has(item.id)
+                      ? <ActivityIndicator size={10} color={item.is_available ? '#16a34a' : '#dc2626'} />
+                      : <View style={[s.availDot, { backgroundColor: item.is_available ? '#16a34a' : '#dc2626' }]} />
+                    }
                     <Text style={[s.availText, { color: item.is_available ? '#16a34a' : '#dc2626' }]}>
                       {item.is_available ? 'Available' : 'Unavailable'}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
