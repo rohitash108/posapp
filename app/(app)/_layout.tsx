@@ -279,7 +279,7 @@ export default function AppLayout() {
   if (isLarge) {
     return (
       <View style={{ flex: 1, flexDirection: 'row' }}>
-        <Sidebar />
+        {!isPOS && <Sidebar />}
         <View style={{ flex: 1 }}>
           <Tabs screenOptions={tabScreenOptions}>
             <Tabs.Screen name="dashboard/index" options={{ headerTitle: () => <RestaurantHeader />, headerRight: () => <View style={{ marginRight: 16 }}><SyncDot /></View> }} />

@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import uuid from 'react-native-uuid';
 import { getCategories, getItems, addToSyncQueue, createLocalOrder } from '@/database/repositories';
 import {
@@ -62,64 +63,150 @@ function getDisplayPrice(item: Item): string {
 }
 
 // ── KOT Print ─────────────────────────────────────────────────────────────────
-function printKOT(items: any[], orderType: string, tableId?: number, tables?: RestaurantTable[], orderNum?: string, notes?: string) {
+function printKOT(items: any[], orderType: string, tableId?: number, tables?: RestaurantTable[], orderNum?: string, notes?: string, restaurantName?: string) {
   if (Platform.OS !== 'web') return;
   const tableName = tables?.find(t => t.id === tableId)?.name ?? '';
   const rows = items.map(i =>
-    `<tr><td style="font-size:16px;font-weight:bold;padding:4px 0">${i.name}${i.variation ? ` (${i.variation})` : ''}</td><td align="center" style="font-size:18px;font-weight:900;padding:4px 8px">${i.quantity}</td></tr>`
+    `<div class="item"><span class="nm">${i.name || i.item_name || ''}${i.variation ? ` (${i.variation})` : ''}</span><span class="qty">x${i.quantity}</span></div>`
   ).join('');
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>KOT</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;max-width:300px;margin:0 auto;padding:10px}
-h2{text-align:center;font-size:18px;letter-spacing:3px;border:3px solid #000;padding:6px;margin-bottom:8px}
-.info{font-size:11px;margin-bottom:8px;border-bottom:2px dashed #000;padding-bottom:6px}
-table{width:100%;border-collapse:collapse}th{font-size:10px;text-transform:uppercase;padding:4px 0;border-bottom:2px solid #000}
-.footer{text-align:center;font-size:10px;margin-top:10px;border-top:2px dashed #000;padding-top:6px}
-@media print{body{max-width:100%}}</style></head><body>
-<h2>KITCHEN ORDER</h2>
-<div class="info">
-  <b>Order:</b> #${orderNum ?? '—'}<br/>
-  <b>Type:</b> ${orderType.replace('_',' ').toUpperCase()}${tableName ? ` · Table: ${tableName}` : ''}<br/>
-  <b>Time:</b> ${new Date().toLocaleTimeString()}
-  ${notes ? `<br/><b>Note:</b> ${notes}` : ''}
+  const totalQty = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const dateStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const typeLabel = (orderType || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>KOT</title>
+<style>
+@page{size:auto;margin:3mm 2mm}
+html{-webkit-text-size-adjust:100%}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;width:100%}
+body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:600;line-height:1.3;color:#000;background:#fff;padding:0 2mm 70px;max-width:320px;margin:0 auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+@media print{body{padding:0 1mm 0;max-width:100%}.no-print{display:none!important}.item{page-break-inside:avoid;break-inside:avoid}}
+.c{text-align:center}.b{font-weight:800}.sm{font-size:9px}
+.hr{border:none;border-top:1px dashed #000;margin:4px 0}
+.hrd{border:none;border-top:2px solid #000;margin:4px 0}
+.row{display:flex;justify-content:space-between;gap:4px;margin:2px 0}
+.shop-name{font-size:12px;font-weight:800;margin-bottom:2px}
+.kot-heading{font-size:22px;font-weight:900;letter-spacing:4px;text-transform:uppercase;border:3px solid #000;padding:3px 12px;margin:4px auto;display:inline-block}
+.item{display:flex;justify-content:space-between;gap:6px;margin:3px 0;font-size:12px;font-weight:700}
+.item .nm{flex:1;min-width:0;word-break:break-word}
+.item .qty{flex-shrink:0;font-size:13px;font-weight:900;min-width:28px;text-align:right}
+.print-actions{position:fixed;left:0;right:0;bottom:0;padding:10px 16px;background:rgba(255,255,255,.97);border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:center;z-index:10}
+.print-actions button{flex:1;max-width:260px;padding:10px 14px;font-size:15px;font-weight:600;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer}
+.print-actions .btn-close{flex:0;background:#f3f4f6;color:#111}
+</style></head><body>
+<div class="c">
+  <div class="shop-name">${restaurantName || 'Restaurant'}</div>
+  <div><span class="kot-heading">KOT</span></div>
 </div>
-<table><thead><tr><th align="left">ITEM</th><th>QTY</th></tr></thead><tbody>${rows}</tbody></table>
-<div class="footer">— KOT —</div>
-<script>window.onload=function(){window.print()}</script></body></html>`;
-  const w = window.open('', '_blank', 'width=350,height=500');
+<div class="hrd"></div>
+<div class="row"><span>Date &amp; Time</span><span>${dateStr}</span></div>
+${tableName ? `<div class="row"><span>Table No.</span><span class="b">${tableName}</span></div>` : orderType === 'dine_in' ? `<div class="row"><span>Table No.</span><span class="b">—</span></div>` : ''}
+${orderNum ? `<div class="row"><span>Order #</span><span class="b">${orderNum}</span></div>` : ''}
+<div class="row"><span>Type</span><span class="b">${typeLabel}</span></div>
+<div class="hrd"></div>
+<div class="row sm b"><span>Item</span><span>Qty</span></div>
+<div class="hr"></div>
+${rows}
+${notes ? `<div class="hr"></div><div style="font-size:10px;margin:3px 0"><span class="b">Note:</span> <span style="font-weight:400;font-style:italic">${notes}</span></div>` : ''}
+<div class="hrd"></div>
+<div class="c sm" style="margin-top:3px">Total Items: ${totalQty}</div>
+<div class="print-actions no-print">
+  <button type="button" class="btn-close" onclick="window.close()">Close</button>
+  <button type="button" onclick="window.print()">Print KOT</button>
+</div>
+<script>(function(){if(window.self===window.top){if(document.readyState==='complete'){setTimeout(function(){window.print()},400)}else{window.addEventListener('load',function(){setTimeout(function(){window.print()},400)})}}})();</script>
+</body></html>`;
+  const w = window.open('', '_blank', 'width=380,height=600');
   if (w) { w.document.write(html); w.document.close(); }
 }
 
 // ── Print receipt on web ───────────────────────────────────────────────────────
-function printOrderReceipt(order: any, restaurant: any) {
+function printOrderReceipt(order: any, restaurant: any, taxRate = 0) {
   if (Platform.OS !== 'web') return;
-  const items = (order.items ?? []).map((i: any) =>
-    `<tr>
-      <td>${i.name}${i.variation ? ` <em>(${i.variation})</em>` : ''}</td>
-      <td align="center">${i.quantity}</td>
-      <td align="right">₹${Number(i.unit_price).toFixed(2)}</td>
-      <td align="right">₹${Number(i.total_price).toFixed(2)}</td>
-    </tr>`
-  ).join('');
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;font-size:12px;max-width:360px;margin:0 auto;padding:12px}
-h2{text-align:center;font-size:16px;letter-spacing:2px;margin-bottom:2px}.sub{text-align:center;font-size:10px;color:#555;margin-bottom:10px;line-height:1.4}
-hr{border:none;border-top:1px dashed #aaa;margin:6px 0}table{width:100%;border-collapse:collapse;font-size:11px}th{text-align:left;font-size:9px;text-transform:uppercase;color:#777;padding:3px 0;border-bottom:1px solid #ddd}
-td{padding:4px 0;vertical-align:top}.total{font-size:15px;font-weight:bold}.footer{text-align:center;font-size:10px;color:#999;margin-top:10px}
-@media print{body{max-width:100%}}</style></head><body>
-<h2>${restaurant?.name ?? 'RESTAURANT'}</h2>
-<div class="sub">${restaurant?.address ?? ''}${restaurant?.phone ? '<br>'+restaurant.phone : ''}</div>
-<hr/><div style="font-size:11px"><b>#${order.order_number ?? '—'}</b> &nbsp;|&nbsp; ${(order.order_type ?? '').replace('_',' ').toUpperCase()}</div>
-<div style="font-size:10px;color:#555;margin:3px 0">${order.customer_name ? `Customer: ${order.customer_name}` : 'Walk-in'}</div>
-<hr/><table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead><tbody>${items}</tbody></table><hr/>
-<table><tr><td>Subtotal</td><td align="right">₹${Number(order.subtotal).toFixed(2)}</td></tr>
-${order.tax_amount > 0 ? `<tr><td>Tax</td><td align="right">₹${Number(order.tax_amount).toFixed(2)}</td></tr>` : ''}
-${order.discount_amount > 0 ? `<tr><td>Discount</td><td align="right" style="color:#16a34a">-₹${Number(order.discount_amount).toFixed(2)}</td></tr>` : ''}
-<tr><td class="total"><b>TOTAL</b></td><td class="total" align="right"><b>₹${Number(order.total).toFixed(2)}</b></td></tr>
-</table><hr/>
-<div style="font-size:10px">Payment: ${order.payment_method?.toUpperCase() ?? '—'}</div>
-<div class="footer">Thank you for visiting!</div>
-<script>window.onload=function(){window.print()}</script></body></html>`;
-  const w = window.open('', '_blank', 'width=400,height=560');
+  const logoUrl = typeof window !== 'undefined' ? window.location.origin + '/global-tea-cafe-logo.png' : '';
+  const currency = restaurant?.currency || '₹';
+  const taxRateN = Number(taxRate) || 0;
+  const cgstRate = taxRateN / 2;
+  const sgstRate = taxRateN / 2;
+  const totalTax = Number(order.tax_amount || 0);
+  const cgstAmt  = (totalTax / 2).toFixed(2);
+  const sgstAmt  = (totalTax / 2).toFixed(2);
+  const subtotal = Number(order.subtotal || 0);
+  const total    = Number(order.total || 0);
+  const discAmt  = Number(order.discount_amount || 0);
+  const tableLabel = order.table_name || (order.restaurant_table_id ? `Table ${order.restaurant_table_id}` : '');
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const dateStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const typeLabel = (order.order_type || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+  const itemRows = (order.items ?? []).map((i: any) => {
+    const lineTotal = Number(i.total_price || (Number(i.unit_price) * Number(i.quantity)) || 0);
+    return `<div class="item"><span class="nm">${i.name || i.item_name || ''} &times;${i.quantity}${i.variation ? ` <em>(${i.variation})</em>` : ''}</span><span class="pr">${currency}${lineTotal.toFixed(2)}</span></div>`;
+  }).join('');
+  const receivedAmt = Number(order.received_amount || 0);
+  const changeAmt   = receivedAmt > total ? (receivedAmt - total) : 0;
+  const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Receipt – ${restaurant?.name ?? 'Restaurant'}</title>
+<style>
+@page{size:auto;margin:3mm 2mm}
+html{-webkit-text-size-adjust:100%}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;width:100%}
+body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:600;line-height:1.25;color:#000;background:#fff;padding:0 2mm 70px;max-width:320px;margin:0 auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+@media print{body{padding:0 1mm 0;max-width:100%;font-size:10px}.no-print{display:none!important}}
+.c{text-align:center}.b{font-weight:700}.sm{font-size:9px}
+.hr{border:none;border-top:1px dashed #000;margin:3px 0}
+.hrd{border:none;border-top:2px solid #000;margin:3px 0}
+.row{display:flex;justify-content:space-between;gap:4px;margin:1px 0}
+.row span:last-child{flex-shrink:0}
+.logo img{width:14mm;height:14mm;object-fit:contain;display:block;margin:0 auto 1mm}
+.shop-name{font-size:13px;font-weight:800;margin-bottom:1px}
+.shop-info{font-size:9px;color:#000;line-height:1.3}
+.item{display:flex;justify-content:space-between;gap:4px;margin:1px 0}
+.item .nm{flex:1;min-width:0;word-break:break-word}
+.item .pr{flex-shrink:0}
+.tot-row{display:flex;justify-content:space-between;gap:4px;margin:1px 0}
+.grand{font-size:12px;font-weight:800}
+.print-actions{position:fixed;left:0;right:0;bottom:0;padding:10px 16px;background:rgba(255,255,255,.97);border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:center;z-index:10}
+.print-actions button{flex:1;max-width:260px;padding:10px 14px;font-size:15px;font-weight:600;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer}
+.print-actions .btn-close{flex:0;background:#f3f4f6;color:#111}
+</style></head><body>
+<div class="c">
+  <div class="logo"><img src="${logoUrl}" alt="${restaurant?.name ?? ''}" onerror="this.style.display='none'"></div>
+  <div class="shop-name">${restaurant?.name ?? 'Restaurant'}</div>
+  ${restaurant?.address ? `<div class="shop-info">${restaurant.address}</div>` : ''}
+  ${restaurant?.phone ? `<div class="shop-info">Ph: ${restaurant.phone}</div>` : ''}
+  ${restaurant?.gst_number ? `<div class="shop-info">GSTIN: ${restaurant.gst_number}</div>` : ''}
+</div>
+<div class="hrd"></div>
+<div class="row"><span>Date</span><span>${dateStr}</span></div>
+${tableLabel ? `<div class="row"><span>Table</span><span class="b">${tableLabel}</span></div>` : ''}
+<div class="row"><span>Type</span><span>${typeLabel}</span></div>
+${order.order_number ? `<div class="row"><span>Order #</span><span class="b">${order.order_number}</span></div>` : ''}
+${order.customer_name && order.customer_name !== 'Walk-in' ? `<div class="row"><span>Customer</span><span>${order.customer_name}</span></div>` : ''}
+<div class="hr"></div>
+<div class="row sm b"><span>Item</span><span>Amt</span></div>
+<div class="hr"></div>
+${itemRows}
+<div class="hr"></div>
+<div class="tot-row"><span>Sub Total</span><span>${currency}${subtotal.toFixed(2)}</span></div>
+${taxRateN > 0 ? `<div class="tot-row"><span>CGST ${cgstRate.toFixed(1)}%</span><span>${currency}${cgstAmt}</span></div><div class="tot-row"><span>SGST ${sgstRate.toFixed(1)}%</span><span>${currency}${sgstAmt}</span></div>` : totalTax > 0 ? `<div class="tot-row"><span>Tax</span><span>${currency}${totalTax.toFixed(2)}</span></div>` : ''}
+${discAmt > 0 ? `<div class="tot-row"><span>Discount</span><span>-${currency}${discAmt.toFixed(2)}</span></div>` : ''}
+<div class="hrd"></div>
+<div class="tot-row grand"><span>TOTAL</span><span>${currency}${total.toFixed(2)}</span></div>
+<div class="hrd"></div>
+${order.payment_method ? `<div class="row"><span>Payment</span><span class="b">${(order.payment_method || '').toUpperCase()}</span></div>` : ''}
+${receivedAmt > 0 ? `<div class="row"><span>Received</span><span>${currency}${receivedAmt.toFixed(2)}</span></div>${changeAmt > 0 ? `<div class="row"><span>Change</span><span>${currency}${changeAmt.toFixed(2)}</span></div>` : ''}` : ''}
+<div class="c sm" style="margin-top:4px">Thank you, visit again!<br>Powered by IT Softwar | softwar.in</div>
+<div class="print-actions no-print">
+  <button type="button" class="btn-close" onclick="window.history.length>1?history.back():window.close()">Close</button>
+  <button type="button" id="receipt-print-btn">Print</button>
+</div>
+<script>(function(){var btn=document.getElementById('receipt-print-btn');function doPrint(){try{window.print()}catch(e){}}if(btn)btn.addEventListener('click',doPrint);function afterReady(){setTimeout(doPrint,400)}if(document.readyState==='complete'){afterReady()}else{window.addEventListener('load',afterReady)}})();</script>
+</body></html>`;
+  const w = window.open('', '_blank', 'width=400,height=620');
   if (w) { w.document.write(html); w.document.close(); }
 }
 
@@ -131,6 +218,7 @@ export default function POSScreen() {
   const [customers, setCustomers]         = useState<Customer[]>([]);
   const [staff, setStaff]                 = useState<StaffMember[]>([]);
   const [recentOrders, setRecentOrders]   = useState<Order[]>([]);
+  const [imgErrors, setImgErrors]         = useState<Set<number>>(new Set());
   const [activeCatId, setActiveCatId]     = useState<number | null>(null);
   const [search, setSearch]               = useState('');
   const [foodFilter, setFoodFilter]       = useState<Record<string, boolean>>({ veg: true, non_veg: true, egg: true });
@@ -154,6 +242,9 @@ export default function POSScreen() {
   const [customItemQty, setCustomItemQty]   = useState('1');
   const [lastOrderNum, setLastOrderNum]   = useState<string | null>(null);
   const [lastOrderData, setLastOrderData] = useState<any>(null);
+  const [lastOrderId, setLastOrderId]     = useState<number | null>(null);
+  const [customPctInput, setCustomPctInput] = useState('');
+  const [quickPct, setQuickPct]           = useState<number | null>(null);
 
   const {
     cart, addItem, updateQuantity, clearCart, getSubtotal, getTotal,
@@ -220,7 +311,17 @@ export default function POSScreen() {
     }
   }, [activeCatId]);
 
-  useEffect(() => { loadData(); }, []);
+  // Auto-refresh recent orders every 30s
+  useEffect(() => {
+    loadData();
+    const t = setInterval(() => {
+      ordersApi.list({ per_page: 8 }).then(r => {
+        const d = r.data?.data ?? r.data ?? [];
+        setRecentOrders(Array.isArray(d) ? d.slice(0, 8) : []);
+      }).catch(() => {});
+    }, 30_000);
+    return () => clearInterval(t);
+  }, []);
   useEffect(() => { loadItems(); }, [activeCatId]);
 
   // Sync discount/notes from inputs to cart store
@@ -289,6 +390,30 @@ export default function POSScreen() {
     setCouponInput('');
   }
 
+  function handleQuickDiscount(pct: number) {
+    const disc = parseFloat(((getSubtotal() * pct) / 100).toFixed(2));
+    setDiscountInput(String(disc));
+    setDiscount(disc);
+    setQuickPct(pct);
+    setCustomPctInput('');
+  }
+
+  function handleCustomPctApply() {
+    const pct = parseFloat(customPctInput);
+    if (isNaN(pct) || pct <= 0) return;
+    const disc = parseFloat(((getSubtotal() * pct) / 100).toFixed(2));
+    setDiscountInput(String(disc));
+    setDiscount(disc);
+    setQuickPct(null);
+  }
+
+  function handleDiscountClear() {
+    setDiscountInput('');
+    setCustomPctInput('');
+    setQuickPct(null);
+    setDiscount(0);
+  }
+
   // ── Add custom item ────────────────────────────────────────────────────────
   function handleAddCustomItem() {
     const name  = customItemName.trim();
@@ -306,7 +431,7 @@ export default function POSScreen() {
   // ── KOT print ──────────────────────────────────────────────────────────────
   function handleKOTPrint() {
     if (cart.items.length === 0) { Alert.alert('Empty cart'); return; }
-    printKOT(cart.items, cart.order_type, cart.table_id, tables, 'NEW', cart.notes);
+    printKOT(cart.items, cart.order_type, cart.table_id, tables, 'NEW', cart.notes, restaurant?.name);
     setKotPrinted(true);
   }
 
@@ -350,6 +475,7 @@ export default function POSScreen() {
         notes:                notesInput.trim() || null,
         items: cart.items.map(i => ({
           item_id:     i.item_id || null,
+          item_name:   i.name,
           name:        i.name,
           variation:   i.variation ?? null,
           quantity:    i.quantity,
@@ -360,23 +486,45 @@ export default function POSScreen() {
 
       if (isOnline) {
         try {
+          console.log('[POS] Placing order online...', { total, items: payload.items.length });
           const res = await ordersApi.create(payload);
-          const orderNum = res.data?.order_number ?? res.data?.data?.order_number ?? localUuid.slice(0, 8);
+          console.log('[POS] Order API response:', JSON.stringify(res.data));
+          const orderNum   = res.data?.order_number ?? res.data?.data?.order_number ?? localUuid.slice(0, 8);
+          const orderId    = res.data?.id ?? res.data?.data?.id ?? null;
+          const tableName  = tables.find(t => t.id === cart.table_id)?.name ?? null;
           setLastOrderNum(orderNum);
-          setLastOrderData({ ...payload, order_number: orderNum });
+          setLastOrderId(orderId);
+          setLastOrderData({ ...payload, order_number: orderNum, table_name: tableName });
           clearCart();
           setWalkInName('');
           setDiscountInput('');
+          setCustomPctInput('');
+          setQuickPct(null);
           setCouponInput('');
           setNotesInput('');
           setReceivedInput('');
           setShowCart(false);
-          // Refresh recent orders
-          ordersApi.list({ per_page: 8 }).then(r => setRecentOrders(r.data?.data ?? r.data ?? [])).catch(() => {});
+          // Immediately add new order to recent strip (optimistic)
+          const newOrderPreview: any = {
+            id: Date.now(),
+            order_number: orderNum,
+            customer_name: cart.customer_name || walkInName || null,
+            status: 'pending',
+            total,
+          };
+          setRecentOrders(prev => [newOrderPreview, ...prev].slice(0, 8));
+          // Then refresh from API for accurate data
+          setTimeout(() => {
+            ordersApi.list({ per_page: 8 }).then(r => {
+              const d = r.data?.data ?? r.data ?? [];
+              setRecentOrders(Array.isArray(d) ? d.slice(0, 8) : []);
+            }).catch(() => {});
+          }, 1500);
           return;
         } catch (apiErr: any) {
           const status  = apiErr?.response?.status;
           const message = apiErr?.response?.data?.message ?? apiErr?.response?.data?.error ?? (apiErr?.message || 'Network error');
+          console.error('[POS] Order API error:', status, message, apiErr?.response?.data);
           if (status) {
             Alert.alert(`Order Failed (${status})`, message);
             return;
@@ -393,11 +541,15 @@ export default function POSScreen() {
         await createLocalOrder({ ...payload, items: payload.items as any } as any);
         await addToSyncQueue({ id: localUuid, action: 'create_order', payload: JSON.stringify(payload), created_at: new Date().toISOString() });
       }
+      const tableNameOffline = tables.find(t => t.id === cart.table_id)?.name ?? null;
       setLastOrderNum(localUuid.slice(0, 8));
-      setLastOrderData({ ...payload, order_number: localUuid.slice(0, 8) });
+      setLastOrderData({ ...payload, order_number: localUuid.slice(0, 8), table_name: tableNameOffline });
       clearCart();
       setWalkInName('');
       setDiscountInput('');
+      setCustomPctInput('');
+      setQuickPct(null);
+      setCouponInput('');
       setNotesInput('');
       setReceivedInput('');
       setShowCart(false);
@@ -412,13 +564,21 @@ export default function POSScreen() {
   function handleNewOrder() {
     setLastOrderNum(null);
     setLastOrderData(null);
+    setLastOrderId(null);
+  }
+
+  async function handleCompleteOrder() {
+    if (lastOrderId) {
+      try { await ordersApi.updateStatus(lastOrderId, 'completed'); } catch { /* ignore */ }
+    }
+    handleNewOrder();
   }
 
   // ── Computed ───────────────────────────────────────────────────────────────
   const cartCount = cart.items.reduce((s, i) => s + i.quantity, 0);
   const subtotal  = getSubtotal();
   const taxAmount = parseFloat(((subtotal * taxRate) / 100).toFixed(2));
-  const discount  = cart.discount_amount ?? 0;
+  const discount  = (cart.discount_amount ?? 0) + (cart.coupon_discount ?? 0);
   const total     = getTotal(taxRate);
   const received  = parseFloat(receivedInput) || 0;
   const change    = received > 0 ? Math.max(0, received - total) : 0;
@@ -429,50 +589,63 @@ export default function POSScreen() {
     || (c.phone ?? '').includes(custSearch)
   );
 
-  // ── Success screen after placing order ─────────────────────────────────────
-  if (lastOrderNum && lastOrderData) {
-    return (
-      <View style={su.shell}>
+  // ── "Order Placed!" modal — matches csPos style ────────────────────────────
+  const successModal = (
+    <Modal visible={!!(lastOrderNum && lastOrderData)} transparent animationType="fade" onRequestClose={handleNewOrder}>
+      <View style={su.overlay}>
         <View style={su.card}>
-          <View style={su.iconCircle}>
-            <Ionicons name="checkmark-circle" size={56} color="#16a34a" />
+          {/* Title row */}
+          <View style={su.titleRow}>
+            <Ionicons name="checkmark-circle" size={28} color="#16a34a" />
+            <Text style={su.title}>Order Placed!</Text>
           </View>
-          <Text style={su.title}>Order Placed!</Text>
-          <Text style={su.orderNum}>#{lastOrderNum}</Text>
-          <Text style={su.sub}>
-            {lastOrderData.customer_name} · {(lastOrderData.order_type ?? '').replace('_', ' ').toUpperCase()}
+          {/* Order number */}
+          <Text style={su.orderNum}>Order #{lastOrderNum}</Text>
+          {/* Hint text */}
+          <Text style={su.hint}>
+            Print KOT for kitchen, Print Bill for customer, or mark the order complete.
           </Text>
-          <View style={su.amountRow}>
-            <Text style={su.amountLabel}>Total</Text>
-            <Text style={su.amountVal}>₹{Number(lastOrderData.total).toFixed(2)}</Text>
-          </View>
+          {/* Change due */}
           {change > 0 && (
-            <View style={[su.amountRow, { backgroundColor: '#f0fdf4' }]}>
-              <Text style={[su.amountLabel, { color: '#16a34a' }]}>Change</Text>
-              <Text style={[su.amountVal, { color: '#16a34a' }]}>₹{change.toFixed(2)}</Text>
+            <View style={su.changePill}>
+              <Text style={su.changeText}>Change to return: ₹{change.toFixed(2)}</Text>
             </View>
           )}
-          <View style={su.actions}>
-            {Platform.OS === 'web' && (
-              <TouchableOpacity style={su.printBtn} onPress={() => printOrderReceipt(lastOrderData, restaurant)}>
-                <Ionicons name="print-outline" size={18} color="#fff" />
-                <Text style={su.printBtnText}>Print Receipt</Text>
-              </TouchableOpacity>
+          {/* Action buttons */}
+          <TouchableOpacity style={su.kotBtn}
+            onPress={() => lastOrderData && printKOT(
+              lastOrderData.items, lastOrderData.order_type,
+              lastOrderData.restaurant_table_id, tables,
+              lastOrderNum ?? undefined, lastOrderData.notes, restaurant?.name
             )}
-            <TouchableOpacity style={su.newBtn} onPress={handleNewOrder}>
-              <Ionicons name="add-circle-outline" size={18} color="#fff" />
-              <Text style={su.newBtnText}>New Order</Text>
-            </TouchableOpacity>
-          </View>
+          >
+            <Ionicons name="print-outline" size={16} color="#1A2B1A" />
+            <Text style={su.kotText}>Print KOT</Text>
+            <Text style={su.kotSub}>(Kitchen)</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={su.billBtn}
+            onPress={() => lastOrderData && printOrderReceipt(lastOrderData, restaurant, taxRate)}
+          >
+            <Ionicons name="print" size={16} color="#fff" />
+            <Text style={su.billText}>Print Bill</Text>
+            <Text style={su.billSub}>(Customer)</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={su.completeBtn} onPress={handleCompleteOrder}>
+            <Ionicons name="checkmark-circle" size={16} color="#fff" />
+            <Text style={su.completeText}>Complete Order</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={su.closeBtn} onPress={handleNewOrder}>
+            <Text style={su.closeText}>× Close</Text>
+          </TouchableOpacity>
         </View>
       </View>
-    );
-  }
+    </Modal>
+  );
 
   // ── Cart panel content (reused in desktop sidebar and mobile modal) ─────────
   const cartPanel = (
     <View style={cp.wrap}>
-      {/* Order type */}
+      {/* ── Order type tabs ── */}
       <View style={cp.orderTypes}>
         {ORDER_TYPES.map(t => (
           <TouchableOpacity
@@ -486,69 +659,64 @@ export default function POSScreen() {
         ))}
       </View>
 
-      {/* Customer row */}
-      <View style={cp.section}>
-        <View style={cp.fieldRow}>
-          <View style={cp.fieldInner}>
-            <Ionicons name="person-outline" size={14} color="#9ca3af" />
-            <TextInput
-              style={cp.fieldInput}
-              placeholder={cart.customer_name || 'Walk-in customer'}
-              value={walkInName}
-              onChangeText={setWalkInName}
-              placeholderTextColor="#9ca3af"
-            />
-            {(walkInName || cart.customer_name) ? (
-              <TouchableOpacity onPress={() => { setWalkInName(''); setCustomer(undefined, undefined, undefined); }}>
-                <Ionicons name="close-circle" size={15} color="#9ca3af" />
+      {/* ── Waiter + Customer rows ── */}
+      <View style={cp.twoColSection}>
+        {/* Waiter */}
+        <View style={cp.halfField}>
+          <Text style={cp.fieldLabel}>Waiter</Text>
+          <TouchableOpacity style={cp.fieldBox} onPress={() => setShowWaiterPicker(true)}>
+            <Ionicons name="person-circle-outline" size={13} color="#9ca3af" />
+            <Text style={[cp.fieldBoxText, cart.waiter_name && { color: '#111827' }]} numberOfLines={1}>
+              {cart.waiter_name || 'Waiter'}
+            </Text>
+            {cart.waiter_name ? (
+              <TouchableOpacity onPress={() => setWaiter(undefined, undefined)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                <Ionicons name="close-circle" size={13} color="#9ca3af" />
               </TouchableOpacity>
             ) : null}
-          </View>
-          <TouchableOpacity style={cp.iconBtn} onPress={() => setShowCustPicker(true)}>
-            <Ionicons name="people" size={16} color="#0D76E1" />
           </TouchableOpacity>
         </View>
-        {cart.customer_name && !walkInName && (
-          <Text style={cp.selectedText}>✓ {cart.customer_name}</Text>
-        )}
+
+        {/* Customer */}
+        <View style={cp.halfField}>
+          <Text style={cp.fieldLabel}>Customer</Text>
+          <View style={cp.fieldRow}>
+            <View style={[cp.fieldBox, { flex: 1 }]}>
+              <TextInput
+                style={[cp.fieldBoxText, { flex: 1 }]}
+                placeholder={cart.customer_name || 'Walk-in'}
+                value={walkInName}
+                onChangeText={setWalkInName}
+                placeholderTextColor="#9ca3af"
+              />
+              {(walkInName || cart.customer_name) ? (
+                <TouchableOpacity onPress={() => { setWalkInName(''); setCustomer(undefined, undefined, undefined); }}>
+                  <Ionicons name="close-circle" size={13} color="#9ca3af" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <TouchableOpacity style={cp.iconSmBtn} onPress={() => setShowCustPicker(true)}>
+              <Ionicons name="add" size={14} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
-      {/* Waiter row */}
-      {staff.length > 0 && (
-        <View style={cp.section}>
-          <TouchableOpacity style={cp.fieldRow} onPress={() => setShowWaiterPicker(true)}>
-            <View style={[cp.fieldInner, { flex: 1 }]}>
-              <Ionicons name="person-circle-outline" size={14} color="#9ca3af" />
-              <Text style={[cp.fieldInput, { color: cart.waiter_name ? '#111827' : '#9ca3af' }]}>
-                {cart.waiter_name || 'Select waiter (optional)'}
-              </Text>
-            </View>
-            {cart.waiter_name && (
-              <TouchableOpacity style={cp.iconBtn} onPress={() => setWaiter(undefined, undefined)}>
-                <Ionicons name="close" size={16} color="#9ca3af" />
-              </TouchableOpacity>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Table selector (dine_in) */}
+      {/* ── Table selector ── */}
       {cart.order_type === 'dine_in' && tables.length > 0 && (
-        <View style={cp.section}>
-          <Text style={cp.sectionLabel}>Table</Text>
+        <View style={cp.tableSection}>
+          <View style={cp.tableLabelRow}>
+            <Text style={cp.fieldLabel}>Table</Text>
+            <View style={cp.requiredDot}><Text style={cp.requiredStar}>*</Text></View>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-            <TouchableOpacity
-              style={[cp.tableChip, !cart.table_id && cp.tableChipActive]}
-              onPress={() => setTable(undefined)}
-            >
+            <TouchableOpacity style={[cp.tableChip, !cart.table_id && cp.tableChipActive]} onPress={() => setTable(undefined)}>
               <Text style={[cp.tableChipText, !cart.table_id && cp.tableChipTextActive]}>—</Text>
             </TouchableOpacity>
             {tables.map(t => (
-              <TouchableOpacity
-                key={t.id}
+              <TouchableOpacity key={t.id}
                 style={[cp.tableChip, cart.table_id === t.id && cp.tableChipActive]}
-                onPress={() => setTable(t.id)}
-              >
+                onPress={() => setTable(t.id)}>
                 <Text style={[cp.tableChipText, cart.table_id === t.id && cp.tableChipTextActive]}>{t.name}</Text>
               </TouchableOpacity>
             ))}
@@ -556,12 +724,19 @@ export default function POSScreen() {
         </View>
       )}
 
-      {/* Cart items */}
-      <View style={cp.colHeader}>
-        <Text style={[cp.colText, { flex: 1 }]}>ITEM</Text>
-        <Text style={[cp.colText, { width: 80, textAlign: 'center' }]}>QTY</Text>
-        <Text style={[cp.colText, { width: 68, textAlign: 'right' }]}>TOTAL</Text>
+      {/* ── Ordered Menus header ── */}
+      <View style={cp.orderedHeader}>
+        <Text style={cp.orderedTitle}>Ordered Menus</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity style={cp.addCustomBtn} onPress={() => setShowCustomItem(true)}>
+            <Ionicons name="add" size={13} color="#374151" />
+            <Text style={cp.addCustomText}>Add custom item</Text>
+          </TouchableOpacity>
+          <Text style={cp.totalMenus}>Total Menus : {cart.items.length}</Text>
+        </View>
       </View>
+
+      {/* ── Cart items ── */}
       <ScrollView style={cp.itemList} showsVerticalScrollIndicator={false}>
         {cart.items.length === 0 ? (
           <View style={cp.emptyCart}>
@@ -570,167 +745,215 @@ export default function POSScreen() {
             <Text style={cp.emptyCartSub}>Tap items to add them</Text>
           </View>
         ) : cart.items.map(item => (
-          <View key={item.uuid} style={cp.cartRow}>
-            <View style={{ flex: 1, marginRight: 4 }}>
-              <Text style={cp.cartName} numberOfLines={2}>{item.name}</Text>
-              {item.variation && <Text style={cp.cartVar}>{item.variation}</Text>}
-            </View>
-            <View style={cp.qtyRow}>
-              <TouchableOpacity style={cp.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity - 1)}>
-                <Ionicons name="remove" size={12} color="#374151" />
+          <View key={item.uuid} style={cp.cartItemBox}>
+            {/* Name + qty controls + remove */}
+            <View style={cp.cartItemRow}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={cp.cartName} numberOfLines={2}>{item.name}</Text>
+                {item.variation && <Text style={cp.cartVar}>{item.variation}</Text>}
+              </View>
+              <View style={cp.qtyRow}>
+                <TouchableOpacity style={cp.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity - 1)}>
+                  <Ionicons name="remove" size={11} color="#374151" />
+                </TouchableOpacity>
+                <Text style={cp.qtyNum}>{item.quantity}</Text>
+                <TouchableOpacity style={cp.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity + 1)}>
+                  <Ionicons name="add" size={11} color="#374151" />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity style={cp.removeBtn} onPress={() => updateQuantity(item.uuid, 0)}>
+                <Ionicons name="close" size={13} color="#6b7280" />
               </TouchableOpacity>
-              <Text style={cp.qtyNum}>{item.quantity}</Text>
-              <TouchableOpacity style={cp.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity + 1)}>
-                <Ionicons name="add" size={12} color="#374151" />
-              </TouchableOpacity>
             </View>
-            <Text style={cp.cartPrice}>₹{item.total_price.toFixed(2)}</Text>
+            {/* Item Rate | Amount | Total */}
+            <View style={cp.cartItemMeta}>
+              <View style={cp.cartMetaCol}>
+                <Text style={cp.cartMetaLabel}>Item Rate</Text>
+                <Text style={cp.cartMetaVal}>₹{item.unit_price.toFixed(2)}</Text>
+              </View>
+              <View style={[cp.cartMetaCol, { alignItems: 'center' }]}>
+                <Text style={cp.cartMetaLabel}>Amount</Text>
+                <Text style={cp.cartMetaVal}>₹{(item.unit_price * item.quantity).toFixed(2)}</Text>
+              </View>
+              <View style={[cp.cartMetaCol, { alignItems: 'flex-end' }]}>
+                <Text style={cp.cartMetaLabel}>Total</Text>
+                <Text style={[cp.cartMetaVal, { fontWeight: '800', color: '#111827' }]}>₹{item.total_price.toFixed(2)}</Text>
+              </View>
+            </View>
           </View>
         ))}
       </ScrollView>
 
-      {/* Discount + Notes */}
-      {cart.items.length > 0 && (
-        <View style={cp.extraFields}>
-          <View style={cp.extraRow}>
-            <View style={[cp.extraInput, { flex: 1, marginRight: 6 }]}>
-              <Ionicons name="pricetag-outline" size={13} color="#9ca3af" />
-              <TextInput
-                style={cp.extraInputText}
-                placeholder="Discount (₹)"
-                value={discountInput}
-                onChangeText={setDiscountInput}
-                keyboardType="decimal-pad"
-                placeholderTextColor="#9ca3af"
-              />
-            </View>
-            <View style={[cp.extraInput, { flex: 1 }]}>
-              <Ionicons name="cash-outline" size={13} color="#9ca3af" />
-              <TextInput
-                style={cp.extraInputText}
-                placeholder="Received (₹)"
-                value={receivedInput}
-                onChangeText={setReceivedInput}
-                keyboardType="decimal-pad"
-                placeholderTextColor="#9ca3af"
-              />
-            </View>
+      {/* ── Payment Summary ── */}
+      <View style={cp.paymentSummary}>
+        <Text style={cp.sectionTitle}>Payment Summary</Text>
+
+        {/* Subtotal / Tax / Discount rows */}
+        <View style={cp.sumRow}>
+          <Text style={cp.sumLabel}>Sub Total</Text>
+          <Text style={cp.sumVal}>₹{subtotal.toFixed(2)}</Text>
+        </View>
+        <View style={cp.sumRow}>
+          <Text style={cp.sumLabel}>Tax ({taxRate}%)</Text>
+          <Text style={cp.sumVal}>₹{taxAmount.toFixed(2)}</Text>
+        </View>
+        <View style={cp.sumRow}>
+          <Text style={cp.sumLabel}>Discount</Text>
+          <Text style={[cp.sumVal, discount > 0 && { color: '#16a34a' }]}>
+            {discount > 0 ? `-₹${discount.toFixed(2)}` : '₹0.00'}
+          </Text>
+        </View>
+
+        {/* Coupon row */}
+        <View style={cp.divider} />
+        {cart.coupon_code ? (
+          <View style={[cp.couponActive]}>
+            <Ionicons name="ticket-outline" size={13} color="#16a34a" />
+            <Text style={cp.couponActiveText}>{cart.coupon_code} (−₹{(cart.coupon_discount ?? 0).toFixed(2)})</Text>
+            <TouchableOpacity onPress={handleRemoveCoupon}>
+              <Ionicons name="close-circle" size={15} color="#16a34a" />
+            </TouchableOpacity>
           </View>
-          {/* Coupon row */}
-          {cart.coupon_code ? (
-            <View style={[cp.extraInput, { backgroundColor: '#f0fdf4', borderColor: '#86efac' }]}>
-              <Ionicons name="ticket-outline" size={13} color="#16a34a" />
-              <Text style={[cp.extraInputText, { color: '#16a34a', fontWeight: '700' }]}>{cart.coupon_code} (-₹{(cart.coupon_discount ?? 0).toFixed(2)})</Text>
-              <TouchableOpacity onPress={handleRemoveCoupon}>
-                <Ionicons name="close-circle" size={15} color="#16a34a" />
-              </TouchableOpacity>
+        ) : (
+          <View style={cp.couponRow}>
+            <View style={cp.couponInput}>
+              <TextInput
+                style={cp.couponInputText}
+                placeholder="Coupon code"
+                value={couponInput}
+                onChangeText={setCouponInput}
+                autoCapitalize="characters"
+                placeholderTextColor="#9ca3af"
+              />
             </View>
-          ) : (
-            <View style={cp.extraRow}>
-              <View style={[cp.extraInput, { flex: 1 }]}>
-                <Ionicons name="ticket-outline" size={13} color="#9ca3af" />
-                <TextInput
-                  style={cp.extraInputText}
-                  placeholder="Coupon code"
-                  value={couponInput}
-                  onChangeText={setCouponInput}
-                  autoCapitalize="characters"
-                  placeholderTextColor="#9ca3af"
-                />
-              </View>
-              <TouchableOpacity
-                style={[cp.iconBtn, { backgroundColor: '#0D76E1', borderColor: '#0D76E1' }, couponLoading && { opacity: 0.5 }]}
-                onPress={handleApplyCoupon}
-                disabled={couponLoading || !couponInput.trim()}
-              >
-                {couponLoading ? <ActivityIndicator size={12} color="#fff" /> : <Ionicons name="checkmark" size={16} color="#fff" />}
-              </TouchableOpacity>
-            </View>
-          )}
-          <View style={cp.extraInput}>
-            <Ionicons name="document-text-outline" size={13} color="#9ca3af" />
+            <TouchableOpacity
+              style={[cp.couponApplyBtn, (!couponInput.trim() || couponLoading) && { opacity: 0.5 }]}
+              onPress={handleApplyCoupon}
+              disabled={couponLoading || !couponInput.trim()}
+            >
+              {couponLoading
+                ? <ActivityIndicator size={11} color="#fff" />
+                : <Text style={cp.couponApplyText}>Apply</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Quick Discount % */}
+        <View style={cp.divider} />
+        <Text style={cp.quickDiscLabel}>Quick Discount %</Text>
+        <View style={cp.quickDiscRow}>
+          {[5, 10, 15, 20].map(pct => (
+            <TouchableOpacity key={pct}
+              style={[cp.quickDiscBtn, quickPct === pct && cp.quickDiscBtnActive]}
+              onPress={() => handleQuickDiscount(pct)}>
+              <Text style={[cp.quickDiscText, quickPct === pct && cp.quickDiscTextActive]}>{pct}%</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Custom % */}
+        <View style={cp.customPctRow}>
+          <View style={cp.customPctInput}>
             <TextInput
-              style={cp.extraInputText}
-              placeholder="Order notes (optional)"
-              value={notesInput}
-              onChangeText={setNotesInput}
+              style={cp.customPctText}
+              placeholder="Custom %"
+              value={customPctInput}
+              onChangeText={setCustomPctInput}
+              keyboardType="decimal-pad"
+              placeholderTextColor="#9ca3af"
+            />
+            <Text style={cp.customPctSymbol}>%</Text>
+          </View>
+          <TouchableOpacity style={cp.customApplyBtn} onPress={handleCustomPctApply}>
+            <Text style={cp.customApplyText}>Apply</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={cp.customClearBtn} onPress={handleDiscountClear}>
+            <Text style={cp.customClearText}>Clear</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Discount ₹ manual input */}
+        <View style={cp.discRupeeRow}>
+          <Text style={cp.discRupeeLabel}>Discount (₹)</Text>
+          <View style={cp.discRupeeInput}>
+            <TextInput
+              style={cp.discRupeeText}
+              value={discountInput}
+              onChangeText={v => { setDiscountInput(v); setQuickPct(null); setCustomPctInput(''); }}
+              keyboardType="decimal-pad"
+              placeholderTextColor="#9ca3af"
+              placeholder="0"
+            />
+          </View>
+        </View>
+
+        {/* Amount to Pay */}
+        <View style={cp.divider} />
+        <View style={cp.amountToPayRow}>
+          <Text style={cp.amountToPayLabel}>Amount to Pay</Text>
+          <Text style={cp.amountToPayVal}>₹{total.toFixed(2)}</Text>
+        </View>
+
+        {/* Received */}
+        <View style={cp.receivedRow}>
+          <Text style={cp.receivedLabel}>Received (₹)</Text>
+          <View style={cp.receivedInput}>
+            <TextInput
+              style={cp.receivedText}
+              placeholder="0"
+              value={receivedInput}
+              onChangeText={setReceivedInput}
+              keyboardType="decimal-pad"
               placeholderTextColor="#9ca3af"
             />
           </View>
         </View>
-      )}
 
-      {/* Summary */}
-      <View style={cp.summary}>
-        <View style={cp.sumRow}>
-          <Text style={cp.sumLabel}>Subtotal</Text>
-          <Text style={cp.sumVal}>₹{subtotal.toFixed(2)}</Text>
+        {/* Change / Balance due */}
+        <View style={cp.changeDueRow}>
+          <Text style={cp.changeDueLabel}>Change / Balance due</Text>
+          <Text style={[cp.changeDueVal, { color: received > 0 && change >= 0 ? '#16a34a' : '#ef4444' }]}>
+            ₹{received > 0 ? change.toFixed(2) : total.toFixed(2)}
+          </Text>
         </View>
-        {taxRate > 0 && (
-          <View style={cp.sumRow}>
-            <Text style={cp.sumLabel}>Tax ({taxRate}%)</Text>
-            <Text style={cp.sumVal}>₹{taxAmount.toFixed(2)}</Text>
-          </View>
-        )}
-        {discount > 0 && (
-          <View style={cp.sumRow}>
-            <Text style={[cp.sumLabel, { color: '#16a34a' }]}>Discount</Text>
-            <Text style={[cp.sumVal, { color: '#16a34a' }]}>-₹{discount.toFixed(2)}</Text>
-          </View>
-        )}
-        <View style={cp.totalRow}>
-          <Text style={cp.totalLabel}>TOTAL</Text>
-          <Text style={cp.totalVal}>₹{total.toFixed(2)}</Text>
+      </View>
+
+      {/* ── Payment Method ── */}
+      <View style={cp.payMethodSection}>
+        <Text style={cp.sectionTitle}>Payment Method</Text>
+        <View style={cp.payRow}>
+          {PAYMENT_METHODS.map(pm => (
+            <TouchableOpacity key={pm.key}
+              style={[cp.payBtn, paymentMethod === pm.key && cp.payBtnActive]}
+              onPress={() => setPaymentMethod(pm.key)}>
+              <Ionicons name={pm.icon} size={14} color={paymentMethod === pm.key ? '#fff' : '#374151'} />
+              <Text style={[cp.payText, paymentMethod === pm.key && cp.payTextActive]}>{pm.label}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
-        {received > 0 && (
-          <View style={[cp.sumRow, change >= 0 ? {} : { opacity: 0.5 }]}>
-            <Text style={[cp.sumLabel, { color: '#16a34a' }]}>Change</Text>
-            <Text style={[cp.sumVal, { color: '#16a34a' }]}>₹{change.toFixed(2)}</Text>
-          </View>
-        )}
       </View>
 
-      {/* Payment method */}
-      <View style={cp.payRow}>
-        {PAYMENT_METHODS.map(pm => (
-          <TouchableOpacity
-            key={pm.key}
-            style={[cp.payBtn, paymentMethod === pm.key && cp.payBtnActive]}
-            onPress={() => setPaymentMethod(pm.key)}
-          >
-            <Ionicons name={pm.icon} size={14} color={paymentMethod === pm.key ? '#fff' : '#374151'} />
-            <Text style={[cp.payText, paymentMethod === pm.key && cp.payTextActive]}>{pm.label}</Text>
-          </TouchableOpacity>
-        ))}
+      {/* ── Order Notes (for kitchen) ── */}
+      <View style={cp.notesSection}>
+        <View style={cp.notesLabelRow}>
+          <Ionicons name="receipt-outline" size={13} color="#C9A52A" />
+          <Text style={cp.sectionTitle}>Order Notes</Text>
+          <Text style={cp.notesMeta}>(for kitchen)</Text>
+        </View>
+        <TextInput
+          style={cp.notesInput}
+          placeholder="E.g. less spicy, no onion, allergies..."
+          value={notesInput}
+          onChangeText={setNotesInput}
+          placeholderTextColor="#9ca3af"
+          multiline
+          numberOfLines={2}
+          textAlignVertical="top"
+        />
       </View>
 
-      {/* Secondary action buttons */}
-      <View style={cp.secondaryRow}>
-        <TouchableOpacity
-          style={[cp.secBtn, { borderColor: '#7c3aed' }, cartCount === 0 && { opacity: 0.4 }]}
-          onPress={handleKOTPrint}
-          disabled={cartCount === 0}
-        >
-          <Ionicons name="print-outline" size={14} color="#7c3aed" />
-          <Text style={[cp.secBtnText, { color: '#7c3aed' }]}>KOT</Text>
-          {cart.kot_printed && <View style={cp.kotDot} />}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[cp.secBtn, { borderColor: '#f59e0b' }, cartCount === 0 && { opacity: 0.4 }]}
-          onPress={() => handlePlaceOrder(true)}
-          disabled={placing || cartCount === 0}
-        >
-          <Ionicons name="save-outline" size={14} color="#f59e0b" />
-          <Text style={[cp.secBtnText, { color: '#f59e0b' }]}>Draft</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[cp.secBtn, { borderColor: '#0D76E1' }]} onPress={() => setShowCustomItem(true)}>
-          <Ionicons name="add-circle-outline" size={14} color="#0D76E1" />
-          <Text style={[cp.secBtnText, { color: '#0D76E1' }]}>Custom</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Main action buttons */}
-      <View style={cp.checkoutRow}>
+      {/* ── Primary: Place an Order ── */}
+      <View style={cp.btnSection}>
         <TouchableOpacity
           style={[cp.placeBtn, (placing || cartCount === 0) && { opacity: 0.5 }]}
           onPress={() => handlePlaceOrder(false)}
@@ -738,22 +961,67 @@ export default function POSScreen() {
         >
           {placing
             ? <ActivityIndicator color="#fff" size="small" />
-            : <>
-                <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                <View style={{ marginLeft: 8 }}>
-                  <Text style={cp.placeBtnLabel}>{isOnline ? 'Place Order' : 'Save Offline'}</Text>
-                  {cartCount > 0 && <Text style={cp.placeBtnTotal}>₹{total.toFixed(2)}</Text>}
-                </View>
-              </>
+            : <Text style={cp.placeBtnLabel}>{isOnline ? 'Place an Order' : 'Save Offline'}</Text>
           }
         </TouchableOpacity>
+
+        {/* Print KOT */}
         <TouchableOpacity
-          style={[cp.clearBtn, cartCount === 0 && { opacity: 0.4 }]}
-          onPress={() => { clearCart(); setWalkInName(''); setDiscountInput(''); setCouponInput(''); setNotesInput(''); setReceivedInput(''); }}
+          style={[cp.kotBtn, cartCount === 0 && { opacity: 0.4 }]}
+          onPress={handleKOTPrint}
           disabled={cartCount === 0}
         >
-          <Ionicons name="trash-outline" size={16} color="#fff" />
+          <Ionicons name="print-outline" size={15} color="#16a34a" />
+          <Text style={cp.kotBtnText}>Print KOT</Text>
+          {cart.kot_printed && <View style={cp.kotDot} />}
         </TouchableOpacity>
+
+        {/* Row 1: Print | Invoice | Draft */}
+        <View style={cp.btnRow3}>
+          <TouchableOpacity style={cp.btn3} onPress={() => handlePlaceOrder(false)}>
+            <Ionicons name="print-outline" size={14} color="#374151" />
+            <Text style={cp.btn3Text}>Print</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={cp.btn3} onPress={() => printOrderReceipt(lastOrderData ?? { ...cart, order_number: 'DRAFT', items: cart.items, total, table_name: tables.find(t => t.id === cart.table_id)?.name ?? null }, restaurant, taxRate)}>
+            <Ionicons name="document-outline" size={14} color="#374151" />
+            <Text style={cp.btn3Text}>Invoice</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={cp.btn3}
+            onPress={() => handlePlaceOrder(true)}
+            disabled={placing || cartCount === 0}>
+            <Ionicons name="save-outline" size={14} color="#374151" />
+            <Text style={cp.btn3Text}>Draft</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Row 2: × Cancel | Void | Transactions */}
+        <View style={cp.btnRow3}>
+          <TouchableOpacity style={[cp.btn3, cp.btn3Danger]}
+            onPress={() => {
+              if (cartCount === 0) return;
+              Alert.alert('Cancel Order', 'Clear all items from this order?', [
+                { text: 'No', style: 'cancel' },
+                { text: 'Yes, Cancel', style: 'destructive', onPress: () => {
+                    clearCart(); setWalkInName(''); setDiscountInput(''); setCustomPctInput('');
+                    setQuickPct(null); setCouponInput(''); setNotesInput(''); setReceivedInput('');
+                  }
+                },
+              ]);
+            }}>
+            <Ionicons name="close" size={14} color="#dc2626" />
+            <Text style={[cp.btn3Text, { color: '#dc2626' }]}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={cp.btn3}
+            onPress={() => Alert.alert('Void', 'Void is available for placed orders in the Orders screen.')}>
+            <Ionicons name="flash-outline" size={14} color="#374151" />
+            <Text style={cp.btn3Text}>Void</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={cp.btn3}
+            onPress={() => Alert.alert('Transactions', 'View all transactions in the Orders screen.')}>
+            <Ionicons name="document-text-outline" size={14} color="#374151" />
+            <Text style={cp.btn3Text}>Transactions</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -763,6 +1031,7 @@ export default function POSScreen() {
     const qty    = getCartQty(item);
     const imgUrl = itemImageUrl(item.image);
     const ft     = item.food_type;
+    const imgErr = imgErrors.has(item.id);
     return (
       <TouchableOpacity
         style={[ic.card, qty > 0 && ic.cardActive, !item.is_available && ic.cardUnavail]}
@@ -776,9 +1045,11 @@ export default function POSScreen() {
           </View>
         )}
         <View style={ic.imgWrap}>
-          {imgUrl
-            ? <Image source={{ uri: imgUrl }} style={ic.img} resizeMode="cover" />
-            : <View style={ic.imgPlaceholder}><Ionicons name="restaurant-outline" size={20} color="#d1d5db" /></View>
+          {imgUrl && !imgErr
+            ? <Image source={{ uri: imgUrl }} style={ic.img} resizeMode="cover" onError={() => setImgErrors(prev => new Set(prev).add(item.id))} />
+            : <View style={[ic.imgPlaceholder, { backgroundColor: ft === 'veg' ? '#f0fdf4' : ft === 'non_veg' ? '#fef2f2' : '#f8f9fa' }]}>
+                <Ionicons name="restaurant-outline" size={24} color={ft === 'veg' ? '#86efac' : ft === 'non_veg' ? '#fca5a5' : '#d1d5db'} />
+              </View>
           }
         </View>
         <Text style={ic.name} numberOfLines={2}>{item.name}</Text>
@@ -975,11 +1246,22 @@ export default function POSScreen() {
   if (isDesktop) {
     return (
       <View style={sh.shell}>
+        {successModal}
         {variationModal}
         {custPickerModal}
         {waiterPickerModal}
         {customItemModal}
 
+        {/* Top header bar */}
+        <View style={sh.posHeader}>
+          <TouchableOpacity style={sh.posBackBtn} onPress={() => router.replace('/(app)/dashboard')}>
+            <Ionicons name="arrow-back" size={15} color="#fff" />
+            <Text style={sh.posBackText}>Dashboard</Text>
+          </TouchableOpacity>
+          <Text style={sh.posTitle}>Point of Sale</Text>
+        </View>
+
+        <View style={sh.cols}>
         {/* Column 1: Category rail */}
         <View style={sh.rail}>
           <View style={sh.railHeader}>
@@ -1017,6 +1299,32 @@ export default function POSScreen() {
 
         {/* Column 2: Item grid */}
         <View style={sh.grid}>
+          {/* Top nav bar */}
+          <View style={sh.posTopBar}>
+            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/dashboard' as any)}>
+              <Ionicons name="home-outline" size={16} color="#5A7A5A" />
+            </TouchableOpacity>
+            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/orders' as any)}>
+              <Ionicons name="receipt-outline" size={16} color="#5A7A5A" />
+              <Text style={sh.navBtnText}>Orders</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/kitchen' as any)}>
+              <Ionicons name="flame-outline" size={16} color="#5A7A5A" />
+              <Text style={sh.navBtnText}>Kitchen</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/tables' as any)}>
+              <Ionicons name="grid-outline" size={16} color="#5A7A5A" />
+              <Text style={sh.navBtnText}>Tables</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/reports' as any)}>
+              <Ionicons name="bar-chart-outline" size={16} color="#5A7A5A" />
+              <Text style={sh.navBtnText}>Reports</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/settings' as any)}>
+              <Ionicons name="settings-outline" size={16} color="#5A7A5A" />
+              <Text style={sh.navBtnText}>Settings</Text>
+            </TouchableOpacity>
+          </View>
           {/* Recent orders strip */}
           {recentOrders.length > 0 && (
             <View style={sh.recentStrip}>
@@ -1097,6 +1405,7 @@ export default function POSScreen() {
           </View>
           {cartPanel}
         </View>
+        </View>{/* end sh.cols */}
       </View>
     );
   }
@@ -1104,11 +1413,18 @@ export default function POSScreen() {
   // ── Mobile layout ──────────────────────────────────────────────────────────
   return (
     <View style={mb.shell}>
+      {successModal}
       {variationModal}
       {custPickerModal}
       {waiterPickerModal}
       {customItemModal}
 
+      <View style={mb.topBar}>
+        <TouchableOpacity style={mb.backBtn} onPress={() => router.replace('/(app)/dashboard')}>
+          <Ionicons name="arrow-back" size={18} color="#374151" />
+        </TouchableOpacity>
+        <Text style={mb.topTitle}>POS</Text>
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={mb.catBar} contentContainerStyle={{ paddingHorizontal: 10, gap: 7 }}>
         {[{ id: null as null, name: 'All' }, ...categories.map(c => ({ id: c.id, name: c.name }))].map(c => (
           <TouchableOpacity
@@ -1166,11 +1482,17 @@ export default function POSScreen() {
 
 // Shell / overall layout
 const sh = StyleSheet.create({
-  shell:      { flex: 1, flexDirection: 'row', backgroundColor: '#f0f2f7' },
+  shell:      { flex: 1, flexDirection: 'column', backgroundColor: '#f0f2f7' },
+  cols:       { flex: 1, flexDirection: 'row' },
+  posHeader:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#1A2B1A', borderBottomWidth: 1, borderBottomColor: '#243a24', gap: 12 },
+  posBackBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  posBackText:{ fontSize: 13, fontWeight: '600', color: '#fff' },
+  posTitle:   { fontSize: 15, fontWeight: '800', color: '#C9A52A', letterSpacing: 0.5 },
 
   rail:       { width: 170, backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: '#e5e7eb' },
-  railHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingTop: 14, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  railTitle:  { fontSize: 11, fontWeight: '800', color: '#374151', letterSpacing: 1, textTransform: 'uppercase' },
+  railHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingTop: 14, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  backBtn:    { width: 28, height: 28, borderRadius: 8, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
+  railTitle:  { flex: 1, fontSize: 11, fontWeight: '800', color: '#374151', letterSpacing: 1, textTransform: 'uppercase' },
   railCount:  { fontSize: 10, color: '#9ca3af', fontWeight: '600' },
   railItem:   { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 10, paddingVertical: 10, marginHorizontal: 6, marginBottom: 1, borderRadius: 9, position: 'relative', overflow: 'hidden' },
   railItemActive: { backgroundColor: 'rgba(13,118,225,0.08)' },
@@ -1185,6 +1507,9 @@ const sh = StyleSheet.create({
   railBadgeTextActive: { color: '#0D76E1' },
 
   grid:       { flex: 1, flexDirection: 'column' },
+  posTopBar:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#1A2B1A', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  navBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.06)' },
+  navBtnText: { fontSize: 11.5, fontWeight: '600', color: '#7A9A7A' },
   toolbar:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, flexWrap: 'wrap' },
   searchBox:  { flex: 1, minWidth: 140, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   searchInput:{ flex: 1, fontSize: 13.5, color: '#111827' },
@@ -1235,70 +1560,147 @@ const ic = StyleSheet.create({
 
 // Cart panel
 const cp = StyleSheet.create({
-  wrap:       { flex: 1, flexDirection: 'column' },
+  wrap: { flex: 1, flexDirection: 'column' },
 
-  orderTypes: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', backgroundColor: '#f8f9fb' },
-  typeBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 9 },
-  typeBtnActive: { backgroundColor: '#0D76E1', borderRadius: 0 },
-  typeBtnText:   { fontSize: 11, fontWeight: '600', color: '#6b7280' },
-  typeBtnTextActive: { color: '#fff', fontWeight: '700' },
+  // ── Order type tabs ──────────────────────────────────────────────────────
+  orderTypes:       { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', backgroundColor: '#f8f9fb' },
+  typeBtn:          { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 9 },
+  typeBtnActive:    { backgroundColor: '#0D76E1', borderRadius: 0 },
+  typeBtnText:      { fontSize: 11, fontWeight: '600', color: '#6b7280' },
+  typeBtnTextActive:{ color: '#fff', fontWeight: '700' },
 
-  section:    { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  sectionLabel: { fontSize: 10, color: '#6b7280', fontWeight: '700', letterSpacing: 0.5, marginBottom: 5 },
-  fieldRow:   { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  fieldInner: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f5f6f8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: '#e5e7eb' },
-  fieldInput: { flex: 1, fontSize: 13, color: '#111827' },
-  iconBtn:    { width: 34, height: 34, borderRadius: 8, backgroundColor: 'rgba(13,118,225,0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#93c5fd' },
-  selectedText: { fontSize: 11, color: '#10b981', fontWeight: '600', marginTop: 4 },
+  // ── Waiter + Customer two-column row ─────────────────────────────────────
+  twoColSection: { flexDirection: 'row', gap: 6, paddingHorizontal: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  halfField:     { flex: 1, gap: 3 },
+  fieldLabel:    { fontSize: 10, fontWeight: '700', color: '#6b7280', letterSpacing: 0.4, textTransform: 'uppercase' },
+  fieldRow:      { flexDirection: 'row', gap: 4, alignItems: 'center' },
+  fieldBox:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f5f6f8', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 6, borderWidth: 1, borderColor: '#e5e7eb', flex: 1 },
+  fieldBoxText:  { fontSize: 12.5, color: '#9ca3af' },
+  iconSmBtn:     { width: 28, height: 28, borderRadius: 7, backgroundColor: '#1A2B1A', alignItems: 'center', justifyContent: 'center' },
+  iconBtn:       { width: 34, height: 34, borderRadius: 8, backgroundColor: 'rgba(13,118,225,0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#93c5fd' },
 
-  tableChip:  { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  tableChipActive: { backgroundColor: 'rgba(13,118,225,0.1)', borderColor: '#93c5fd' },
-  tableChipText:   { fontSize: 11.5, color: '#374151', fontWeight: '500' },
-  tableChipTextActive: { color: '#0D76E1', fontWeight: '700' },
+  // ── Table ────────────────────────────────────────────────────────────────
+  tableSection:  { paddingHorizontal: 8, paddingTop: 6, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  tableLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 5 },
+  requiredDot:   { width: 14, height: 14, borderRadius: 7, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center' },
+  requiredStar:  { fontSize: 11, color: '#ef4444', fontWeight: '800' },
+  tableChip:     { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
+  tableChipActive:    { backgroundColor: 'rgba(13,118,225,0.1)', borderColor: '#93c5fd' },
+  tableChipText:      { fontSize: 11.5, color: '#374151', fontWeight: '500' },
+  tableChipTextActive:{ color: '#0D76E1', fontWeight: '700' },
 
-  colHeader:  { flexDirection: 'row', paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#f8f9fb', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  colText:    { fontSize: 9.5, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 },
-  itemList:   { flex: 1 },
-  emptyCart:  { alignItems: 'center', paddingTop: 32, gap: 8 },
-  emptyCartText: { fontSize: 13.5, fontWeight: '600', color: '#374151' },
-  emptyCartSub:  { fontSize: 11.5, color: '#9ca3af' },
+  // ── Ordered Menus header ─────────────────────────────────────────────────
+  orderedHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 6, backgroundColor: '#f8f9fb', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  orderedTitle:   { fontSize: 11.5, fontWeight: '800', color: '#111827', textTransform: 'uppercase', letterSpacing: 0.5 },
+  addCustomBtn:   { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
+  addCustomText:  { fontSize: 11, fontWeight: '600', color: '#374151' },
+  totalMenus:     { fontSize: 11, fontWeight: '700', color: '#0D76E1' },
 
-  cartRow:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', gap: 4 },
-  cartName:   { fontSize: 12.5, fontWeight: '600', color: '#111827', lineHeight: 16 },
-  cartVar:    { fontSize: 10.5, color: '#C9A52A', marginTop: 1 },
-  qtyRow:     { flexDirection: 'row', alignItems: 'center', width: 80, justifyContent: 'center', gap: 3 },
-  qtyBtn:     { width: 24, height: 24, backgroundColor: '#f3f4f6', borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  qtyNum:     { fontSize: 13, fontWeight: '700', color: '#111827', minWidth: 20, textAlign: 'center' },
-  cartPrice:  { fontSize: 12.5, fontWeight: '700', color: '#111827', width: 68, textAlign: 'right' },
+  // ── Cart items ───────────────────────────────────────────────────────────
+  itemList:       { flex: 1 },
+  emptyCart:      { alignItems: 'center', paddingTop: 32, gap: 8 },
+  emptyCartText:  { fontSize: 13.5, fontWeight: '600', color: '#374151' },
+  emptyCartSub:   { fontSize: 11.5, color: '#9ca3af' },
+  cartItemBox:    { paddingHorizontal: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  cartItemRow:    { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
+  cartName:       { fontSize: 12.5, fontWeight: '600', color: '#111827', lineHeight: 16 },
+  cartVar:        { fontSize: 10.5, color: '#C9A52A', marginTop: 1 },
+  qtyRow:         { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  qtyBtn:         { width: 22, height: 22, backgroundColor: '#f3f4f6', borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
+  qtyNum:         { fontSize: 12, fontWeight: '700', color: '#111827', minWidth: 18, textAlign: 'center' },
+  removeBtn:      { width: 22, height: 22, borderRadius: 5, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center', marginLeft: 2 },
+  cartItemMeta:   { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#f8f9fb', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  cartMetaCol:    { flex: 1 },
+  cartMetaLabel:  { fontSize: 9.5, color: '#9ca3af', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
+  cartMetaVal:    { fontSize: 12, fontWeight: '700', color: '#374151', marginTop: 1 },
 
-  extraFields:{ padding: 8, gap: 6, borderTopWidth: 1, borderTopColor: '#f3f4f6', backgroundColor: '#fafbfc' },
-  extraRow:   { flexDirection: 'row', gap: 6 },
-  extraInput: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, borderWidth: 1, borderColor: '#e5e7eb' },
-  extraInputText: { flex: 1, fontSize: 12.5, color: '#111827' },
+  // ── Payment Summary ──────────────────────────────────────────────────────
+  paymentSummary: { paddingHorizontal: 8, paddingTop: 8, paddingBottom: 4, borderTopWidth: 1, borderTopColor: '#e5e7eb', gap: 5 },
+  sectionTitle:   { fontSize: 11, fontWeight: '800', color: '#111827', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  sumRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sumLabel:       { fontSize: 12.5, color: '#6b7280' },
+  sumVal:         { fontSize: 12.5, fontWeight: '600', color: '#374151' },
+  divider:        { height: 1, backgroundColor: '#f3f4f6', marginVertical: 4 },
 
-  summary:    { padding: 10, borderTopWidth: 1, borderTopColor: '#e5e7eb', backgroundColor: '#f8f9fb', gap: 4 },
-  sumRow:     { flexDirection: 'row', justifyContent: 'space-between' },
-  sumLabel:   { fontSize: 12.5, color: '#6b7280' },
-  sumVal:     { fontSize: 12.5, fontWeight: '600', color: '#374151' },
-  totalRow:   { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 6, borderTopWidth: 1.5, borderTopColor: '#1A2B1A', marginTop: 4 },
-  totalLabel: { fontSize: 15, fontWeight: '800', color: '#1A2B1A' },
-  totalVal:   { fontSize: 17, fontWeight: '800', color: '#0D76E1' },
+  // Coupon
+  couponActive:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f0fdf4', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: '#86efac' },
+  couponActiveText: { flex: 1, fontSize: 12.5, fontWeight: '700', color: '#16a34a' },
+  couponRow:        { flexDirection: 'row', gap: 6 },
+  couponInput:      { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f6f8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: '#e5e7eb' },
+  couponInputText:  { flex: 1, fontSize: 12.5, color: '#111827' },
+  couponApplyBtn:   { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: '#0D76E1', alignItems: 'center', justifyContent: 'center' },
+  couponApplyText:  { fontSize: 12, fontWeight: '700', color: '#fff' },
 
-  payRow:     { flexDirection: 'row', gap: 5, paddingHorizontal: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#e5e7eb' },
+  // Quick discount %
+  quickDiscLabel:    { fontSize: 10.5, fontWeight: '700', color: '#6b7280' },
+  quickDiscRow:      { flexDirection: 'row', gap: 5 },
+  quickDiscBtn:      { flex: 1, paddingVertical: 7, borderRadius: 7, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center' },
+  quickDiscBtnActive:{ backgroundColor: '#0D76E1', borderColor: '#0D76E1' },
+  quickDiscText:     { fontSize: 12, fontWeight: '700', color: '#374151' },
+  quickDiscTextActive:{ color: '#fff' },
+
+  // Custom %
+  customPctRow:    { flexDirection: 'row', gap: 5 },
+  customPctInput:  { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f6f8', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 6, borderWidth: 1, borderColor: '#e5e7eb' },
+  customPctText:   { flex: 1, fontSize: 12.5, color: '#111827' },
+  customPctSymbol: { fontSize: 13, fontWeight: '700', color: '#9ca3af' },
+  customApplyBtn:  { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 7, backgroundColor: '#1A2B1A', alignItems: 'center', justifyContent: 'center' },
+  customApplyText: { fontSize: 12, fontWeight: '700', color: '#C9A52A' },
+  customClearBtn:  { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 7, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' },
+  customClearText: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
+
+  // Discount ₹ row
+  discRupeeRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  discRupeeLabel: { fontSize: 12.5, color: '#6b7280' },
+  discRupeeInput: { backgroundColor: '#f5f6f8', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: '#e5e7eb', minWidth: 80, alignItems: 'flex-end' },
+  discRupeeText:  { fontSize: 12.5, fontWeight: '600', color: '#111827', textAlign: 'right' },
+
+  // Amount to Pay
+  amountToPayRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+  amountToPayLabel: { fontSize: 14, fontWeight: '800', color: '#111827' },
+  amountToPayVal:   { fontSize: 16, fontWeight: '800', color: '#0D76E1' },
+
+  // Received
+  receivedRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  receivedLabel: { fontSize: 12.5, color: '#6b7280' },
+  receivedInput: { backgroundColor: '#f5f6f8', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: '#e5e7eb', minWidth: 80, alignItems: 'flex-end' },
+  receivedText:  { fontSize: 12.5, fontWeight: '600', color: '#111827', textAlign: 'right' },
+
+  // Change / Balance due
+  changeDueRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  changeDueLabel: { fontSize: 12.5, color: '#6b7280' },
+  changeDueVal:   { fontSize: 13, fontWeight: '800' },
+
+  // ── Payment Method ───────────────────────────────────────────────────────
+  payMethodSection: { paddingHorizontal: 8, paddingTop: 8, paddingBottom: 4, borderTopWidth: 1, borderTopColor: '#e5e7eb', gap: 6 },
+  payRow:     { flexDirection: 'row', gap: 5 },
   payBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 8, borderRadius: 8, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  payBtnActive: { backgroundColor: '#1A2B1A', borderColor: '#1A2B1A' },
-  payText:    { fontSize: 11.5, fontWeight: '600', color: '#374151' },
+  payBtnActive:  { backgroundColor: '#1A2B1A', borderColor: '#1A2B1A' },
+  payText:       { fontSize: 11.5, fontWeight: '600', color: '#374151' },
   payTextActive: { color: '#C9A52A', fontWeight: '700' },
 
-  secondaryRow: { flexDirection: 'row', gap: 7, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 2 },
-  secBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 8, borderRadius: 8, backgroundColor: '#f8f9fb', borderWidth: 1.5, position: 'relative' },
-  secBtnText:  { fontSize: 11, fontWeight: '700' },
-  kotDot:      { position: 'absolute', top: 4, right: 4, width: 6, height: 6, borderRadius: 3, backgroundColor: '#7c3aed' },
-  checkoutRow: { flexDirection: 'row', gap: 7, padding: 10, borderTopWidth: 1, borderTopColor: '#e5e7eb' },
-  placeBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 13, borderRadius: 10, backgroundColor: '#C9A52A', shadowColor: '#C9A52A', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
-  placeBtnLabel: { fontSize: 13, fontWeight: '800', color: '#fff' },
-  placeBtnTotal: { fontSize: 14, fontWeight: '800', color: 'rgba(255,255,255,0.85)', marginTop: 1 },
-  clearBtn:   { width: 44, height: 44, borderRadius: 10, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center' },
+  // ── Order Notes ──────────────────────────────────────────────────────────
+  notesSection:   { paddingHorizontal: 8, paddingTop: 8, paddingBottom: 4, borderTopWidth: 1, borderTopColor: '#e5e7eb', gap: 5 },
+  notesLabelRow:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  notesMeta:      { fontSize: 10.5, color: '#9ca3af', fontStyle: 'italic' },
+  notesInput:     { backgroundColor: '#f5f6f8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e5e7eb', fontSize: 12.5, color: '#111827', minHeight: 50 },
+
+  // ── Bottom action buttons ────────────────────────────────────────────────
+  btnSection:    { padding: 8, gap: 6, borderTopWidth: 1, borderTopColor: '#e5e7eb' },
+  placeBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 13, borderRadius: 10, backgroundColor: '#1A2B1A', gap: 8 },
+  placeBtnLabel: { fontSize: 14, fontWeight: '800', color: '#C9A52A' },
+  kotBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: '#16a34a', backgroundColor: '#f0fdf4', gap: 6, position: 'relative' },
+  kotBtnText:    { fontSize: 13, fontWeight: '700', color: '#16a34a' },
+  kotDot:        { position: 'absolute', top: 4, right: 8, width: 7, height: 7, borderRadius: 4, backgroundColor: '#7c3aed' },
+  btnRow3:       { flexDirection: 'row', gap: 5 },
+  btn3:          { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 9, borderRadius: 8, backgroundColor: '#f5f6f8', borderWidth: 1, borderColor: '#e5e7eb' },
+  btn3Text:      { fontSize: 11.5, fontWeight: '600', color: '#374151' },
+  btn3Danger:    { backgroundColor: '#fef2f2', borderColor: '#fca5a5' },
+
+  // ── Custom item modal (shared field styles) ──────────────────────────────
+  extraRow:      { flexDirection: 'row', gap: 6 },
+  extraInput:    { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, borderWidth: 1, borderColor: '#e5e7eb' },
+  extraInputText:{ flex: 1, fontSize: 12.5, color: '#111827' },
 });
 
 // Variation modal
@@ -1344,22 +1746,29 @@ const mb = StyleSheet.create({
   fabBadge:   { backgroundColor: '#C9A52A', borderRadius: 999, minWidth: 20, height: 20, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
   fabBadgeText: { color: '#1A2B1A', fontSize: 11, fontWeight: '800' },
   fabTotal:   { color: '#C9A52A', fontWeight: '800', fontSize: 15 },
+  topBar:     { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  backBtn:    { width: 32, height: 32, borderRadius: 8, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
+  topTitle:   { fontSize: 16, fontWeight: '800', color: '#111827' },
 });
 
-// Order placed success screen
+// Order placed success modal — csPos style
 const su = StyleSheet.create({
-  shell:      { flex: 1, backgroundColor: '#f0f2f7', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  card:       { backgroundColor: '#fff', borderRadius: 20, padding: 32, alignItems: 'center', width: '100%', maxWidth: 420, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 20, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
-  iconCircle: { marginBottom: 16 },
-  title:      { fontSize: 24, fontWeight: '800', color: '#111827', marginBottom: 6 },
-  orderNum:   { fontSize: 32, fontWeight: '800', color: '#0D76E1', marginBottom: 6 },
-  sub:        { fontSize: 14, color: '#6b7280', marginBottom: 20, textAlign: 'center' },
-  amountRow:  { flexDirection: 'row', justifyContent: 'space-between', width: '100%', backgroundColor: '#f8f9fb', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 8 },
-  amountLabel:{ fontSize: 14, fontWeight: '600', color: '#374151' },
-  amountVal:  { fontSize: 20, fontWeight: '800', color: '#111827' },
-  actions:    { flexDirection: 'row', gap: 10, marginTop: 20, width: '100%' },
-  printBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#1A2B1A', borderRadius: 12, paddingVertical: 13 },
-  printBtnText: { color: '#C9A52A', fontWeight: '800', fontSize: 14 },
-  newBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#C9A52A', borderRadius: 12, paddingVertical: 13 },
-  newBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  card:        { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 420, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 6 }, elevation: 16 },
+  titleRow:    { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  title:       { fontSize: 22, fontWeight: '800', color: '#111827' },
+  orderNum:    { fontSize: 15, fontWeight: '700', color: '#C9A52A', marginBottom: 8 },
+  hint:        { fontSize: 13.5, color: '#d97706', lineHeight: 20, marginBottom: 16 },
+  changePill:  { backgroundColor: '#f0fdf4', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, marginBottom: 14, alignSelf: 'stretch' },
+  changeText:  { fontSize: 13.5, fontWeight: '700', color: '#16a34a', textAlign: 'center' },
+  kotBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 10, borderWidth: 1.5, borderColor: '#d1d5db', backgroundColor: '#fff', marginBottom: 10 },
+  kotText:     { fontSize: 14, fontWeight: '700', color: '#1A2B1A' },
+  kotSub:      { fontSize: 12, color: '#6b7280' },
+  billBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 10, backgroundColor: '#1A2B1A', marginBottom: 10 },
+  billText:    { fontSize: 14, fontWeight: '700', color: '#fff' },
+  billSub:     { fontSize: 12, color: 'rgba(255,255,255,0.65)' },
+  completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 10, backgroundColor: '#16a34a', marginBottom: 10 },
+  completeText:{ fontSize: 14, fontWeight: '700', color: '#fff' },
+  closeBtn:    { paddingVertical: 13, borderRadius: 10, backgroundColor: '#FFA80B', alignItems: 'center' },
+  closeText:   { fontSize: 14, fontWeight: '800', color: '#fff' },
 });
