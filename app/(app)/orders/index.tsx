@@ -1,607 +1,959 @@
 /**
- * Orders Screen — Master-Detail Layout
- * Desktop: side-by-side list + detail panel
- * Mobile: list + slide-up modal detail
- * Features: status advance, mark paid, real-time polling, search, receipt print
+ * Orders Screen — matches csPos Admin Orders page
+ * Status cards · Tab navigation · Grid/List toggle · Date filter
+ * Aggregator Accept/Reject · Payment method selector · Status advance
  */
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl,
-  useWindowDimensions, ScrollView, TextInput, Modal, ActivityIndicator, Platform,
+  View, Text, TouchableOpacity, StyleSheet, RefreshControl, ScrollView,
+  TextInput, Modal, ActivityIndicator, Platform, Alert, Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { format, isToday, isYesterday } from 'date-fns';
-import { getOrders, updateLocalOrderStatus, addToSyncQueue } from '@/database/repositories';
-import { webGetOrders, webUpdateOrderStatus, webAddSyncQueue } from '@/utils/webDb';
+import { format, isToday, isYesterday, startOfWeek, startOfMonth, subDays } from 'date-fns';
 import { ordersApi } from '@/api/orders';
-import { syncService } from '@/sync/SyncService';
 import { useAppStore } from '@/store/appStore';
-import client from '@/api/client';
-import type { Order } from '@/types';
+import type { Order, OrderStatus } from '@/types';
 
-// ── Config ──────────────────────────────────────────────────────────────────
-const STATUS_CFG: Record<string, { color: string; bg: string; border: string; icon: string; label: string; dot: string }> = {
-  pending:   { color: '#d97706', bg: '#fef9ec', border: '#fcd34d', icon: 'time-outline',             label: 'Pending',   dot: '#f59e0b' },
-  confirmed: { color: '#2563eb', bg: '#eff6ff', border: '#93c5fd', icon: 'checkmark-outline',        label: 'Confirmed', dot: '#3b82f6' },
-  preparing: { color: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd', icon: 'flame-outline',            label: 'Preparing', dot: '#8b5cf6' },
-  ready:     { color: '#0891b2', bg: '#ecfeff', border: '#67e8f9', icon: 'restaurant-outline',       label: 'Ready',     dot: '#06b6d4' },
-  served:    { color: '#059669', bg: '#ecfdf5', border: '#6ee7b7', icon: 'checkmark-done-outline',   label: 'Served',    dot: '#10b981' },
-  completed: { color: '#16a34a', bg: '#f0fdf4', border: '#86efac', icon: 'checkmark-circle-outline', label: 'Completed', dot: '#22c55e' },
-  cancelled: { color: '#dc2626', bg: '#fff1f2', border: '#fca5a5', icon: 'close-circle-outline',    label: 'Cancelled', dot: '#ef4444' },
-};
-const NEXT_STATUS: Record<string, string> = {
-  pending: 'confirmed', confirmed: 'preparing', preparing: 'ready', ready: 'served', served: 'completed',
-};
-const NEXT_LABEL: Record<string, string> = {
-  pending: 'Confirm', confirmed: 'Start Cooking', preparing: 'Mark Ready', ready: 'Mark Served', served: 'Complete',
-};
-const NEXT_ICON: Record<string, string> = {
-  pending: 'checkmark-circle-outline', confirmed: 'flame-outline', preparing: 'restaurant-outline',
-  ready: 'checkmark-done-outline', served: 'checkmark-circle',
-};
-const SOURCE_CFG: Record<string, { color: string; bg: string }> = {
-  zomato: { color: '#d00000', bg: '#fff0f0' },
-  swiggy: { color: '#fc8019', bg: '#fff7ed' },
-  qr:     { color: '#7c3aed', bg: '#f5f3ff' },
-  pos:    { color: '#1A2B1A', bg: '#f0f2f0' },
-};
-const FILTER_STATUSES = ['all', 'pending', 'confirmed', 'preparing', 'ready', 'served', 'completed', 'cancelled'];
-const POLL_INTERVAL = 30_000; // 30 s
+// ── Color system (maps to csPos badge-soft-* classes) ────────────────────────
+const STATUS_CFG = {
+  pending:   { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe', dot: '#3b82f6', label: 'Pending',   icon: 'time-outline',              next: 'confirmed', nextLabel: 'Confirm'       },
+  confirmed: { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe', dot: '#3b82f6', label: 'Confirmed', icon: 'checkmark-circle-outline',  next: 'preparing', nextLabel: 'Start Cooking' },
+  preparing: { bg: '#fff7ed', text: '#d97706', border: '#fde68a', dot: '#f59e0b', label: 'Preparing', icon: 'flame-outline',             next: 'ready',     nextLabel: 'Mark Ready'    },
+  ready:     { bg: '#fff7ed', text: '#d97706', border: '#fde68a', dot: '#f59e0b', label: 'Ready',     icon: 'restaurant-outline',        next: 'served',    nextLabel: 'Mark Served'   },
+  served:    { bg: '#ecfeff', text: '#0891b2', border: '#a5f3fc', dot: '#06b6d4', label: 'Served',    icon: 'checkmark-done-outline',    next: 'completed', nextLabel: 'Complete'      },
+  completed: { bg: '#f0fdf4', text: '#16a34a', border: '#bbf7d0', dot: '#22c55e', label: 'Completed', icon: 'checkmark-circle-outline',  next: null,        nextLabel: null            },
+  cancelled: { bg: '#fff1f2', text: '#dc2626', border: '#fecaca', dot: '#ef4444', label: 'Cancelled', icon: 'close-circle-outline',      next: null,        nextLabel: null            },
+} as const;
 
-function formatTime(dt?: string) {
-  if (!dt) return '';
+const SOURCE_CFG = {
+  zomato: { bg: '#fff1f2', text: '#dc2626' },
+  swiggy: { bg: '#fff7ed', text: '#ea580c' },
+  qr:     { bg: '#f5f3ff', text: '#7c3aed' },
+  pos:    { bg: '#f1f5f9', text: '#64748b' },
+} as const;
+
+const STATUS_CARDS = [
+  { key: 'confirmed', label: 'Confirmed',  icon: 'bookmark-outline',       bg: '#f1f5f9', color: '#64748b' },
+  { key: 'pending',   label: 'Pending',    icon: 'time-outline',           bg: '#eff6ff', color: '#2563eb' },
+  { key: 'preparing', label: 'Processing', icon: 'reload-outline',         bg: '#fff7ed', color: '#ea580c' },
+  { key: 'ready',     label: 'Ready',      icon: 'bicycle-outline',        bg: '#f5f3ff', color: '#7c3aed' },
+  { key: 'completed', label: 'Completed',  icon: 'paper-plane-outline',    bg: '#f0fdf4', color: '#16a34a' },
+  { key: 'cancelled', label: 'Cancelled',  icon: 'person-remove-outline',  bg: '#fff1f2', color: '#dc2626' },
+] as const;
+
+type TabKey = 'all' | 'pending' | 'inprogress' | 'completed' | 'cancelled';
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'all',        label: 'All Orders'  },
+  { key: 'pending',    label: 'Pending'     },
+  { key: 'inprogress', label: 'In Progress' },
+  { key: 'completed',  label: 'Completed'   },
+  { key: 'cancelled',  label: 'Cancelled'   },
+];
+
+const DATE_RANGES = [
+  { key: 'all',       label: 'All Time'   },
+  { key: 'today',     label: 'Today'      },
+  { key: 'yesterday', label: 'Yesterday'  },
+  { key: 'week',      label: 'This Week'  },
+  { key: 'month',     label: 'This Month' },
+];
+
+const IN_PROGRESS = ['confirmed', 'preparing', 'ready', 'served'];
+const POLL_MS     = 30_000;
+const PRIMARY     = '#2563eb';
+const GOLD        = '#C9A52A';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function sCfg(status: string) {
+  return STATUS_CFG[status as keyof typeof STATUS_CFG] ?? STATUS_CFG.pending;
+}
+function srcCfg(source?: string) {
+  return SOURCE_CFG[(source ?? 'pos') as keyof typeof SOURCE_CFG] ?? SOURCE_CFG.pos;
+}
+function isAgg(o: Order) { return o.source === 'zomato' || o.source === 'swiggy'; }
+
+function fmtTime(dt?: string) {
+  if (!dt) return '—';
   const d = new Date(dt);
-  if (isToday(d))     return `Today ${format(d, 'hh:mm a')}`;
+  if (isToday(d))     return format(d, 'hh:mm a');
   if (isYesterday(d)) return `Yesterday ${format(d, 'hh:mm a')}`;
   return format(d, 'dd MMM, hh:mm a');
 }
 
-// Receipt printing (web only)
+function getDateRange(key: string) {
+  const now   = new Date();
+  const fmt   = (d: Date) => format(d, 'yyyy-MM-dd');
+  const today = fmt(now);
+  if (key === 'today')     return { from: today, to: today };
+  if (key === 'yesterday') { const y = fmt(subDays(now, 1)); return { from: y, to: y }; }
+  if (key === 'week')      return { from: fmt(startOfWeek(now, { weekStartsOn: 1 })), to: today };
+  if (key === 'month')     return { from: fmt(startOfMonth(now)), to: today };
+  return null;
+}
+
+function matchTab(o: Order, t: TabKey) {
+  if (t === 'all')        return true;
+  if (t === 'pending')    return o.status === 'pending';
+  if (t === 'inprogress') return IN_PROGRESS.includes(o.status);
+  if (t === 'completed')  return o.status === 'completed';
+  if (t === 'cancelled')  return o.status === 'cancelled';
+  return true;
+}
+
 function printReceipt(order: Order, restaurant: any) {
   if (Platform.OS !== 'web') return;
   const rows = (order.items ?? []).map(i =>
-    `<tr><td>${i.name}${i.variation ? ` (${i.variation})` : ''}</td><td align="center">${i.quantity}</td><td align="right">₹${Number(i.unit_price).toFixed(2)}</td><td align="right">₹${Number(i.total_price).toFixed(2)}</td></tr>`
+    `<tr><td>${i.item_name ?? i.name}${i.variation ? ` (${i.variation})` : ''}</td><td align="center">${i.quantity}</td><td align="right">₹${Number(i.unit_price).toFixed(2)}</td><td align="right">₹${Number(i.total_price).toFixed(2)}</td></tr>`
   ).join('');
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Order ${order.order_number}</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;font-size:12px;max-width:360px;margin:0 auto;padding:12px}
-h2{text-align:center;font-size:16px;letter-spacing:2px;margin-bottom:2px}.sub{text-align:center;font-size:10px;color:#555;margin-bottom:10px;line-height:1.4}
-hr{border:none;border-top:1px dashed #aaa;margin:6px 0}table{width:100%;border-collapse:collapse;font-size:11px}th{text-align:left;font-size:9px;text-transform:uppercase;color:#777;padding:3px 0;border-bottom:1px solid #ddd}
-td{padding:4px 0;vertical-align:top}.total{font-size:15px;font-weight:bold}.footer{text-align:center;font-size:10px;color:#999;margin-top:10px}
+h2{text-align:center;font-size:15px;letter-spacing:2px;margin-bottom:2px}
+.sub{text-align:center;font-size:10px;color:#555;line-height:1.4;margin-bottom:10px}
+hr{border:none;border-top:1px dashed #aaa;margin:6px 0}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{text-align:left;font-size:9px;text-transform:uppercase;color:#777;padding:3px 0;border-bottom:1px solid #ddd}
+td{padding:4px 0;vertical-align:top}.ttl{font-size:15px;font-weight:bold}.ft{text-align:center;font-size:10px;color:#999;margin-top:10px}
 @media print{body{max-width:100%}}</style></head><body>
 <h2>${restaurant?.name ?? 'RESTAURANT'}</h2>
 <div class="sub">${restaurant?.address ?? ''}${restaurant?.phone ? '<br>'+restaurant.phone : ''}</div>
-<hr/><div style="font-size:11px"><b>#${order.order_number ?? '—'}</b> &nbsp;|&nbsp; ${(order.order_type ?? '').replace('_',' ').toUpperCase()}</div>
-<div style="font-size:10px;color:#555;margin:3px 0">${order.customer_name ? `Customer: ${order.customer_name}` : 'Walk-in'}${order.restaurant_table?.name ? ` · Table: ${order.restaurant_table.name}` : ''}</div>
+<hr/><div style="font-size:11px"><b>#${order.order_number}</b> | ${(order.order_type ?? '').replace(/_/g,' ').toUpperCase()}</div>
+<div style="font-size:10px;color:#555;margin:3px 0">${order.customer_name ? `Customer: ${order.customer_name}` : 'Walk-in'}${order.table_name ? ` · Table: ${order.table_name}` : ''}</div>
 <hr/><table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead><tbody>${rows}</tbody></table><hr/>
-<table><tr><td>Subtotal</td><td align="right">₹${Number(order.subtotal).toFixed(2)}</td></tr>
+<table>
+<tr><td>Subtotal</td><td align="right">₹${Number(order.subtotal).toFixed(2)}</td></tr>
 ${Number(order.tax_amount) > 0 ? `<tr><td>Tax</td><td align="right">₹${Number(order.tax_amount).toFixed(2)}</td></tr>` : ''}
-${Number(order.discount_amount) > 0 ? `<tr><td>Discount</td><td align="right" style="color:#16a34a">-₹${Number(order.discount_amount).toFixed(2)}</td></tr>` : ''}
-<tr><td class="total"><b>TOTAL</b></td><td class="total" align="right"><b>₹${Number(order.total).toFixed(2)}</b></td></tr></table><hr/>
-<div style="font-size:10px">Payment: ${(order.payment_method ?? '—').toUpperCase()} | Status: ${order.payment_status?.toUpperCase() ?? '—'}</div>
-<div class="footer">Thank you for visiting!</div>
-<script>window.onload=function(){window.print()}</script></body></html>`;
-  const w = window.open('', '_blank', 'width=400,height=560');
+${Number(order.discount_amount) > 0 ? `<tr><td>Discount</td><td align="right" style="color:green">-₹${Number(order.discount_amount).toFixed(2)}</td></tr>` : ''}
+<tr><td class="ttl"><b>TOTAL</b></td><td class="ttl" align="right"><b>₹${Number(order.total).toFixed(2)}</b></td></tr>
+</table><hr/>
+<div style="font-size:10px">Payment: ${(order.payment_method ?? '—').toUpperCase()} | ${(order.payment_status ?? '—').toUpperCase()}</div>
+<div class="ft">Thank you for visiting!</div>
+<script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const w = window.open('', '_blank', 'width=420,height=600');
   if (w) { w.document.write(html); w.document.close(); }
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
-export default function OrdersScreen() {
-  const [orders, setOrders]       = useState<Order[]>([]);
-  const [selected, setSelected]   = useState<Order | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading]     = useState(true);
-  const [filter, setFilter]       = useState('all');
-  const [search, setSearch]       = useState('');
-  const [advancing, setAdvancing] = useState(false);
-  const [showDetail, setShowDetail] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+// ── Shared action props ───────────────────────────────────────────────────────
+interface ActionProps {
+  onStatusChange:  (id: number, status: string) => void;
+  onPaymentChange: (id: number, method: string) => void;
+  onMarkPaid:      (id: number, paid: boolean) => void;
+  onPrint:         (order: Order) => void;
+  isUpdating:      boolean;
+}
 
-  const { isOnline, restaurant } = useAppStore();
-  const { width } = useWindowDimensions();
-  const isDesktop = width >= 900;
-
-  // ── Load orders ──────────────────────────────────────────────────────────
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      if (Platform.OS === 'web') {
-        const res  = await ordersApi.list();
-        const data = res.data?.data ?? res.data ?? [];
-        const list = Array.isArray(data) ? data : [];
-        setOrders(list);
-        // Update selected if it's open
-        setSelected(prev => prev ? (list.find(o => o.id === prev.id) ?? prev) : null);
-      } else {
-        const list = await getOrders(200);
-        setOrders(list);
-        setSelected(prev => prev ? (list.find(o => o.id === prev.id) ?? prev) : null);
-      }
-    } catch {
-      if (Platform.OS === 'web') setOrders(await webGetOrders(200));
-      else setOrders(await getOrders(200));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-    pollRef.current = setInterval(() => load(true), POLL_INTERVAL);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    try { if (isOnline) await syncService.manualSync(); } catch {}
-    await load();
-    setRefreshing(false);
-  }
-
-  // ── Status advance ───────────────────────────────────────────────────────
-  async function advanceStatus(order: Order) {
-    const next = NEXT_STATUS[order.status];
-    if (!next || advancing) return;
-    setAdvancing(true);
-    try {
-      if (isOnline) {
-        await ordersApi.updateStatus(order.id, next);
-      } else {
-        if (Platform.OS === 'web') {
-          await webUpdateOrderStatus(String(order.id), next);
-          await webAddSyncQueue({ id: `s-${order.id}-${Date.now()}`, action: 'update_status', payload: JSON.stringify({ order_id: order.id, status: next }), created_at: new Date().toISOString() });
-        } else {
-          await updateLocalOrderStatus(order.id, next);
-          await addToSyncQueue({ id: `s-${order.id}-${Date.now()}`, action: 'update_status', payload: JSON.stringify({ order_id: order.id, status: next }), created_at: new Date().toISOString() });
-        }
-      }
-      await load(true);
-    } catch (e) { console.warn(e); }
-    finally { setAdvancing(false); }
-  }
-
-  // ── Mark paid ────────────────────────────────────────────────────────────
-  async function markPaid(order: Order) {
-    if (!isOnline) return;
-    try {
-      await client.patch(`/orders/${order.id}`, { payment_status: 'paid' });
-      await load(true);
-    } catch (e) { console.warn(e); }
-  }
-
-  // ── Select order ─────────────────────────────────────────────────────────
-  function selectOrder(o: Order) {
-    setSelected(o);
-    if (!isDesktop) setShowDetail(true);
-  }
-
-  // ── Filtered list ────────────────────────────────────────────────────────
-  const filtered = orders.filter(o => {
-    if (filter !== 'all' && o.status !== filter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      const num = (o.order_number ?? '').toLowerCase();
-      const cust = (o.customer_name ?? '').toLowerCase();
-      if (!num.includes(q) && !cust.includes(q)) return false;
-    }
-    return true;
-  });
-
-  // Status counts
-  const counts: Record<string, number> = { all: orders.length };
-  for (const o of orders) counts[o.status] = (counts[o.status] ?? 0) + 1;
-
-  // ── Detail Panel ─────────────────────────────────────────────────────────
-  function DetailPanel({ order, onClose }: { order: Order; onClose?: () => void }) {
-    const cfg = STATUS_CFG[order.status] ?? STATUS_CFG.pending;
-    const nextStatus = NEXT_STATUS[order.status];
-    const isPaid = order.payment_status === 'paid';
-    return (
-      <View style={dp.wrap}>
-        {/* Header */}
-        <View style={[dp.header, { backgroundColor: cfg.color }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={dp.orderNum}>#{order.order_number ?? '—'}</Text>
-            <Text style={dp.headerSub}>
-              {(order.order_type ?? '').replace('_', ' ').toUpperCase()}
-              {order.restaurant_table?.name ? ` · Table ${order.restaurant_table.name}` : ''}
-            </Text>
-          </View>
-          <View style={dp.headerRight}>
-            <View style={[dp.statusPill, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-              <Ionicons name={cfg.icon as any} size={12} color="#fff" />
-              <Text style={dp.statusPillText}>{cfg.label}</Text>
-            </View>
-            {onClose && (
-              <TouchableOpacity onPress={onClose} style={dp.closeBtn}>
-                <Ionicons name="close" size={20} color="#fff" />
+// ── Overlay modals ────────────────────────────────────────────────────────────
+function StatusMenu({ order, visible, onClose, onSelect }: {
+  order: Order; visible: boolean; onClose: () => void; onSelect: (s: string) => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={ovl.backdrop} onPress={onClose}>
+        <View style={ovl.menu}>
+          <Text style={ovl.title}>Change Status — Order {order.order_number}</Text>
+          {(['pending','confirmed','preparing','ready','served','completed'] as OrderStatus[]).map(s => {
+            const c = sCfg(s);
+            const active = order.status === s;
+            return (
+              <TouchableOpacity key={s} style={[ovl.item, active && ovl.itemActive]}
+                onPress={() => { onClose(); onSelect(s); }}>
+                <View style={[ovl.dot, { backgroundColor: c.dot }]} />
+                <Text style={[ovl.itemText, active && { fontWeight: '800', color: c.text }]}>{c.label}</Text>
+                {active && <Ionicons name="checkmark" size={14} color={c.text} />}
               </TouchableOpacity>
-            )}
-          </View>
+            );
+          })}
         </View>
+      </Pressable>
+    </Modal>
+  );
+}
 
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
-          {/* Customer + time */}
-          <View style={dp.section}>
-            <View style={dp.infoRow}>
-              <View style={dp.infoItem}>
-                <Text style={dp.infoLabel}>Customer</Text>
-                <Text style={dp.infoVal}>{order.customer_name || 'Walk-in'}</Text>
-              </View>
-              {order.customer_phone ? (
-                <View style={dp.infoItem}>
-                  <Text style={dp.infoLabel}>Phone</Text>
-                  <Text style={dp.infoVal}>{order.customer_phone}</Text>
-                </View>
-              ) : null}
-              <View style={dp.infoItem}>
-                <Text style={dp.infoLabel}>Placed</Text>
-                <Text style={dp.infoVal}>{formatTime(order.created_at)}</Text>
-              </View>
-              <View style={dp.infoItem}>
-                <Text style={dp.infoLabel}>Source</Text>
-                <View style={[dp.srcBadge, { backgroundColor: SOURCE_CFG[order.source ?? 'pos']?.bg ?? '#f0f2f0' }]}>
-                  <Text style={[dp.srcBadgeText, { color: SOURCE_CFG[order.source ?? 'pos']?.color ?? '#1A2B1A' }]}>
-                    {(order.source ?? 'POS').toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* Items */}
-          <View style={dp.section}>
-            <Text style={dp.sectionTitle}>Items</Text>
-            {order.items?.map((item, idx) => (
-              <View key={idx} style={dp.itemRow}>
-                <View style={[dp.qtyBox, { backgroundColor: cfg.bg }]}>
-                  <Text style={[dp.qtyBoxText, { color: cfg.color }]}>{item.quantity}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={dp.itemName}>{item.name}</Text>
-                  {item.variation && <Text style={dp.itemVar}>{item.variation}</Text>}
-                </View>
-                <Text style={dp.itemPrice}>₹{Number(item.total_price).toFixed(2)}</Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Totals */}
-          <View style={dp.section}>
-            <Text style={dp.sectionTitle}>Summary</Text>
-            <View style={dp.sumRow}>
-              <Text style={dp.sumLabel}>Subtotal</Text>
-              <Text style={dp.sumVal}>₹{Number(order.subtotal ?? 0).toFixed(2)}</Text>
-            </View>
-            {Number(order.tax_amount) > 0 && (
-              <View style={dp.sumRow}>
-                <Text style={dp.sumLabel}>Tax</Text>
-                <Text style={dp.sumVal}>₹{Number(order.tax_amount).toFixed(2)}</Text>
-              </View>
-            )}
-            {Number(order.discount_amount) > 0 && (
-              <View style={dp.sumRow}>
-                <Text style={[dp.sumLabel, { color: '#16a34a' }]}>Discount</Text>
-                <Text style={[dp.sumVal, { color: '#16a34a' }]}>-₹{Number(order.discount_amount).toFixed(2)}</Text>
-              </View>
-            )}
-            <View style={[dp.sumRow, { paddingTop: 10, borderTopWidth: 1.5, borderTopColor: '#1A2B1A', marginTop: 6 }]}>
-              <Text style={[dp.sumLabel, { fontSize: 16, fontWeight: '800', color: '#1A2B1A' }]}>TOTAL</Text>
-              <Text style={[dp.sumVal, { fontSize: 18, fontWeight: '800', color: '#0D76E1' }]}>₹{Number(order.total ?? 0).toFixed(2)}</Text>
-            </View>
-          </View>
-
-          {/* Payment */}
-          <View style={dp.section}>
-            <Text style={dp.sectionTitle}>Payment</Text>
-            <View style={dp.payRow}>
-              <View style={dp.payItem}>
-                <Text style={dp.infoLabel}>Method</Text>
-                <Text style={dp.infoVal}>{(order.payment_method ?? '—').toUpperCase()}</Text>
-              </View>
-              <View style={dp.payItem}>
-                <Text style={dp.infoLabel}>Status</Text>
-                <View style={[dp.payStatusPill, isPaid ? dp.paidPill : dp.unpaidPill]}>
-                  <View style={[dp.payStatusDot, { backgroundColor: isPaid ? '#16a34a' : '#d97706' }]} />
-                  <Text style={[dp.payStatusText, { color: isPaid ? '#16a34a' : '#d97706' }]}>
-                    {isPaid ? 'Paid' : 'Unpaid'}
-                  </Text>
-                </View>
-              </View>
-              {Number(order.received_amount) > 0 && (
-                <View style={dp.payItem}>
-                  <Text style={dp.infoLabel}>Received</Text>
-                  <Text style={dp.infoVal}>₹{Number(order.received_amount).toFixed(2)}</Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {order.notes ? (
-            <View style={dp.section}>
-              <Text style={dp.sectionTitle}>Notes</Text>
-              <View style={dp.notesBox}>
-                <Ionicons name="document-text-outline" size={14} color="#9ca3af" />
-                <Text style={dp.notesText}>{order.notes}</Text>
-              </View>
-            </View>
-          ) : null}
-
-          {/* Action buttons */}
-          <View style={dp.actions}>
-            {nextStatus && (
-              <TouchableOpacity
-                style={[dp.advBtn, { backgroundColor: STATUS_CFG[nextStatus]?.color ?? '#1A2B1A' }, advancing && { opacity: 0.6 }]}
-                onPress={() => advanceStatus(order)}
-                disabled={advancing}
-              >
-                {advancing
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <>
-                      <Ionicons name={NEXT_ICON[order.status] as any} size={16} color="#fff" />
-                      <Text style={dp.advBtnText}>{NEXT_LABEL[order.status]}</Text>
-                    </>
-                }
-              </TouchableOpacity>
-            )}
-            {!isPaid && isOnline && (
-              <TouchableOpacity style={dp.paidBtn} onPress={() => markPaid(order)}>
-                <Ionicons name="cash-outline" size={16} color="#fff" />
-                <Text style={dp.paidBtnText}>Mark Paid</Text>
-              </TouchableOpacity>
-            )}
-            {Platform.OS === 'web' && (
-              <TouchableOpacity style={dp.printBtn} onPress={() => printReceipt(order, restaurant)}>
-                <Ionicons name="print-outline" size={16} color="#1A2B1A" />
-                <Text style={dp.printBtnText}>Print</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // ── Order row card (compact, for the list) ───────────────────────────────
-  function OrderRow({ o }: { o: Order }) {
-    const cfg    = STATUS_CFG[o.status] ?? STATUS_CFG.pending;
-    const src    = o.source ?? 'pos';
-    const srcCfg = SOURCE_CFG[src] ?? SOURCE_CFG.pos;
-    const isPaid = o.payment_status === 'paid';
-    const isActive = selected?.id === o.id;
-
-    return (
-      <TouchableOpacity
-        style={[oc.row, isActive && oc.rowActive, { borderLeftColor: cfg.dot }]}
-        onPress={() => selectOrder(o)}
-        activeOpacity={0.8}
-      >
-        <View style={oc.rowLeft}>
-          <View style={[oc.statusDot, { backgroundColor: cfg.dot }]} />
-          <View style={{ flex: 1 }}>
-            <View style={oc.topLine}>
-              <Text style={oc.num}>#{o.order_number ?? '—'}</Text>
-              {src !== 'pos' && (
-                <View style={[oc.srcTag, { backgroundColor: srcCfg.bg }]}>
-                  <Text style={[oc.srcTagText, { color: srcCfg.color }]}>{src.toUpperCase()}</Text>
-                </View>
-              )}
-            </View>
-            <Text style={oc.customer} numberOfLines={1}>
-              {o.customer_name || 'Walk-in'}{o.restaurant_table?.name ? ` · ${o.restaurant_table.name}` : ''}
-            </Text>
-            <Text style={oc.itemSummary} numberOfLines={1}>
-              {o.items?.map(i => `${i.quantity}× ${i.name}`).join(', ') || 'No items'}
-            </Text>
-            <Text style={oc.time}>{formatTime(o.created_at)}</Text>
-          </View>
-        </View>
-        <View style={oc.rowRight}>
-          <Text style={oc.total}>₹{Number(o.total ?? 0).toFixed(2)}</Text>
-          <View style={[oc.statusChip, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
-            <Text style={[oc.statusChipText, { color: cfg.color }]}>{cfg.label}</Text>
-          </View>
-          {!isPaid && (
-            <View style={oc.unpaidTag}>
-              <Text style={oc.unpaidText}>Unpaid</Text>
-            </View>
+function MoreMenu({ order, visible, onClose, onStatusChange, onMarkPaid, onPrint, onShowStatusMenu }: {
+  order: Order; visible: boolean; onClose: () => void;
+  onStatusChange: (id: number, s: string) => void;
+  onMarkPaid: (id: number, paid: boolean) => void;
+  onPrint: (o: Order) => void;
+  onShowStatusMenu: () => void;
+}) {
+  const isPaid = order.payment_status === 'paid';
+  const agg    = isAgg(order);
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={ovl.backdrop} onPress={onClose}>
+        <View style={ovl.menu}>
+          <Text style={ovl.title}>Order {order.order_number}</Text>
+          <TouchableOpacity style={ovl.item} onPress={() => { onClose(); onShowStatusMenu(); }}>
+            <Ionicons name="swap-horizontal-outline" size={16} color="#374151" />
+            <Text style={ovl.itemText}>Change Status</Text>
+          </TouchableOpacity>
+          {!agg && (
+            <TouchableOpacity style={ovl.item} onPress={() => { onClose(); onMarkPaid(order.id, !isPaid); }}>
+              <Ionicons name={isPaid ? 'alert-circle-outline' : 'checkmark-circle-outline'} size={16}
+                color={isPaid ? '#d97706' : '#16a34a'} />
+              <Text style={ovl.itemText}>{isPaid ? 'Mark Unpaid' : 'Mark Paid'}</Text>
+            </TouchableOpacity>
+          )}
+          {order.status !== 'completed' && (
+            <TouchableOpacity style={ovl.item} onPress={() => { onClose(); onStatusChange(order.id, 'completed'); }}>
+              <Ionicons name="checkmark-done-outline" size={16} color="#16a34a" />
+              <Text style={ovl.itemText}>Mark Completed</Text>
+            </TouchableOpacity>
+          )}
+          {order.status !== 'completed' && order.status !== 'cancelled' && (
+            <TouchableOpacity style={ovl.item} onPress={() => {
+              onClose();
+              Alert.alert('Cancel Order', `Cancel order ${order.order_number}?`, [
+                { text: 'No', style: 'cancel' },
+                { text: 'Cancel', style: 'destructive', onPress: () => onStatusChange(order.id, 'cancelled') },
+              ]);
+            }}>
+              <Ionicons name="close-circle-outline" size={16} color="#d97706" />
+              <Text style={[ovl.itemText, { color: '#d97706' }]}>Cancel Order</Text>
+            </TouchableOpacity>
+          )}
+          {Platform.OS === 'web' && (
+            <TouchableOpacity style={ovl.item} onPress={() => { onClose(); onPrint(order); }}>
+              <Ionicons name="print-outline" size={16} color="#374151" />
+              <Text style={ovl.itemText}>Print Receipt</Text>
+            </TouchableOpacity>
           )}
         </View>
-      </TouchableOpacity>
-    );
-  }
-
-  // ── Filter bar ──────────────────────────────────────────────────────────
-  const FilterBar = () => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={fb.bar} contentContainerStyle={{ paddingHorizontal: 10, paddingVertical: 8, gap: 7 }}>
-      {FILTER_STATUSES.map(s => {
-        const count   = counts[s] ?? 0;
-        const isActive = filter === s;
-        const cfg     = STATUS_CFG[s];
-        return (
-          <TouchableOpacity
-            key={s}
-            style={[fb.chip, isActive && { backgroundColor: cfg ? cfg.color : '#1A2B1A', borderColor: cfg ? cfg.color : '#1A2B1A' }]}
-            onPress={() => setFilter(s)}
-          >
-            {cfg && <View style={[fb.dot, { backgroundColor: isActive ? '#fff' : cfg.dot }]} />}
-            <Text style={[fb.label, isActive && { color: '#fff', fontWeight: '700' }]}>
-              {s.charAt(0).toUpperCase() + s.slice(1)}
-            </Text>
-            <View style={[fb.badge, isActive && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
-              <Text style={[fb.badgeText, isActive && { color: '#fff' }]}>{count}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
+      </Pressable>
+    </Modal>
   );
+}
 
-  // ── Main render ─────────────────────────────────────────────────────────
+// ── Order Card (Grid View) ────────────────────────────────────────────────────
+function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint, isUpdating }: { order: Order } & ActionProps) {
+  const [showMore,   setShowMore]   = useState(false);
+  const [showStatus, setShowStatus] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+
+  const cfg    = sCfg(order.status);
+  const sc     = srcCfg(order.source);
+  const isPaid = order.payment_status === 'paid';
+  const agg    = isAgg(order);
+  const items  = order.items ?? [];
+  const visible = items.slice(0, 4);
+  const more    = Math.max(0, items.length - 4);
+
   return (
-    <View style={s.shell}>
-      {/* Left panel: list */}
-      <View style={[s.listPanel, isDesktop && selected && { maxWidth: 420 }]}>
-        {/* Search bar */}
-        <View style={s.searchBar}>
-          <Ionicons name="search" size={15} color="#9ca3af" />
-          <TextInput
-            style={s.searchInput}
-            placeholder="Search order # or customer..."
-            value={search}
-            onChangeText={setSearch}
-            placeholderTextColor="#9ca3af"
-          />
-          {search ? (
-            <TouchableOpacity onPress={() => setSearch('')}>
-              <Ionicons name="close-circle" size={16} color="#9ca3af" />
-            </TouchableOpacity>
-          ) : null}
+    <View style={card.wrap}>
+      {/* ── Header ── */}
+      <View style={card.header}>
+        <View style={card.avatar}>
+          <Ionicons name="bag-outline" size={18} color="#fff" />
         </View>
-        <FilterBar />
-
-        {loading && orders.length === 0 ? (
-          <View style={s.loadingWrap}>
-            <ActivityIndicator color="#C9A52A" size="large" />
-          </View>
-        ) : (
-          <FlatList
-            data={filtered}
-            keyExtractor={o => String(o.id)}
-            contentContainerStyle={{ paddingHorizontal: 10, paddingVertical: 8, paddingBottom: 32, flexGrow: 1 }}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#C9A52A" />}
-            renderItem={({ item }) => <OrderRow o={item} />}
-            ListEmptyComponent={
-              <View style={s.empty}>
-                <Ionicons name="receipt-outline" size={38} color="#e5e7eb" />
-                <Text style={s.emptyTitle}>No orders</Text>
-                <Text style={s.emptySub}>{search ? 'No results for "' + search + '"' : filter === 'all' ? 'Pull to refresh' : `No ${filter} orders`}</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={card.numRow}>
+            <Text style={card.num} numberOfLines={1}>Order {order.order_number}</Text>
+            {order.source && order.source !== 'pos' && (
+              <View style={[card.srcBadge, { backgroundColor: sc.bg }]}>
+                <Text style={[card.srcText, { color: sc.text }]}>{order.source.toUpperCase()}</Text>
               </View>
-            }
-          />
-        )}
+            )}
+          </View>
+          {agg && order.external_id ? (
+            <Text style={card.extId} numberOfLines={1}>{order.source} ID: {order.external_id}</Text>
+          ) : null}
+          <Text style={card.typeText} numberOfLines={1}>
+            {(order.order_type ?? 'dine_in').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+            {order.table_name ? ` · Table: ${order.table_name}` : ''}
+          </Text>
+        </View>
+        <TouchableOpacity style={card.menuBtn} onPress={() => setShowMore(true)}>
+          <Ionicons name="ellipsis-vertical" size={16} color="#64748b" />
+        </TouchableOpacity>
       </View>
 
-      {/* Right panel: detail (desktop only) */}
-      {isDesktop && (
-        <View style={s.detailPanel}>
-          {selected
-            ? <DetailPanel order={selected} />
-            : (
-              <View style={s.noSelection}>
-                <Ionicons name="receipt-outline" size={50} color="#e5e7eb" />
-                <Text style={s.noSelTitle}>Select an Order</Text>
-                <Text style={s.noSelSub}>Tap any order on the left to view details, update status, or print receipt</Text>
-              </View>
-            )
-          }
+      {/* ── Total & time ── */}
+      <View style={card.totalRow}>
+        <Text style={card.total}>
+          <Text style={card.totalLabel}>Total: </Text>
+          ₹{Number(order.total ?? 0).toFixed(2)}
+        </Text>
+        <View style={card.timeRow}>
+          <Ionicons name="time-outline" size={12} color="#6b7280" />
+          <Text style={card.time}>{fmtTime(order.created_at)}</Text>
+        </View>
+      </View>
+
+      {/* ── Items list ── */}
+      <View style={card.itemsWrap}>
+        {visible.length > 0 ? visible.map((oi, i) => (
+          <View key={i} style={card.itemLine}>
+            <View style={card.itemDot} />
+            <Text style={card.itemName} numberOfLines={1}>{oi.item_name ?? oi.name}</Text>
+            <Text style={card.itemQty} numberOfLines={1}>
+              ×{oi.quantity}{Number(oi.unit_price) > 0 ? ` · ₹${Number(oi.unit_price).toFixed(2)}` : ''}
+            </Text>
+          </View>
+        )) : agg ? (
+          <Text style={card.noItems}>Items not loaded from {order.source}</Text>
+        ) : null}
+        {order.notes ? (
+          <View style={card.notesBox}>
+            <Ionicons name="information-circle-outline" size={12} color="#6b7280" />
+            <Text style={card.notesText} numberOfLines={2}>Notes: {order.notes}</Text>
+          </View>
+        ) : null}
+        {more > 0 && <Text style={card.more}>+{more} More</Text>}
+      </View>
+
+      {/* ── Action buttons: Receipt | Print | KOT ── */}
+      <View style={card.btnRow}>
+        <TouchableOpacity style={[card.btn, card.receiptBtn]} onPress={() => onPrint(order)}>
+          <Ionicons name="document-text-outline" size={12} color="#4f46e5" />
+          <Text style={[card.btnText, { color: '#4f46e5' }]}>Receipt</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[card.btn, card.printBtn]} onPress={() => onPrint(order)}>
+          <Ionicons name="print-outline" size={12} color="#fff" />
+          <Text style={[card.btnText, { color: '#fff' }]}>Print</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[card.btn, card.kotBtn]}>
+          <Ionicons name="restaurant-outline" size={12} color="#1A2B1A" />
+          <Text style={[card.btnText, { color: '#1A2B1A' }]}>KOT</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Payment method selector ── */}
+      {!agg && (
+        <View style={card.payMethodRow}>
+          <Text style={card.payMethodLabel}>Payment:</Text>
+          {(['cash', 'card', 'upi'] as const).map(m => {
+            const active = (order.payment_method ?? '') === m;
+            return (
+              <TouchableOpacity key={m} disabled={isUpdating}
+                style={[card.payMethodBtn, active && card.payMethodBtnActive]}
+                onPress={() => onPaymentChange(order.id, m)}>
+                <Text style={[card.payMethodText, active && { color: '#fff' }]}>
+                  {m === 'upi' ? 'UPI' : m.charAt(0).toUpperCase() + m.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
 
-      {/* Mobile detail modal */}
-      {!isDesktop && (
-        <Modal visible={showDetail} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowDetail(false)}>
-          <View style={{ flex: 1 }}>
-            {selected && <DetailPanel order={selected} onClose={() => setShowDetail(false)} />}
+      {/* ── Footer: payment badge + status actions ── */}
+      <View style={card.footer}>
+        {/* Payment status badge */}
+        <View style={[card.payBadge, isPaid ? card.paidBadge : card.unpaidBadge]}>
+          <Ionicons name={isPaid ? 'checkmark-circle' : 'alert-circle'} size={11}
+            color={isPaid ? '#16a34a' : '#d97706'} />
+          <Text style={[card.payBadgeText, { color: isPaid ? '#16a34a' : '#d97706' }]}>
+            {isPaid ? 'Paid' : 'Unpaid'}
+          </Text>
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1, justifyContent: 'flex-end' }}>
+          {/* Status badge */}
+          <View style={[card.statusBadge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+            <View style={[card.statusDot, { backgroundColor: cfg.dot }]} />
+            <Text style={[card.statusText, { color: cfg.text }]}>{cfg.label}</Text>
           </View>
-        </Modal>
-      )}
+
+          {/* Aggregator: Accept/Reject */}
+          {agg && order.status === 'pending' ? (
+            <>
+              <TouchableOpacity style={card.acceptBtn} disabled={isUpdating}
+                onPress={() => onStatusChange(order.id, 'confirmed')}>
+                <Text style={card.acceptText}>Accept</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={card.rejectBtn} disabled={isUpdating}
+                onPress={() => Alert.alert('Reject Order', `Reject this ${order.source} order?`, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Reject', style: 'destructive', onPress: () => onStatusChange(order.id, 'cancelled') },
+                ])}>
+                <Text style={card.rejectText}>Reject</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            /* Status dropdown button */
+            <TouchableOpacity style={card.statusDropBtn} onPress={() => setShowStatus(true)}>
+              <Text style={card.statusDropText}>{cfg.label}</Text>
+              <Ionicons name="chevron-down" size={11} color="#374151" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      <StatusMenu order={order} visible={showStatus} onClose={() => setShowStatus(false)}
+        onSelect={(s) => onStatusChange(order.id, s)} />
+      <MoreMenu order={order} visible={showMore} onClose={() => setShowMore(false)}
+        onStatusChange={onStatusChange} onMarkPaid={onMarkPaid} onPrint={onPrint}
+        onShowStatusMenu={() => setShowStatus(true)} />
     </View>
   );
 }
 
-// ── StyleSheets ──────────────────────────────────────────────────────────────
+// ── Order List Row (Table View) ───────────────────────────────────────────────
+function OrderListRow({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint, isUpdating }: { order: Order } & ActionProps) {
+  const [showMore,   setShowMore]   = useState(false);
+  const [showStatus, setShowStatus] = useState(false);
 
+  const cfg    = sCfg(order.status);
+  const sc     = srcCfg(order.source);
+  const isPaid = order.payment_status === 'paid';
+  const agg    = isAgg(order);
+
+  return (
+    <View style={row.wrap}>
+      {/* Order */}
+      <View style={row.c1}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+          <Text style={row.orderNum}>Order {order.order_number}</Text>
+          {order.source && order.source !== 'pos' && (
+            <View style={[row.srcBadge, { backgroundColor: sc.bg }]}>
+              <Text style={[row.srcText, { color: sc.text }]}>{order.source.toUpperCase()}</Text>
+            </View>
+          )}
+        </View>
+        <Text style={row.subText}>{order.created_at ? format(new Date(order.created_at), 'dd MMM, hh:mm a') : '—'}</Text>
+        {agg && order.external_id ? <Text style={row.subText}>{order.source} ID: {order.external_id}</Text> : null}
+      </View>
+      {/* Customer */}
+      <View style={row.c2}>
+        <Text style={row.custName}>{order.customer_name || '—'}</Text>
+        {order.customer_phone ? <Text style={row.subText}>{order.customer_phone}</Text> : null}
+      </View>
+      {/* Type */}
+      <View style={row.c3}>
+        <Text style={row.typeText}>
+          {(order.order_type ?? 'dine_in').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+        </Text>
+        {order.table_name ? <Text style={row.subText}>Table: {order.table_name}</Text> : null}
+      </View>
+      {/* Items */}
+      <View style={[row.c4, { alignItems: 'center' }]}>
+        <View style={row.itemsBadge}>
+          <Text style={row.itemsBadgeText}>{order.items?.length ?? 0}</Text>
+        </View>
+      </View>
+      {/* Total */}
+      <View style={[row.c5, { alignItems: 'flex-end' }]}>
+        <Text style={row.total}>₹{Number(order.total ?? 0).toFixed(2)}</Text>
+      </View>
+      {/* Status */}
+      <View style={row.c6}>
+        <View style={[row.statusBadge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+          <Text style={[row.statusText, { color: cfg.text }]}>{cfg.label}</Text>
+        </View>
+      </View>
+      {/* Payment */}
+      <View style={row.c7}>
+        <View style={[row.payBadge, isPaid ? row.paidBadge : row.unpaidBadge]}>
+          <Ionicons name={isPaid ? 'checkmark-circle' : 'alert-circle'} size={10}
+            color={isPaid ? '#16a34a' : '#d97706'} />
+          <Text style={[row.payBadgeText, { color: isPaid ? '#16a34a' : '#d97706' }]}>
+            {isPaid ? 'Paid' : 'Unpaid'}
+          </Text>
+        </View>
+        {!agg && (
+          <View style={{ flexDirection: 'row', gap: 2, marginTop: 4 }}>
+            {(['cash','card','upi'] as const).map(m => {
+              const active = (order.payment_method ?? '') === m;
+              return (
+                <TouchableOpacity key={m} disabled={isUpdating}
+                  style={[row.pmBtn, active && row.pmBtnActive]}
+                  onPress={() => onPaymentChange(order.id, m)}>
+                  <Text style={[row.pmText, active && { color: '#fff' }]}>
+                    {m === 'upi' ? 'UPI' : m.charAt(0).toUpperCase()+m.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </View>
+      {/* Actions */}
+      <View style={[row.c8, { alignItems: 'flex-end' }]}>
+        {agg && order.status === 'pending' && (
+          <View style={{ flexDirection: 'row', gap: 4, marginBottom: 4 }}>
+            <TouchableOpacity style={row.acceptBtn} disabled={isUpdating}
+              onPress={() => onStatusChange(order.id, 'confirmed')}>
+              <Text style={row.acceptText}>Accept</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={row.rejectBtn} disabled={isUpdating}
+              onPress={() => Alert.alert('Reject', `Reject this ${order.source} order?`, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Reject', style: 'destructive', onPress: () => onStatusChange(order.id, 'cancelled') },
+              ])}>
+              <Text style={row.rejectText}>Reject</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        <View style={row.iconGroup}>
+          <TouchableOpacity style={[row.iconBtn, row.receiptIconBtn]} onPress={() => onPrint(order)}>
+            <Ionicons name="document-text-outline" size={14} color="#4f46e5" />
+          </TouchableOpacity>
+          <TouchableOpacity style={[row.iconBtn, row.printIconBtn]} onPress={() => onPrint(order)}>
+            <Ionicons name="print-outline" size={14} color="#0891b2" />
+          </TouchableOpacity>
+          <TouchableOpacity style={[row.iconBtn, row.kotIconBtn]}>
+            <Ionicons name="restaurant-outline" size={14} color="#7c3aed" />
+          </TouchableOpacity>
+          <TouchableOpacity style={[row.iconBtn, row.moreIconBtn]} onPress={() => setShowMore(true)}>
+            <Ionicons name="ellipsis-vertical" size={14} color="#475569" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <StatusMenu order={order} visible={showStatus} onClose={() => setShowStatus(false)}
+        onSelect={(s) => onStatusChange(order.id, s)} />
+      <MoreMenu order={order} visible={showMore} onClose={() => setShowMore(false)}
+        onStatusChange={onStatusChange} onMarkPaid={onMarkPaid} onPrint={onPrint}
+        onShowStatusMenu={() => setShowStatus(true)} />
+    </View>
+  );
+}
+
+// ── Main screen ───────────────────────────────────────────────────────────────
+export default function OrdersScreen() {
+  const [orders,      setOrders]      = useState<Order[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [refreshing,  setRefreshing]  = useState(false);
+  const [tab,         setTab]         = useState<TabKey>('all');
+  const [search,      setSearch]      = useState('');
+  const [dateRange,   setDateRange]   = useState('all');
+  const [viewMode,    setViewMode]    = useState<'grid' | 'list'>('grid');
+  const [isUpdating,  setIsUpdating]  = useState(false);
+  const [showDateDrop, setShowDateDrop] = useState(false);
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { restaurant } = useAppStore();
+  const { width }  = useWindowDimensions();
+  const isDesktop  = width >= 1024;
+
+  // ── Data loading ──────────────────────────────────────────────────────────
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const range  = getDateRange(dateRange);
+      const params: any = { per_page: 300 };
+      if (range) { params.from = range.from; params.to = range.to; }
+      const res  = await ordersApi.list(params);
+      const data = res.data?.data ?? res.data ?? [];
+      setOrders(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.warn('Orders load:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateRange]);
+
+  useEffect(() => {
+    load();
+    pollRef.current = setInterval(() => load(true), POLL_MS);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [load]);
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  const handleStatusChange = useCallback(async (id: number, status: string) => {
+    setIsUpdating(true);
+    try {
+      await ordersApi.updateStatus(id, status);
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, status: status as OrderStatus } : o));
+    } catch (e: any) {
+      Alert.alert('Update Failed', e?.response?.data?.message ?? 'Could not update status');
+    } finally { setIsUpdating(false); }
+  }, []);
+
+  const handlePaymentChange = useCallback(async (id: number, method: string) => {
+    setIsUpdating(true);
+    try {
+      await ordersApi.updatePaymentMethod(id, method);
+      setOrders(prev => prev.map(o =>
+        o.id === id ? { ...o, payment_method: method as any, payment_status: 'paid' } : o
+      ));
+    } catch (e: any) {
+      Alert.alert('Update Failed', e?.response?.data?.message ?? 'Could not update payment');
+    } finally { setIsUpdating(false); }
+  }, []);
+
+  const handleMarkPaid = useCallback(async (id: number, paid: boolean) => {
+    setIsUpdating(true);
+    try {
+      await ordersApi.updatePayment(id, { payment_status: paid ? 'paid' : 'unpaid' });
+      setOrders(prev => prev.map(o =>
+        o.id === id ? { ...o, payment_status: paid ? 'paid' : 'unpaid' } : o
+      ));
+    } catch (e: any) {
+      Alert.alert('Update Failed', e?.response?.data?.message ?? 'Could not update payment status');
+    } finally { setIsUpdating(false); }
+  }, []);
+
+  const handlePrint = useCallback((order: Order) => {
+    printReceipt(order, restaurant);
+  }, [restaurant]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await load(true);
+    setRefreshing(false);
+  }
+
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const filtered = useMemo(() => orders.filter(o => {
+    if (!matchTab(o, tab)) return false;
+    if (search) {
+      const q  = search.toLowerCase();
+      const n  = (o.order_number ?? '').toLowerCase();
+      const c  = (o.customer_name ?? '').toLowerCase();
+      if (!n.includes(q) && !c.includes(q)) return false;
+    }
+    return true;
+  }), [orders, tab, search]);
+
+  const tabCounts = useMemo(() => {
+    const c: Record<TabKey, number> = { all: 0, pending: 0, inprogress: 0, completed: 0, cancelled: 0 };
+    for (const o of orders) {
+      c.all++;
+      if (o.status === 'pending')              c.pending++;
+      if (IN_PROGRESS.includes(o.status))      c.inprogress++;
+      if (o.status === 'completed')            c.completed++;
+      if (o.status === 'cancelled')            c.cancelled++;
+    }
+    return c;
+  }, [orders]);
+
+  const statusCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const o of orders) c[o.status] = (c[o.status] ?? 0) + 1;
+    return c;
+  }, [orders]);
+
+  const dateLabel = DATE_RANGES.find(r => r.key === dateRange)?.label ?? 'All Time';
+
+  const actionProps: ActionProps = {
+    onStatusChange:  handleStatusChange,
+    onPaymentChange: handlePaymentChange,
+    onMarkPaid:      handleMarkPaid,
+    onPrint:         handlePrint,
+    isUpdating,
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <View style={s.shell}>
+      <ScrollView
+        style={{ flex: 1 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={GOLD} />}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Status summary cards ── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={s.cardsScroll}
+          contentContainerStyle={[s.cardsRow, isDesktop && { minWidth: '100%' }]}
+        >
+          {STATUS_CARDS.map(cfg => (
+            <View key={cfg.key} style={[s.statCard, isDesktop && { flex: 1, minWidth: 140 }]}>
+              <View>
+                <Text style={s.statLabel}>{cfg.label}</Text>
+                <Text style={s.statCount}>{statusCounts[cfg.key] ?? 0}</Text>
+              </View>
+              <View style={[s.statIcon, { backgroundColor: cfg.bg }]}>
+                <Ionicons name={cfg.icon as any} size={20} color={cfg.color} />
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* ── Tab bar ── */}
+        <View style={s.tabSection}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabsRow}>
+            {TABS.map(t => {
+              const active = tab === t.key;
+              return (
+                <TouchableOpacity key={t.key} style={[s.tab, active && s.tabActive]} onPress={() => setTab(t.key)}>
+                  <Text style={[s.tabText, active && s.tabTextActive]}>
+                    {t.label} ({tabCounts[t.key]})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Toolbar: view toggle + date + search */}
+          <View style={s.toolbar}>
+            {/* View toggle */}
+            <View style={s.viewToggle}>
+              <TouchableOpacity
+                style={[s.viewBtn, viewMode === 'grid' && s.viewBtnActive]}
+                onPress={() => setViewMode('grid')}
+              >
+                <Ionicons name="grid-outline" size={14} color={viewMode === 'grid' ? '#fff' : '#64748b'} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.viewBtn, viewMode === 'list' && s.viewBtnActive]}
+                onPress={() => setViewMode('list')}
+              >
+                <Ionicons name="list-outline" size={14} color={viewMode === 'list' ? '#fff' : '#64748b'} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Date range button */}
+            <TouchableOpacity style={s.dateBtn} onPress={() => setShowDateDrop(true)}>
+              <Ionicons name="calendar-outline" size={13} color="#374151" />
+              <Text style={s.dateBtnText}>{dateLabel}</Text>
+              <Ionicons name="chevron-down" size={12} color="#374151" />
+            </TouchableOpacity>
+
+            {/* Search */}
+            <View style={s.searchBox}>
+              <Ionicons name="search" size={13} color="#9ca3af" />
+              <TextInput
+                style={s.searchInput}
+                placeholder="Search order # or customer..."
+                value={search}
+                onChangeText={setSearch}
+                placeholderTextColor="#9ca3af"
+              />
+              {search ? (
+                <TouchableOpacity onPress={() => setSearch('')}>
+                  <Ionicons name="close-circle" size={14} color="#9ca3af" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        {/* ── Content ── */}
+        {loading ? (
+          <View style={s.loadWrap}>
+            <ActivityIndicator color={GOLD} size="large" />
+            <Text style={s.loadText}>Loading orders...</Text>
+          </View>
+        ) : filtered.length === 0 ? (
+          <View style={s.emptyWrap}>
+            <Ionicons name="bag-outline" size={52} color="#e5e7eb" />
+            <Text style={s.emptyTitle}>No orders found</Text>
+            <Text style={s.emptySub}>
+              {search
+                ? `No results for "${search}"`
+                : `No ${tab === 'all' ? '' : tab + ' '}orders${dateRange !== 'all' ? ` for ${dateLabel}` : ''}`
+              }
+            </Text>
+          </View>
+        ) : viewMode === 'grid' ? (
+          <View style={[s.grid, isDesktop && s.gridDesktop]}>
+            {filtered.map(o => (
+              <View key={o.id} style={[s.gridItem, isDesktop && (width >= 1400 ? s.gridItem3 : s.gridItem2)]}>
+                <OrderCard order={o} {...actionProps} />
+              </View>
+            ))}
+          </View>
+        ) : (
+          // List view
+          <View style={s.listWrap}>
+            <ScrollView horizontal showsHorizontalScrollIndicator>
+              <View style={{ minWidth: isDesktop ? '100%' : 900 }}>
+                {/* Table header */}
+                <View style={row.header}>
+                  <Text style={[row.hCell, row.c1]}>Order</Text>
+                  <Text style={[row.hCell, row.c2]}>Customer</Text>
+                  <Text style={[row.hCell, row.c3]}>Type</Text>
+                  <Text style={[row.hCell, row.c4, { textAlign: 'center' }]}>Items</Text>
+                  <Text style={[row.hCell, row.c5, { textAlign: 'right' }]}>Total</Text>
+                  <Text style={[row.hCell, row.c6]}>Status</Text>
+                  <Text style={[row.hCell, row.c7]}>Payment</Text>
+                  <Text style={[row.hCell, row.c8, { textAlign: 'right' }]}>Actions</Text>
+                </View>
+                {filtered.map((o, idx) => (
+                  <View key={o.id} style={idx % 2 === 1 ? { backgroundColor: '#f9fafb' } : {}}>
+                    <OrderListRow order={o} {...actionProps} />
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        )}
+
+        <View style={{ height: 48 }} />
+      </ScrollView>
+
+      {/* Date range dropdown */}
+      <Modal visible={showDateDrop} transparent animationType="fade" onRequestClose={() => setShowDateDrop(false)}>
+        <Pressable style={ovl.backdrop} onPress={() => setShowDateDrop(false)}>
+          <View style={[ovl.menu, { position: 'absolute', top: 170, right: 16 }]}>
+            <Text style={ovl.title}>Date Range</Text>
+            {DATE_RANGES.map(r => (
+              <TouchableOpacity key={r.key} style={ovl.item}
+                onPress={() => { setDateRange(r.key); setShowDateDrop(false); }}>
+                <Ionicons name="calendar-outline" size={14} color={dateRange === r.key ? PRIMARY : '#374151'} />
+                <Text style={[ovl.itemText, dateRange === r.key && { color: PRIMARY, fontWeight: '700' }]}>{r.label}</Text>
+                {dateRange === r.key && <Ionicons name="checkmark" size={13} color={PRIMARY} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+// ── StyleSheets ───────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  shell:      { flex: 1, flexDirection: 'row', backgroundColor: '#f0f2f7' },
-  listPanel:  { flex: 1, flexDirection: 'column', backgroundColor: '#f0f2f7' },
-  detailPanel:{ flex: 1, borderLeftWidth: 1, borderLeftColor: '#e5e7eb', backgroundColor: '#fff' },
-  searchBar:  { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', marginHorizontal: 10, marginTop: 10, marginBottom: 2, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
-  searchInput:{ flex: 1, fontSize: 13.5, color: '#111827' },
-  loadingWrap:{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-  empty:      { alignItems: 'center', paddingTop: 80, gap: 10 },
+  shell:      { flex: 1, backgroundColor: '#f0f2f7' },
+
+  // Status cards
+  cardsScroll:{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  cardsRow:   { flexDirection: 'row', padding: 12, gap: 10 },
+  statCard:   { minWidth: 140, backgroundColor: '#fff', borderRadius: 10, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  statLabel:  { fontSize: 12.5, fontWeight: '500', color: '#64748b', marginBottom: 3 },
+  statCount:  { fontSize: 24, fontWeight: '800', color: '#111827' },
+  statIcon:   { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+
+  // Tabs
+  tabSection: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', paddingBottom: 10 },
+  tabsRow:    { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 14, gap: 4 },
+  tab:        { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabActive:  { borderBottomColor: PRIMARY },
+  tabText:    { fontSize: 13, fontWeight: '600', color: '#64748b' },
+  tabTextActive: { color: PRIMARY, fontWeight: '700' },
+
+  // Toolbar
+  toolbar:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingTop: 10, flexWrap: 'wrap' },
+  viewToggle: { flexDirection: 'row', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, overflow: 'hidden', backgroundColor: '#fff', padding: 2, gap: 2 },
+  viewBtn:    { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
+  viewBtnActive: { backgroundColor: PRIMARY },
+  dateBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff' },
+  dateBtnText:{ fontSize: 12.5, fontWeight: '600', color: '#374151' },
+  searchBox:  { flex: 1, minWidth: 160, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+  searchInput:{ flex: 1, fontSize: 13, color: '#111827', minWidth: 0 },
+
+  // Content states
+  loadWrap:   { paddingTop: 80, alignItems: 'center', gap: 12 },
+  loadText:   { fontSize: 14, color: '#9ca3af' },
+  emptyWrap:  { paddingTop: 80, alignItems: 'center', gap: 10 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#9ca3af' },
-  emptySub:   { fontSize: 12.5, color: '#d1d5db', textAlign: 'center' },
-  noSelection:{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 14 },
-  noSelTitle: { fontSize: 18, fontWeight: '700', color: '#9ca3af' },
-  noSelSub:   { fontSize: 13, color: '#d1d5db', textAlign: 'center', lineHeight: 20 },
+  emptySub:   { fontSize: 12.5, color: '#d1d5db', textAlign: 'center', paddingHorizontal: 40 },
+
+  // Grid
+  grid:       { padding: 12, gap: 12 },
+  gridDesktop:{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
+  gridItem:   { width: '100%' },
+  gridItem2:  { width: '50%', paddingHorizontal: 4 },
+  gridItem3:  { width: '33.33%', paddingHorizontal: 4 },
+
+  // List
+  listWrap:   { margin: 12, backgroundColor: '#fff', borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb' },
 });
 
-const fb = StyleSheet.create({
-  bar:       { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  chip:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  dot:       { width: 6, height: 6, borderRadius: 3 },
-  label:     { fontSize: 12.5, fontWeight: '600', color: '#374151' },
-  badge:     { backgroundColor: '#e5e7eb', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
-  badgeText: { fontSize: 10.5, fontWeight: '700', color: '#6b7280' },
+const card = StyleSheet.create({
+  wrap:       { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#f1f5f9', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2, marginBottom: 2 },
+  header:     { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, paddingBottom: 10 },
+  avatar:     { width: 36, height: 36, borderRadius: 18, backgroundColor: PRIMARY, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  numRow:     { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  num:        { fontSize: 14, fontWeight: '700', color: '#111827' },
+  srcBadge:   { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
+  srcText:    { fontSize: 9.5, fontWeight: '800' },
+  extId:      { fontSize: 10.5, color: '#6b7280', marginTop: 1 },
+  typeText:   { fontSize: 11.5, color: '#6b7280', marginTop: 2 },
+  menuBtn:    { width: 30, height: 30, borderRadius: 15, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2e8f0', flexShrink: 0 },
+
+  totalRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingBottom: 10 },
+  total:      { fontSize: 14, fontWeight: '600', color: '#111827' },
+  totalLabel: { fontWeight: '400', color: '#6b7280' },
+  timeRow:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  time:       { fontSize: 12, fontWeight: '600', color: '#374151' },
+
+  itemsWrap:  { paddingHorizontal: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  itemLine:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 },
+  itemDot:    { width: 5, height: 5, borderRadius: 3, backgroundColor: '#9ca3af', flexShrink: 0 },
+  itemName:   { flex: 1, fontSize: 12.5, color: '#374151' },
+  itemQty:    { fontSize: 12, color: '#374151', fontWeight: '600' },
+  noItems:    { fontSize: 12, color: '#f59e0b', fontStyle: 'italic' },
+  notesBox:   { flexDirection: 'row', alignItems: 'flex-start', gap: 5, backgroundColor: '#fefce8', borderRadius: 6, padding: 7, marginTop: 5 },
+  notesText:  { flex: 1, fontSize: 11.5, color: '#713f12' },
+  more:       { fontSize: 12.5, fontWeight: '700', color: PRIMARY, marginTop: 5 },
+
+  btnRow:     { flexDirection: 'row', gap: 6, padding: 12, paddingTop: 10 },
+  btn:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 7, borderRadius: 7, borderWidth: 1 },
+  btnText:    { fontSize: 12, fontWeight: '600' },
+  receiptBtn: { backgroundColor: '#eef2ff', borderColor: '#e0e7ff' },
+  printBtn:   { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  kotBtn:     { backgroundColor: '#fff', borderColor: '#d1d5db' },
+
+  payMethodRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingBottom: 10, flexWrap: 'wrap' },
+  payMethodLabel: { fontSize: 11.5, color: '#6b7280', fontWeight: '500' },
+  payMethodBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff' },
+  payMethodBtnActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  payMethodText: { fontSize: 11.5, fontWeight: '600', color: '#374151' },
+
+  footer:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, paddingTop: 8, gap: 8, flexWrap: 'wrap', borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  payBadge:   { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
+  paidBadge:  { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  unpaidBadge:{ backgroundColor: '#fff7ed', borderColor: '#fde68a' },
+  payBadgeText: { fontSize: 11, fontWeight: '700' },
+  statusBadge:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+  statusDot:    { width: 5, height: 5, borderRadius: 3 },
+  statusText:   { fontSize: 11, fontWeight: '700' },
+  statusDropBtn:{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  statusDropText:{ fontSize: 11.5, fontWeight: '600', color: '#374151' },
+  acceptBtn:  { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5, backgroundColor: '#16a34a' },
+  acceptText: { fontSize: 11.5, fontWeight: '700', color: '#fff' },
+  rejectBtn:  { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5, borderWidth: 1, borderColor: '#dc2626', backgroundColor: '#fff' },
+  rejectText: { fontSize: 11.5, fontWeight: '700', color: '#dc2626' },
 });
 
-const oc = StyleSheet.create({
-  row:       { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, borderLeftWidth: 4, borderWidth: 1, borderColor: '#f3f4f6', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  rowActive: { borderColor: '#93c5fd', shadowOpacity: 0.12 },
-  rowLeft:   { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginRight: 10 },
-  statusDot: { width: 9, height: 9, borderRadius: 5, marginTop: 5 },
-  topLine:   { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 2 },
-  num:       { fontSize: 16, fontWeight: '800', color: '#111827' },
-  srcTag:    { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
-  srcTagText:{ fontSize: 9.5, fontWeight: '800' },
-  customer:  { fontSize: 12.5, fontWeight: '600', color: '#374151', marginBottom: 2 },
-  itemSummary: { fontSize: 11.5, color: '#9ca3af', marginBottom: 3 },
-  time:      { fontSize: 11, color: '#d1d5db' },
-  rowRight:  { alignItems: 'flex-end', gap: 5 },
-  total:     { fontSize: 16, fontWeight: '800', color: '#C9A52A' },
-  statusChip:{ borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
-  statusChipText: { fontSize: 10.5, fontWeight: '700' },
-  unpaidTag: { backgroundColor: '#fef3c7', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
-  unpaidText:{ fontSize: 9.5, fontWeight: '700', color: '#d97706' },
+const row = StyleSheet.create({
+  header:   { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  hCell:    { fontSize: 11.5, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.4 },
+  wrap:     { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+
+  c1: { width: 160, paddingRight: 8 },
+  c2: { width: 130, paddingRight: 8 },
+  c3: { width: 110, paddingRight: 8 },
+  c4: { width: 60,  paddingRight: 8 },
+  c5: { width: 80,  paddingRight: 8 },
+  c6: { width: 100, paddingRight: 8 },
+  c7: { width: 130, paddingRight: 8 },
+  c8: { width: 170 },
+
+  orderNum:  { fontSize: 13, fontWeight: '700', color: PRIMARY },
+  srcBadge:  { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  srcText:   { fontSize: 9, fontWeight: '800' },
+  subText:   { fontSize: 11, color: '#9ca3af', marginTop: 2 },
+  extId:     { fontSize: 11, color: '#9ca3af', marginTop: 2 },
+  custName:  { fontSize: 13, fontWeight: '600', color: '#111827' },
+  typeText:  { fontSize: 12.5, color: '#374151', fontWeight: '500' },
+  tableText: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
+  itemsBadge:{ backgroundColor: '#f1f5f9', borderRadius: 12, paddingHorizontal: 9, paddingVertical: 3, alignSelf: 'center' },
+  itemsBadgeText: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  total:     { fontSize: 13.5, fontWeight: '800', color: '#111827' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 6, borderWidth: 1, alignSelf: 'flex-start' },
+  statusText:  { fontSize: 11.5, fontWeight: '700' },
+  payBadge:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1, alignSelf: 'flex-start' },
+  paidBadge:   { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  unpaidBadge: { backgroundColor: '#fff7ed', borderColor: '#fde68a' },
+  payBadgeText: { fontSize: 10.5, fontWeight: '700' },
+  payMethods:  { flexDirection: 'row', gap: 2 },
+  pmBtn:     { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff' },
+  pmBtnActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  pmText:    { fontSize: 10, fontWeight: '700', color: '#374151' },
+  acceptBtn: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 5, backgroundColor: '#16a34a' },
+  acceptText:{ fontSize: 11, fontWeight: '700', color: '#fff' },
+  rejectBtn: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 5, borderWidth: 1, borderColor: '#dc2626', backgroundColor: '#fff' },
+  rejectText:{ fontSize: 11, fontWeight: '700', color: '#dc2626' },
+  iconGroup: { flexDirection: 'row', gap: 5, justifyContent: 'flex-end' },
+  iconBtn:   { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  receiptIconBtn: { backgroundColor: '#eef2ff', borderColor: '#e0e7ff' },
+  printIconBtn:   { backgroundColor: '#ecfeff', borderColor: '#cffafe' },
+  kotIconBtn:     { backgroundColor: '#f5f3ff', borderColor: '#ede9fe' },
+  moreIconBtn:    { backgroundColor: '#f1f5f9', borderColor: '#e2e8f0' },
 });
 
-const dp = StyleSheet.create({
-  wrap:      { flex: 1, flexDirection: 'column', backgroundColor: '#fff' },
-  header:    { flexDirection: 'row', alignItems: 'flex-start', padding: 20, gap: 10 },
-  orderNum:  { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
-  headerSub: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
-  headerRight:{ alignItems: 'flex-end', gap: 8 },
-  statusPill:{ flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
-  statusPillText: { fontSize: 12, fontWeight: '700', color: '#fff' },
-  closeBtn:  { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.15)', alignItems: 'center', justifyContent: 'center' },
-
-  section:   { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  sectionTitle: { fontSize: 10.5, fontWeight: '800', color: '#9ca3af', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 },
-
-  infoRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  infoItem:  { minWidth: 130 },
-  infoLabel: { fontSize: 10.5, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 },
-  infoVal:   { fontSize: 14, fontWeight: '600', color: '#111827' },
-  srcBadge:  { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' },
-  srcBadgeText: { fontSize: 11, fontWeight: '800' },
-
-  itemRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
-  qtyBox:    { width: 26, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
-  qtyBoxText:{ fontSize: 12, fontWeight: '800' },
-  itemName:  { fontSize: 14, fontWeight: '600', color: '#111827' },
-  itemVar:   { fontSize: 11.5, color: '#C9A52A', marginTop: 1 },
-  itemPrice: { fontSize: 14, fontWeight: '700', color: '#374151' },
-
-  sumRow:    { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  sumLabel:  { fontSize: 13.5, color: '#6b7280' },
-  sumVal:    { fontSize: 13.5, fontWeight: '600', color: '#374151' },
-
-  payRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  payItem:   { minWidth: 100 },
-  payStatusPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1, alignSelf: 'flex-start', marginTop: 4 },
-  paidPill:  { backgroundColor: '#f0fdf4', borderColor: '#86efac' },
-  unpaidPill:{ backgroundColor: '#fef9ec', borderColor: '#fcd34d' },
-  payStatusDot: { width: 6, height: 6, borderRadius: 3 },
-  payStatusText: { fontSize: 12, fontWeight: '700' },
-
-  notesBox:  { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#f8f9fb', borderRadius: 10, padding: 12 },
-  notesText: { flex: 1, fontSize: 13.5, color: '#374151', lineHeight: 20 },
-
-  actions:   { flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 18, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  advBtn:    { flex: 1, minWidth: 140, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 12, borderRadius: 10 },
-  advBtnText:{ color: '#fff', fontSize: 13.5, fontWeight: '800' },
-  paidBtn:   { flex: 1, minWidth: 120, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 10, backgroundColor: '#16a34a' },
-  paidBtnText: { color: '#fff', fontSize: 13.5, fontWeight: '700' },
-  printBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, paddingHorizontal: 18, borderRadius: 10, backgroundColor: '#f0f2f7', borderWidth: 1, borderColor: '#e5e7eb' },
-  printBtnText: { fontSize: 13, fontWeight: '700', color: '#1A2B1A' },
+const ovl = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  menu:     { backgroundColor: '#fff', borderRadius: 14, paddingVertical: 8, minWidth: 230, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 12, marginTop: 'auto', marginBottom: 'auto', alignSelf: 'center' },
+  title:    { fontSize: 12, fontWeight: '800', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 },
+  item:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, marginHorizontal: 4 },
+  itemActive: { backgroundColor: '#f0f9ff' },
+  itemText: { flex: 1, fontSize: 14, color: '#374151', fontWeight: '500' },
+  dot:      { width: 8, height: 8, borderRadius: 4 },
 });
