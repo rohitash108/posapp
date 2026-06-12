@@ -172,7 +172,7 @@ function Sidebar() {
                 >
                   {active && <View style={sb.activeBar} />}
                   <View style={[sb.iconBox, active && sb.iconBoxActive]}>
-                    <Ionicons name={item.icon} size={16} color={active ? '#C9A52A' : '#5A7A5A'} />
+                    <Ionicons name={item.icon} size={14} color={active ? '#C9A52A' : 'rgba(255,255,255,0.55)'} />
                   </View>
                   <Text style={[sb.navLabel, active && sb.navLabelActive]}>{item.label}</Text>
                   {active && item.name === 'pos/index' && (
@@ -235,7 +235,7 @@ function RestaurantHeader() {
 
 export default function AppLayout() {
   const { width } = useWindowDimensions();
-  const isLarge = width >= 768;
+  const isLarge = width >= 640;
   const token = useAppStore((s) => s.token);
   const store = useAppStore();
   const pathname = usePathname();
@@ -279,13 +279,11 @@ export default function AppLayout() {
   if (isLarge) {
     return (
       <View style={{ flex: 1, flexDirection: 'row' }}>
-        {/* Hide sidebar on POS so the screen gets maximum width */}
-        {!isPOS && <Sidebar />}
+        <Sidebar />
         <View style={{ flex: 1 }}>
           <Tabs screenOptions={tabScreenOptions}>
             <Tabs.Screen name="dashboard/index" options={{ headerTitle: () => <RestaurantHeader />, headerRight: () => <View style={{ marginRight: 16 }}><SyncDot /></View> }} />
-            {/* On POS page: hide header too for full-screen real estate */}
-            <Tabs.Screen name="pos/index" options={{ headerShown: !isPOS, headerTitle: () => <RestaurantHeader />, headerRight: () => <View style={{ marginRight: 16 }}><SyncDot /></View> }} />
+            <Tabs.Screen name="pos/index" options={{ headerShown: false }} />
             <Tabs.Screen name="kitchen/index"    options={{ title: 'Kitchen Display' }} />
             <Tabs.Screen name="orders/index"     options={{ title: 'Orders' }} />
             <Tabs.Screen name="tables/index"     options={{ title: 'Tables' }} />
@@ -346,24 +344,24 @@ const sb = StyleSheet.create({
   blobTop: { position: 'absolute', top: -50, right: -50, width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(201,165,42,0.07)' },
   blobBottom: { position: 'absolute', bottom: -40, left: -40, width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(201,165,42,0.05)' },
 
-  brand: { alignItems: 'center', paddingTop: 18, paddingHorizontal: 16 },
-  logoWrap: { width: 90, height: 90, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  ring1: { position: 'absolute', width: 72, height: 72, borderRadius: 36, borderWidth: 1.5, borderColor: 'rgba(201,165,42,0.45)' },
-  ring2: { position: 'absolute', width: 88, height: 88, borderRadius: 44, borderWidth: 1, borderColor: 'rgba(201,165,42,0.15)' },
-  logo: { width: 56, height: 56, borderRadius: 28, zIndex: 1 },
-  logoFallback: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#2D4A2D', alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  restName: { color: '#C9A52A', fontWeight: '800', fontSize: 10.5, letterSpacing: 1.5, textAlign: 'center' },
-  restSub: { color: '#4A6A4A', fontSize: 9.5, marginTop: 2, letterSpacing: 1 },
-  divider: { width: 28, height: 2, backgroundColor: 'rgba(201,165,42,0.35)', borderRadius: 1, marginTop: 10, marginBottom: 4 },
+  brand: { alignItems: 'center', paddingTop: 10, paddingHorizontal: 16 },
+  logoWrap: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  ring1: { position: 'absolute', width: 52, height: 52, borderRadius: 26, borderWidth: 1.5, borderColor: 'rgba(201,165,42,0.45)' },
+  ring2: { position: 'absolute', width: 62, height: 62, borderRadius: 31, borderWidth: 1, borderColor: 'rgba(201,165,42,0.15)' },
+  logo: { width: 42, height: 42, borderRadius: 21, zIndex: 1 },
+  logoFallback: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#2D4A2D', alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  restName: { color: '#C9A52A', fontWeight: '800', fontSize: 10, letterSpacing: 1.5, textAlign: 'center' },
+  restSub: { color: 'rgba(255,255,255,0.4)', fontSize: 9, marginTop: 1, letterSpacing: 1 },
+  divider: { width: 28, height: 2, backgroundColor: 'rgba(201,165,42,0.35)', borderRadius: 1, marginTop: 6, marginBottom: 2 },
 
-  navScroll: { flex: 1, paddingTop: 4 },
-  navSection: { color: '#2D4A2D', fontSize: 9, fontWeight: '700', letterSpacing: 2, paddingHorizontal: 18, marginBottom: 3, marginTop: 12 },
-  navItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 10, marginHorizontal: 8, borderRadius: 10, marginBottom: 1, position: 'relative', overflow: 'hidden' },
-  navItemActive: { backgroundColor: 'rgba(201,165,42,0.1)' },
+  navScroll: { flex: 1, paddingTop: 2 },
+  navSection: { color: 'rgba(255,255,255,0.35)', fontSize: 8.5, fontWeight: '700', letterSpacing: 2, paddingHorizontal: 18, marginBottom: 2, marginTop: 8 },
+  navItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 7, marginHorizontal: 8, borderRadius: 8, marginBottom: 1, position: 'relative', overflow: 'hidden' },
+  navItemActive: { backgroundColor: 'rgba(201,165,42,0.12)' },
   activeBar: { position: 'absolute', left: 0, top: 8, bottom: 8, width: 3, backgroundColor: '#C9A52A', borderRadius: 2 },
-  iconBox: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.04)', marginRight: 10 },
-  iconBoxActive: { backgroundColor: 'rgba(201,165,42,0.15)' },
-  navLabel: { fontSize: 13, fontWeight: '500', color: '#4A6A4A', flex: 1 },
+  iconBox: { width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', marginRight: 8 },
+  iconBoxActive: { backgroundColor: 'rgba(201,165,42,0.18)' },
+  navLabel: { fontSize: 12.5, fontWeight: '500', color: 'rgba(255,255,255,0.65)', flex: 1 },
   navLabelActive: { color: '#fff', fontWeight: '700' },
 
   footer:     { paddingHorizontal: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
