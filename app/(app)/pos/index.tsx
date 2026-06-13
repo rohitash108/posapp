@@ -227,8 +227,14 @@ export default function POSScreen() {
   const [variationItem, setVariationItem] = useState<Item | null>(null);
   const [showCart, setShowCart]           = useState(false);
   const [showCustPicker, setShowCustPicker] = useState(false);
+  const custFieldRef = React.useRef<View>(null);
+  const [custDropPos, setCustDropPos] = useState({ top: 200, left: 0, width: 300 });
   const [showWaiterPicker, setShowWaiterPicker] = useState(false);
+  const waiterFieldRef = React.useRef<View>(null);
+  const [waiterDropPos, setWaiterDropPos] = useState({ top: 200, left: 0, width: 300 });
   const [showTablePicker, setShowTablePicker] = useState(false);
+  const tableFieldRef = React.useRef<View>(null);
+  const [tableDropPos, setTableDropPos] = useState({ top: 200, left: 0, width: 300 });
   const [showCustomItem, setShowCustomItem] = useState(false);
   const [placing, setPlacing]             = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
@@ -267,6 +273,8 @@ export default function POSScreen() {
     setOrderType, setTable, switchTable, setCustomer, setWaiter, setDiscount, setNotes,
     setCoupon, setKotPrinted,
   } = useCartStore();
+  // Subscribe to tableCartMap so the table picker re-renders when slots change
+  const tableCartMap = useCartStore(s => s.tableCartMap);
 
   /**
    * After switchTable() replaces the active cart in the store, this helper
@@ -288,6 +296,60 @@ export default function POSScreen() {
     setQuickPct(null);
     setCustomPctInput('');
   }
+  /** Reliable field measurement for web (uses getBoundingClientRect) + native fallback */
+  function measureFieldPos(
+    ref: React.RefObject<View>,
+    onResult: (top: number, left: number, width: number) => void
+  ) {
+    if (!ref.current) return;
+    const el = ref.current as any;
+    if (typeof el.getBoundingClientRect === 'function') {
+      const rect = el.getBoundingClientRect();
+      // width > 0 means the element has been laid out and is visible
+      if (rect.width > 0) {
+        onResult(rect.bottom + 4, rect.left, Math.max(rect.width, 280));
+        return;
+      }
+    }
+    // Native fallback: measure() gives pageX/pageY which are always window-relative
+    if (typeof (ref.current as any).measure === 'function') {
+      (ref.current as any).measure((_x: number, _y: number, w: number, h: number, pageX: number, pageY: number) => {
+        onResult(pageY + h + 4, pageX, Math.max(w, 280));
+      });
+    }
+  }
+  const openCustPicker = useCallback(() => {
+    measureFieldPos(custFieldRef, (top, left, width) => {
+      setCustDropPos({ top, left, width });
+      setShowCustPicker(true);
+    });
+  }, []);
+  const openWaiterPicker = useCallback(() => {
+    measureFieldPos(waiterFieldRef, (top, left, width) => {
+      setWaiterDropPos({ top, left, width });
+      setShowWaiterPicker(true);
+    });
+  }, []);
+  const openTablePicker = useCallback(() => {
+    if (Platform.OS === 'web') {
+      // On web: use document.getElementById for reliable coords even inside
+      // conditional JSX where React ref getBoundingClientRect can be unreliable.
+      const el = (typeof document !== 'undefined')
+        ? document.getElementById('pos-table-field')
+        : null;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        setTableDropPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 280) });
+        setShowTablePicker(true);
+        return;
+      }
+    }
+    // Native fallback
+    measureFieldPos(tableFieldRef, (top, left, width) => {
+      setTableDropPos({ top, left, width });
+      setShowTablePicker(true);
+    });
+  }, []);
   const { isOnline, taxes, restaurant } = useAppStore();
   const taxRate = taxes[0]?.rate ?? 0;
   const { width } = useWindowDimensions();
@@ -698,81 +760,149 @@ export default function POSScreen() {
         ))}
       </View>
 
-      {/* ── Waiter + Customer rows ── */}
-      <View style={cp.twoColSection}>
-        {/* Waiter */}
-        <View style={cp.halfField}>
-          <Text style={cp.fieldLabel}>Waiter</Text>
-          <Pressable style={cp.fieldBox} onPress={() => setShowWaiterPicker(true)}>
-            <Ionicons name="person-circle-outline" size={13} color="#9ca3af" />
-            <Text style={[cp.fieldBoxText, cart.waiter_name && { color: '#111827' }]} numberOfLines={1}>
-              {cart.waiter_name || 'Waiter'}
-            </Text>
-            {cart.waiter_name ? (
-              <Pressable onPress={() => setWaiter(undefined, undefined)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                <Ionicons name="close-circle" size={13} color="#9ca3af" />
-              </Pressable>
-            ) : null}
-          </Pressable>
+      {/* ── Customer selector ── */}
+      <View ref={custFieldRef} style={cp.selectorSection}>
+        <View style={cp.selectorLabelRow}>
+          <Ionicons name="person-outline" size={11} color="#9ca3af" />
+          <Text style={cp.selectorLabel}>CUSTOMER</Text>
         </View>
-
-        {/* Customer */}
-        <View style={cp.halfField}>
-          <Text style={cp.fieldLabel}>Customer</Text>
+        {cart.customer_id ? (
+          /* ── Selected customer pill ── */
+          <View style={cp.fieldRow}>
+            <Pressable
+              style={({ pressed }) => [cp.selectedPill, { flex: 1 }, pressed && { opacity: 0.85 }]}
+              onPress={() => openCustPicker()}
+            >
+              <View style={cp.selectedAvatar}>
+                <Text style={cp.selectedAvatarText}>{(cart.customer_name ?? 'C').charAt(0).toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={cp.selectedName} numberOfLines={1}>{cart.customer_name}</Text>
+                {cart.customer_phone ? <Text style={cp.selectedSub}>{cart.customer_phone}</Text> : null}
+              </View>
+              <Ionicons name="swap-horizontal-outline" size={13} color="#6b7280" />
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [cp.clearBtn, pressed && { opacity: 0.7 }]}
+              onPress={() => { setWalkInName(''); setCustomer(undefined, undefined, undefined); }}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="close" size={13} color="#dc2626" />
+            </Pressable>
+          </View>
+        ) : (
+          /* ── Walk-in input + picker button ── */
           <View style={cp.fieldRow}>
             <View style={[cp.fieldBox, { flex: 1 }]}>
+              <Ionicons name="walk-outline" size={13} color={walkInName ? '#374151' : '#9ca3af'} />
               <TextInput
-                style={[cp.fieldBoxText, { flex: 1 }]}
-                placeholder={cart.customer_name || 'Walk-in'}
+                style={[cp.fieldBoxText, { flex: 1 }, walkInName ? { color: '#111827', fontWeight: '600' as const } : undefined]}
+                placeholder="Walk-in name (optional)"
                 value={walkInName}
                 onChangeText={setWalkInName}
                 placeholderTextColor="#9ca3af"
+                returnKeyType="done"
               />
-              {(walkInName || cart.customer_name) ? (
-                <Pressable onPress={() => { setWalkInName(''); setCustomer(undefined, undefined, undefined); }}>
-                  <Ionicons name="close-circle" size={13} color="#9ca3af" />
+              {walkInName ? (
+                <Pressable onPress={() => setWalkInName('')} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}>
+                  <Ionicons name="close-circle" size={14} color="#9ca3af" />
                 </Pressable>
               ) : null}
             </View>
-            <Pressable style={[cp.iconSmBtn, t.chromeBtn]} onPress={() => setShowCustPicker(true)}>
-              <Ionicons name="add" size={14} color="#fff" />
+            <Pressable
+              style={({ pressed }) => [cp.selectorBtn, t.chromeBtn, pressed && { opacity: 0.85 }]}
+              onPress={() => openCustPicker()}
+            >
+              <Ionicons name="people-outline" size={14} color="#C9A52A" />
             </Pressable>
           </View>
+        )}
+      </View>
+
+      {/* ── Waiter selector ── */}
+      <View ref={waiterFieldRef} style={[cp.selectorSection, { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }]}>
+        <View style={cp.selectorLabelRow}>
+          <Ionicons name="person-circle-outline" size={11} color="#9ca3af" />
+          <Text style={cp.selectorLabel}>WAITER</Text>
         </View>
+        {cart.waiter_id ? (
+          <View style={cp.fieldRow}>
+            <Pressable
+              style={({ pressed }) => [cp.selectedPill, { flex: 1, borderColor: '#e9d5ff' }, pressed && { opacity: 0.85 }]}
+              onPress={() => openWaiterPicker()}
+            >
+              <View style={[cp.selectedAvatar, { backgroundColor: '#7c3aed' }]}>
+                <Text style={cp.selectedAvatarText}>{(cart.waiter_name ?? 'W').charAt(0).toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={cp.selectedName} numberOfLines={1}>{cart.waiter_name}</Text>
+                <Text style={cp.selectedSub}>Waiter</Text>
+              </View>
+              <Ionicons name="swap-horizontal-outline" size={13} color="#6b7280" />
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [cp.clearBtn, pressed && { opacity: 0.7 }]}
+              onPress={() => setWaiter(undefined, undefined)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="close" size={13} color="#dc2626" />
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [cp.fieldBox, pressed && { opacity: 0.85 }]}
+            onPress={() => openWaiterPicker()}
+          >
+            <Ionicons name="person-circle-outline" size={14} color="#9ca3af" />
+            <Text style={[cp.fieldBoxText, { flex: 1 }]}>Select waiter (optional)</Text>
+            <Ionicons name="chevron-down" size={13} color="#9ca3af" />
+          </Pressable>
+        )}
       </View>
 
       {/* ── Table selector (searchable picker — scales to 50+ tables) ── */}
       {cart.order_type === 'dine_in' && tables.length > 0 && (
-        <View style={cp.tableSection}>
-          <View style={cp.tableLabelRow}>
-            <Text style={cp.fieldLabel}>Table</Text>
+        <View ref={tableFieldRef} nativeID="pos-table-field" collapsable={false} style={[cp.selectorSection, { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }]}>
+          <View style={cp.selectorLabelRow}>
+            <Ionicons name="grid-outline" size={11} color="#9ca3af" />
+            <Text style={cp.selectorLabel}>TABLE</Text>
             <View style={cp.requiredDot}><Text style={[cp.requiredStar, { color: t.colors.danger }]}>*</Text></View>
           </View>
-          <View style={cp.fieldRow}>
-            <Pressable
-              style={({ pressed }) => [cp.fieldBox, { flex: 1 }, pressed && { opacity: 0.8 }]}
-              onPress={() => setShowTablePicker(true)}
-            >
-              <Ionicons name="grid-outline" size={13} color={cart.table_id ? '#0D76E1' : '#9ca3af'} />
-              <Text
-                style={[cp.fieldBoxText, { flex: 1 }, cart.table_id ? { color: '#111827', fontWeight: '600' as const } : undefined]}
-                numberOfLines={1}
-              >
-                {cart.table_id
-                  ? tables.find(tb => tb.id === cart.table_id)?.name ?? `Table ${cart.table_id}`
-                  : 'Select table...'}
-              </Text>
-              <Ionicons name="chevron-down" size={13} color="#9ca3af" />
-            </Pressable>
-            {cart.table_id ? (
+          {cart.table_id ? (
+            <View style={cp.fieldRow}>
               <Pressable
-                style={({ pressed }) => [cp.iconSmBtn, { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fca5a5' }, pressed && { opacity: 0.75 }]}
+                style={({ pressed }) => [cp.selectedPill, { flex: 1, borderColor: '#bfdbfe' }, pressed && { opacity: 0.85 }]}
+                onPress={openTablePicker}
+              >
+                <View style={[cp.selectedAvatar, { backgroundColor: '#0D76E1' }]}>
+                  <Ionicons name="grid-outline" size={14} color="#fff" />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={cp.selectedName} numberOfLines={1}>
+                    {tables.find(tb => tb.id === cart.table_id)?.name ?? `Table ${cart.table_id}`}
+                  </Text>
+                  <Text style={cp.selectedSub}>Dine-in table selected</Text>
+                </View>
+                <Ionicons name="swap-horizontal-outline" size={13} color="#6b7280" />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [cp.clearBtn, pressed && { opacity: 0.75 }]}
                 onPress={() => { switchTable(undefined); syncLocalFromCart(); }}
               >
-                <Ionicons name="close" size={14} color="#dc2626" />
+                <Ionicons name="close" size={13} color="#dc2626" />
               </Pressable>
-            ) : null}
-          </View>
+            </View>
+          ) : (
+            <Pressable
+              style={({ pressed }) => [cp.fieldBox, cp.tableEmpty, pressed && { opacity: 0.85 }]}
+              onPress={openTablePicker}
+            >
+              <Ionicons name="grid-outline" size={14} color="#d97706" />
+              <Text style={[cp.fieldBoxText, { flex: 1, color: '#d97706', fontWeight: '600' as const }]}>Select table...</Text>
+              <View style={cp.tableRequiredBadge}><Text style={cp.tableRequiredText}>Required</Text></View>
+              <Ionicons name="chevron-down" size={13} color="#d97706" />
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -1150,60 +1280,122 @@ export default function POSScreen() {
   );
 
   const custPickerModal = (
-    <Modal visible={showCustPicker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCustPicker(false)}>
-      <View style={{ flex: 1, backgroundColor: '#f5f6f8' }}>
-        <View style={[cpm.header, t.chrome]}>
-          <Text style={cpm.title}>Select Customer</Text>
-          <Pressable onPress={() => setShowCustPicker(false)}>
-            <Ionicons name="close" size={22} color="#374151" />
+    <Modal
+      visible={showCustPicker}
+      transparent
+      animationType="fade"
+      onRequestClose={() => { setShowCustPicker(false); setCustSearch(''); }}
+    >
+      <Pressable
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        onPress={() => { setShowCustPicker(false); setCustSearch(''); }}
+      />
+      <View style={[cpm.dropPanel, { top: custDropPos.top, left: custDropPos.left, width: custDropPos.width }]}>
+        {/* Compact header */}
+        <View style={cpm.dropHeader}>
+          <Ionicons name="person-outline" size={13} color="#C9A52A" />
+          <Text style={[cpm.title, { fontSize: 13, flex: 1 }]}>Select Customer</Text>
+          <Pressable
+            style={({ pressed }) => [cpm.closeBtn, pressed && { opacity: 0.7 }]}
+            onPress={() => { setShowCustPicker(false); setCustSearch(''); }}
+          >
+            <Ionicons name="close" size={16} color="#fff" />
           </Pressable>
         </View>
+        {/* Search */}
         <View style={cpm.search}>
-          <Ionicons name="search" size={16} color="#9ca3af" />
+          <Ionicons name="search" size={14} color="#1A2B1A" />
           <TextInput
             style={cpm.searchInput}
-            placeholder="Search name or phone..."
+            placeholder="Search by name or phone..."
             value={custSearch}
             onChangeText={setCustSearch}
             placeholderTextColor="#9ca3af"
             autoFocus
           />
+          {custSearch ? (
+            <Pressable onPress={() => setCustSearch('')}>
+              <Ionicons name="close-circle" size={14} color="#9ca3af" />
+            </Pressable>
+          ) : null}
         </View>
-        <Pressable
-          style={cpm.row}
-          onPress={() => { setCustomer(undefined, undefined, undefined); setWalkInName(''); setShowCustPicker(false); setCustSearch(''); }}
-        >
-          <View style={[cpm.avatar, { backgroundColor: '#6b7280' }]}>
-            <Ionicons name="person-outline" size={18} color="#fff" />
+        {/* Walk-in section */}
+        <View style={[cpm.walkInSection, { marginHorizontal: 8, marginBottom: 6 }]}>
+          <Text style={cpm.walkInLabel}>Walk-in Name (optional)</Text>
+          <View style={cpm.walkInRow}>
+            <TextInput
+              style={[cpm.walkInInput, { fontSize: 13 }]}
+              placeholder="Enter name for this order..."
+              value={walkInName}
+              onChangeText={setWalkInName}
+              placeholderTextColor="#9ca3af"
+              returnKeyType="done"
+              onSubmitEditing={() => { setCustomer(undefined, undefined, undefined); setShowCustPicker(false); setCustSearch(''); }}
+            />
+            {walkInName ? (
+              <Pressable
+                style={cpm.walkInConfirm}
+                onPress={() => { setCustomer(undefined, undefined, undefined); setShowCustPicker(false); setCustSearch(''); }}
+              >
+                <Ionicons name="checkmark" size={14} color="#fff" />
+                <Text style={cpm.walkInConfirmText}>Use</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={[cpm.walkInConfirm, { backgroundColor: '#6b7280' }]}
+                onPress={() => { setWalkInName(''); setCustomer(undefined, undefined, undefined); setShowCustPicker(false); setCustSearch(''); }}
+              >
+                <Ionicons name="person-outline" size={13} color="#fff" />
+                <Text style={cpm.walkInConfirmText}>Walk-in</Text>
+              </Pressable>
+            )}
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={cpm.name}>Walk-in Customer</Text>
-            <Text style={cpm.phone}>No account</Text>
+        </View>
+        {/* Divider */}
+        {customers.length > 0 && (
+          <View style={[cpm.dividerRow, { marginHorizontal: 8, marginBottom: 2 }]}>
+            <View style={cpm.dividerLine} />
+            <Text style={cpm.dividerText}>existing customers</Text>
+            <View style={cpm.dividerLine} />
           </View>
-        </Pressable>
-        <ScrollView>
+        )}
+        <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 280 }}>
           {filteredCustomers.map(c => (
             <Pressable
               key={c.id}
-              style={cpm.row}
+              style={({ pressed }) => [cpm.row, cart.customer_id === c.id && cpm.rowSelected, pressed && { backgroundColor: '#f0f4ff' }]}
               onPress={() => { setCustomer(c.id, c.name, c.phone); setWalkInName(''); setShowCustPicker(false); setCustSearch(''); }}
             >
-              <View style={cpm.avatar}>
-                <Text style={cpm.avatarText}>{c.name.charAt(0).toUpperCase()}</Text>
+              <View style={[cpm.avatar, { width: 34, height: 34, borderRadius: 17 }]}>
+                <Text style={[cpm.avatarText, { fontSize: 14 }]}>{c.name.charAt(0).toUpperCase()}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={cpm.name}>{c.name}</Text>
-                {c.phone && <Text style={cpm.phone}>{c.phone}</Text>}
+                <Text style={[cpm.name, { fontSize: 13.5 }]}>{c.name}</Text>
+                <Text style={[cpm.phone, { fontSize: 11.5 }]}>{c.phone || 'No phone'}</Text>
               </View>
-              {cart.customer_id === c.id && <Ionicons name="checkmark-circle" size={20} color="#10b981" />}
+              {cart.customer_id === c.id
+                ? <Ionicons name="checkmark-circle" size={19} color="#0D76E1" />
+                : <Ionicons name="chevron-forward" size={14} color="#d1d5db" />}
             </Pressable>
           ))}
           {filteredCustomers.length === 0 && custSearch.length > 0 && (
-            <View style={{ padding: 30, alignItems: 'center', gap: 12 }}>
-              <Text style={{ color: '#9ca3af', fontSize: 14 }}>No customers found</Text>
-              <Pressable style={cpm.useBtn} onPress={() => { setWalkInName(custSearch); setShowCustPicker(false); setCustSearch(''); }}>
-                <Text style={cpm.useBtnText}>Use "{custSearch}" as walk-in name</Text>
+            <View style={[cpm.emptyState, { paddingTop: 20 }]}>
+              <Ionicons name="person-add-outline" size={28} color="#d1d5db" />
+              <Text style={cpm.emptyTitle}>No customers found</Text>
+              <Pressable
+                style={[cpm.useBtn, { marginTop: 8 }]}
+                onPress={() => { setWalkInName(custSearch); setCustomer(undefined, undefined, undefined); setShowCustPicker(false); setCustSearch(''); }}
+              >
+                <Ionicons name="add-circle-outline" size={14} color="#fff" />
+                <Text style={cpm.useBtnText}>Use "{custSearch}" as walk-in</Text>
               </Pressable>
+            </View>
+          )}
+          {filteredCustomers.length === 0 && !custSearch && customers.length === 0 && (
+            <View style={[cpm.emptyState, { paddingTop: 20 }]}>
+              <Ionicons name="people-outline" size={28} color="#d1d5db" />
+              <Text style={cpm.emptyTitle}>No customers yet</Text>
+              <Text style={cpm.emptyText}>Add in the Customers module</Text>
             </View>
           )}
         </ScrollView>
@@ -1216,38 +1408,85 @@ export default function POSScreen() {
     !waiterSearch || s.name.toLowerCase().includes(waiterSearch.toLowerCase())
   );
   const waiterPickerModal = (
-    <Modal visible={showWaiterPicker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowWaiterPicker(false)}>
-      <View style={{ flex: 1, backgroundColor: '#f5f6f8' }}>
-        <View style={[cpm.header, t.chrome]}>
-          <Text style={cpm.title}>Select Waiter</Text>
-          <Pressable onPress={() => setShowWaiterPicker(false)}>
-            <Ionicons name="close" size={22} color="#374151" />
+    <Modal
+      visible={showWaiterPicker}
+      transparent
+      animationType="fade"
+      onRequestClose={() => { setShowWaiterPicker(false); setWaiterSearch(''); }}
+    >
+      <Pressable
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        onPress={() => { setShowWaiterPicker(false); setWaiterSearch(''); }}
+      />
+      <View style={[cpm.dropPanel, { top: waiterDropPos.top, left: waiterDropPos.left, width: waiterDropPos.width }]}>
+        {/* Compact header */}
+        <View style={cpm.dropHeader}>
+          <Ionicons name="person-circle-outline" size={13} color="#C9A52A" />
+          <Text style={[cpm.title, { fontSize: 13, flex: 1 }]}>Select Waiter</Text>
+          <Pressable
+            style={({ pressed }) => [cpm.closeBtn, pressed && { opacity: 0.7 }]}
+            onPress={() => { setShowWaiterPicker(false); setWaiterSearch(''); }}
+          >
+            <Ionicons name="close" size={16} color="#fff" />
           </Pressable>
         </View>
+        {/* Search */}
         <View style={cpm.search}>
-          <Ionicons name="search" size={16} color="#9ca3af" />
-          <TextInput style={cpm.searchInput} placeholder="Search staff..." value={waiterSearch} onChangeText={setWaiterSearch} placeholderTextColor="#9ca3af" autoFocus />
+          <Ionicons name="search" size={14} color="#1A2B1A" />
+          <TextInput
+            style={cpm.searchInput}
+            placeholder="Search staff..."
+            value={waiterSearch}
+            onChangeText={setWaiterSearch}
+            placeholderTextColor="#9ca3af"
+            autoFocus
+          />
+          {waiterSearch ? (
+            <Pressable onPress={() => setWaiterSearch('')}>
+              <Ionicons name="close-circle" size={14} color="#9ca3af" />
+            </Pressable>
+          ) : null}
         </View>
-        <Pressable style={cpm.row} onPress={() => { setWaiter(undefined, undefined); setShowWaiterPicker(false); }}>
-          <View style={[cpm.avatar, { backgroundColor: '#6b7280' }]}><Ionicons name="person-outline" size={18} color="#fff" /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={cpm.name}>No Waiter</Text>
-            <Text style={cpm.phone}>Remove selection</Text>
-          </View>
-        </Pressable>
-        <ScrollView>
+        <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 320 }}>
+          {/* No waiter option */}
+          <Pressable
+            style={({ pressed }) => [cpm.row, !cart.waiter_id && cpm.rowSelected, pressed && { backgroundColor: '#f5f6f8' }]}
+            onPress={() => { setWaiter(undefined, undefined); setShowWaiterPicker(false); setWaiterSearch(''); }}
+          >
+            <View style={[cpm.avatar, { width: 34, height: 34, borderRadius: 17, backgroundColor: '#6b7280' }]}>
+              <Ionicons name="person-outline" size={16} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[cpm.name, { fontSize: 13.5 }]}>No Waiter</Text>
+              <Text style={[cpm.phone, { fontSize: 11.5 }]}>Remove assignment</Text>
+            </View>
+            {!cart.waiter_id && <Ionicons name="checkmark-circle" size={19} color="#10b981" />}
+          </Pressable>
           {filteredStaff.map(s => (
-            <Pressable key={s.id} style={cpm.row} onPress={() => { setWaiter(s.id, s.name); setShowWaiterPicker(false); setWaiterSearch(''); }}>
-              <View style={[cpm.avatar, { backgroundColor: '#7c3aed' }]}>
-                <Text style={cpm.avatarText}>{s.name.charAt(0).toUpperCase()}</Text>
+            <Pressable
+              key={s.id}
+              style={({ pressed }) => [cpm.row, cart.waiter_id === s.id && cpm.rowSelected, pressed && { backgroundColor: '#f5f0ff' }]}
+              onPress={() => { setWaiter(s.id, s.name); setShowWaiterPicker(false); setWaiterSearch(''); }}
+            >
+              <View style={[cpm.avatar, { width: 34, height: 34, borderRadius: 17, backgroundColor: '#7c3aed' }]}>
+                <Text style={[cpm.avatarText, { fontSize: 14 }]}>{s.name.charAt(0).toUpperCase()}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={cpm.name}>{s.name}</Text>
-                <Text style={cpm.phone}>{s.role}</Text>
+                <Text style={[cpm.name, { fontSize: 13.5 }]}>{s.name}</Text>
+                <Text style={[cpm.phone, { fontSize: 11.5 }]}>{s.role}</Text>
               </View>
-              {cart.waiter_id === s.id && <Ionicons name="checkmark-circle" size={20} color="#7c3aed" />}
+              {cart.waiter_id === s.id
+                ? <Ionicons name="checkmark-circle" size={19} color="#7c3aed" />
+                : <Ionicons name="chevron-forward" size={14} color="#d1d5db" />}
             </Pressable>
           ))}
+          {filteredStaff.length === 0 && (
+            <View style={[cpm.emptyState, { paddingTop: 20 }]}>
+              <Ionicons name="people-outline" size={28} color="#d1d5db" />
+              <Text style={cpm.emptyTitle}>{waiterSearch ? 'No staff found' : 'No staff members'}</Text>
+              <Text style={cpm.emptyText}>Add staff in Settings → Staff</Text>
+            </View>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -1258,16 +1497,40 @@ export default function POSScreen() {
     !tableSearch || tb.name.toLowerCase().includes(tableSearch.toLowerCase())
   );
   const tablePickerModal = (
-    <Modal visible={showTablePicker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowTablePicker(false)}>
-      <View style={{ flex: 1, backgroundColor: '#f5f6f8' }}>
-        <View style={[cpm.header, t.chrome]}>
-          <Text style={cpm.title}>Select Table</Text>
-          <Pressable onPress={() => setShowTablePicker(false)}>
-            <Ionicons name="close" size={22} color="#374151" />
+    <Modal
+      visible={showTablePicker}
+      transparent
+      animationType="fade"
+      onRequestClose={() => { setShowTablePicker(false); setTableSearch(''); }}
+    >
+      {/* Tap-outside backdrop */}
+      <Pressable
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        onPress={() => { setShowTablePicker(false); setTableSearch(''); }}
+      />
+      {/* Anchored dropdown panel */}
+      <View style={[cpm.dropPanel, { top: tableDropPos.top, left: tableDropPos.left, width: tableDropPos.width }]}>
+        {/* Compact header */}
+        <View style={cpm.dropHeader}>
+          <Ionicons name="grid-outline" size={13} color="#C9A52A" />
+          <View style={{ flex: 1 }}>
+            <Text style={[cpm.title, { fontSize: 13 }]}>Select Table</Text>
+          </View>
+          {Object.keys(tableCartMap).length > 0 && (
+            <View style={[cpm.pendingBadge, { marginRight: 6 }]}>
+              <Text style={cpm.pendingBadgeText}>{Object.keys(tableCartMap).length}</Text>
+            </View>
+          )}
+          <Pressable
+            style={({ pressed }) => [cpm.closeBtn, pressed && { opacity: 0.7 }]}
+            onPress={() => { setShowTablePicker(false); setTableSearch(''); }}
+          >
+            <Ionicons name="close" size={16} color="#fff" />
           </Pressable>
         </View>
+        {/* Search */}
         <View style={cpm.search}>
-          <Ionicons name="search" size={16} color="#9ca3af" />
+          <Ionicons name="search" size={14} color="#1A2B1A" />
           <TextInput
             style={cpm.searchInput}
             placeholder={`Search ${tables.length} tables...`}
@@ -1278,43 +1541,74 @@ export default function POSScreen() {
           />
           {tableSearch ? (
             <Pressable onPress={() => setTableSearch('')}>
-              <Ionicons name="close-circle" size={16} color="#9ca3af" />
+              <Ionicons name="close-circle" size={14} color="#9ca3af" />
             </Pressable>
           ) : null}
         </View>
-        <Pressable
-          style={({ pressed }) => [cpm.row, pressed && { backgroundColor: '#f5f6f8' }]}
-          onPress={() => { switchTable(undefined); syncLocalFromCart(); setShowTablePicker(false); setTableSearch(''); }}
-        >
-          <View style={[cpm.avatar, { backgroundColor: '#6b7280' }]}>
-            <Ionicons name="close-outline" size={18} color="#fff" />
+        {/* Pending-items legend */}
+        {Object.keys(tableCartMap).length > 0 && (
+          <View style={[cpm.legendRow, { paddingVertical: 5 }]}>
+            <View style={cpm.legendDot} />
+            <Text style={[cpm.legendText, { fontSize: 11 }]}>Amber = pending items</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={cpm.name}>No Table</Text>
-            <Text style={cpm.phone}>Walk-in / Takeaway</Text>
-          </View>
-          {!cart.table_id && <Ionicons name="checkmark-circle" size={20} color="#10b981" />}
-        </Pressable>
-        <ScrollView>
-          {filteredTables.map(tb => (
-            <Pressable
-              key={tb.id}
-              style={({ pressed }) => [cpm.row, pressed && { backgroundColor: '#f5f6f8' }]}
-              onPress={() => { switchTable(tb.id); syncLocalFromCart(); setShowTablePicker(false); setTableSearch(''); }}
-            >
-              <View style={[cpm.avatar, { backgroundColor: '#0D76E1' }]}>
-                <Text style={cpm.avatarText}>{tb.name.charAt(0).toUpperCase()}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={cpm.name}>{tb.name}</Text>
-                {(tb as any).capacity ? <Text style={cpm.phone}>Capacity: {(tb as any).capacity}</Text> : null}
-              </View>
-              {cart.table_id === tb.id && <Ionicons name="checkmark-circle" size={20} color="#10b981" />}
-            </Pressable>
-          ))}
+        )}
+        <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 320 }}>
+          {/* No table option */}
+          <Pressable
+            style={({ pressed }) => [cpm.row, !cart.table_id && cpm.rowSelected, pressed && { backgroundColor: '#f5f6f8' }]}
+            onPress={() => { switchTable(undefined); syncLocalFromCart(); setShowTablePicker(false); setTableSearch(''); }}
+          >
+            <View style={[cpm.avatar, { width: 34, height: 34, borderRadius: 17, backgroundColor: '#6b7280' }]}>
+              <Ionicons name="walk-outline" size={16} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[cpm.name, { fontSize: 13.5 }]}>No Table</Text>
+              <Text style={[cpm.phone, { fontSize: 11.5 }]}>Walk-in / Takeaway</Text>
+            </View>
+            {!cart.table_id && <Ionicons name="checkmark-circle" size={19} color="#0D76E1" />}
+          </Pressable>
+          {filteredTables.map(tb => {
+            const isActive   = cart.table_id === tb.id;
+            const hasPending = !!tableCartMap[tb.id] && tableCartMap[tb.id].items.length > 0;
+            const pendingQty = hasPending
+              ? tableCartMap[tb.id].items.reduce((s, i) => s + i.quantity, 0)
+              : 0;
+            return (
+              <Pressable
+                key={tb.id}
+                style={({ pressed }) => [cpm.row, isActive && cpm.rowSelected, pressed && { backgroundColor: '#eff6ff' }]}
+                onPress={() => { switchTable(tb.id); syncLocalFromCart(); setShowTablePicker(false); setTableSearch(''); }}
+              >
+                <View style={[cpm.avatar, { width: 34, height: 34, borderRadius: 17, backgroundColor: isActive ? '#0D76E1' : hasPending ? '#f59e0b' : '#e5e7eb' }]}>
+                  <Text style={[cpm.avatarText, { fontSize: 14, color: isActive || hasPending ? '#fff' : '#374151' }]}>
+                    {tb.name.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[cpm.name, { fontSize: 13.5 }]}>{tb.name}</Text>
+                  <Text style={[cpm.phone, { fontSize: 11.5 }]}>
+                    {hasPending
+                      ? `${pendingQty} item${pendingQty > 1 ? 's' : ''} pending`
+                      : (tb as any).capacity
+                        ? `Capacity: ${(tb as any).capacity}`
+                        : 'Available'}
+                  </Text>
+                </View>
+                {hasPending && !isActive && (
+                  <View style={cpm.pendingBadge}>
+                    <Text style={cpm.pendingBadgeText}>{pendingQty}</Text>
+                  </View>
+                )}
+                {isActive
+                  ? <Ionicons name="checkmark-circle" size={19} color="#0D76E1" />
+                  : <Ionicons name="chevron-forward" size={14} color="#d1d5db" />}
+              </Pressable>
+            );
+          })}
           {filteredTables.length === 0 && tableSearch.length > 0 && (
-            <View style={{ padding: 30, alignItems: 'center' }}>
-              <Text style={{ color: '#9ca3af', fontSize: 14 }}>No tables found for "{tableSearch}"</Text>
+            <View style={[cpm.emptyState, { paddingTop: 24 }]}>
+              <Ionicons name="search-outline" size={28} color="#d1d5db" />
+              <Text style={cpm.emptyTitle}>No match for "{tableSearch}"</Text>
             </View>
           )}
         </ScrollView>
@@ -1691,25 +1985,42 @@ const cp = StyleSheet.create({
   typeBtnText:      { fontSize: 11, fontWeight: '600', color: '#6b7280' },
   typeBtnTextActive:{ color: '#fff', fontWeight: '700' },
 
-  // ── Waiter + Customer two-column row ─────────────────────────────────────
-  twoColSection: { flexDirection: 'row', gap: 6, paddingHorizontal: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  halfField:     { flex: 1, gap: 3 },
-  fieldLabel:    { fontSize: 10, fontWeight: '700', color: '#6b7280', letterSpacing: 0.4, textTransform: 'uppercase' },
-  fieldRow:      { flexDirection: 'row', gap: 4, alignItems: 'center' },
-  fieldBox:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f5f6f8', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 6, borderWidth: 1, borderColor: '#e5e7eb', flex: 1 },
-  fieldBoxText:  { fontSize: 12.5, color: '#9ca3af' },
-  iconSmBtn:     { width: 28, height: 28, borderRadius: 7, backgroundColor: '#1A2B1A', alignItems: 'center', justifyContent: 'center' },
-  iconBtn:       { width: 34, height: 34, borderRadius: 8, backgroundColor: 'rgba(13,118,225,0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#93c5fd' },
-
-  // ── Table ────────────────────────────────────────────────────────────────
-  tableSection:  { paddingHorizontal: 8, paddingTop: 6, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  tableLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 5 },
-  requiredDot:   { width: 14, height: 14, borderRadius: 7, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center' },
-  requiredStar:  { fontSize: 11, color: '#ef4444', fontWeight: '800' },
-  tableChip:     { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  tableChipActive:    { backgroundColor: 'rgba(13,118,225,0.1)', borderColor: '#93c5fd' },
-  tableChipText:      { fontSize: 11.5, color: '#374151', fontWeight: '500' },
-  tableChipTextActive:{ color: '#0D76E1', fontWeight: '700' },
+  // ── Selector rows (Customer / Waiter / Table) ─────────────────────────────
+  selectorSection:  { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 8 },
+  selectorLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 5 },
+  selectorLabel:    { fontSize: 10, fontWeight: '800', color: '#9ca3af', letterSpacing: 0.8, textTransform: 'uppercase' },
+  fieldLabel:       { fontSize: 10, fontWeight: '700', color: '#6b7280', letterSpacing: 0.4, textTransform: 'uppercase' },
+  fieldRow:         { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  fieldBox:         { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f5f6f8', borderRadius: 9, paddingHorizontal: 10, paddingVertical: 9, borderWidth: 1, borderColor: '#e5e7eb', flex: 1 },
+  fieldBoxText:     { fontSize: 13, color: '#9ca3af' },
+  iconSmBtn:        { width: 30, height: 30, borderRadius: 8, backgroundColor: '#1A2B1A', alignItems: 'center', justifyContent: 'center' },
+  iconBtn:          { width: 34, height: 34, borderRadius: 8, backgroundColor: 'rgba(13,118,225,0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#93c5fd' },
+  // Selected state pill
+  selectedPill:     { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: '#fff', borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1.5, borderColor: '#bfdbfe', flex: 1 },
+  selectedAvatar:   { width: 30, height: 30, borderRadius: 15, backgroundColor: '#0D76E1', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  selectedAvatarText: { fontSize: 13, fontWeight: '800', color: '#fff' },
+  selectedName:     { fontSize: 13, fontWeight: '700', color: '#111827' },
+  selectedSub:      { fontSize: 10.5, color: '#6b7280', marginTop: 1 },
+  // Clear X button
+  clearBtn:         { width: 28, height: 28, borderRadius: 8, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fca5a5', alignItems: 'center', justifyContent: 'center' },
+  // Picker open button
+  selectorBtn:      { width: 36, height: 36, borderRadius: 9, backgroundColor: '#1A2B1A', alignItems: 'center', justifyContent: 'center' },
+  // Table required empty state
+  tableEmpty:       { borderColor: '#fde68a', backgroundColor: '#fffbeb' },
+  tableRequiredBadge: { backgroundColor: '#fef3c7', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
+  tableRequiredText:  { fontSize: 9.5, fontWeight: '700', color: '#d97706' },
+  // Required star
+  requiredDot:      { width: 14, height: 14, borderRadius: 7, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center' },
+  requiredStar:     { fontSize: 11, color: '#ef4444', fontWeight: '800' },
+  // Legacy — kept for compatibility
+  twoColSection:    { flexDirection: 'row', gap: 6, paddingHorizontal: 10, paddingVertical: 7 },
+  halfField:        { flex: 1, gap: 3 },
+  tableSection:     { paddingHorizontal: 10, paddingTop: 6, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  tableLabelRow:    { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 5 },
+  tableChip:        { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
+  tableChipActive:     { backgroundColor: 'rgba(13,118,225,0.1)', borderColor: '#93c5fd' },
+  tableChipText:       { fontSize: 11.5, color: '#374151', fontWeight: '500' },
+  tableChipTextActive: { color: '#0D76E1', fontWeight: '700' },
 
   // ── Ordered Menus header ─────────────────────────────────────────────────
   orderedHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 6, backgroundColor: '#f8f9fb', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
@@ -1839,18 +2150,59 @@ const vm = StyleSheet.create({
   varPrice: { fontSize: 15, fontWeight: '800', color: '#0D76E1', marginRight: 6 },
 });
 
-// Customer picker modal
+// Customer / Waiter / Table picker modals
 const cpm = StyleSheet.create({
-  header:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  title:      { fontSize: 17, fontWeight: '800', color: '#111827' },
-  search:     { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
-  searchInput:{ flex: 1, fontSize: 15, color: '#111827' },
-  row:        { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: '#fff' },
-  avatar:     { width: 40, height: 40, borderRadius: 20, backgroundColor: '#0D76E1', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 16, fontWeight: '800', color: '#fff' },
-  name:       { fontSize: 15, fontWeight: '700', color: '#111827' },
-  phone:      { fontSize: 12.5, color: '#6b7280', marginTop: 2 },
-  useBtn:     { backgroundColor: '#0D76E1', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
+  // ── Anchored dropdown panel (table picker on desktop) ─────────────────────
+  dropPanel:  { position: 'absolute', backgroundColor: '#fff', borderRadius: 14, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: 8 }, elevation: 24, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb', zIndex: 999 },
+  dropHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#1A2B1A' },
+
+  // ── Header (forest-green chrome with white text) ──────────────────────────
+  header:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#1A2B1A' },
+  title:      { fontSize: 16, fontWeight: '800', color: '#C9A52A' },          // gold on forest-green
+  subtitle:   { fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 2 },
+  closeBtn:   { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+
+  // ── Search ────────────────────────────────────────────────────────────────
+  search:     { flexDirection: 'row', alignItems: 'center', gap: 9, marginHorizontal: 10, marginVertical: 8, backgroundColor: '#f0f2f5', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  searchInput:{ flex: 1, fontSize: 13.5, color: '#111827' },
+
+  // ── Walk-in name entry (customer picker) ──────────────────────────────────
+  walkInSection: { marginHorizontal: 12, marginBottom: 4, backgroundColor: '#fff', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#e5e7eb' },
+  walkInLabel:   { fontSize: 10.5, fontWeight: '700', color: '#9ca3af', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 },
+  walkInRow:     { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  walkInInput:   { flex: 1, backgroundColor: '#f5f6f8', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#111827', borderWidth: 1, borderColor: '#e5e7eb' },
+  walkInConfirm: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#0D76E1', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
+  walkInConfirmText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+
+  // ── Divider ───────────────────────────────────────────────────────────────
+  dividerRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 4 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#e5e7eb' },
+  dividerText: { fontSize: 11, color: '#9ca3af', fontWeight: '600' },
+
+  // ── Legend (pending indicator) ────────────────────────────────────────────
+  legendRow:   { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: '#fffbeb', borderBottomWidth: 1, borderBottomColor: '#fde68a' },
+  legendDot:   { width: 9, height: 9, borderRadius: 5, backgroundColor: '#f59e0b' },
+  legendText:  { fontSize: 11.5, color: '#92400e', flex: 1 },
+
+  // ── List rows ─────────────────────────────────────────────────────────────
+  row:         { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: '#fff' },
+  rowSelected: { backgroundColor: '#eff6ff', borderLeftWidth: 3, borderLeftColor: '#0D76E1', paddingLeft: 13 },
+  avatar:      { width: 42, height: 42, borderRadius: 21, backgroundColor: '#0D76E1', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  avatarText:  { fontSize: 16, fontWeight: '800', color: '#fff' },
+  name:        { fontSize: 15, fontWeight: '700', color: '#111827' },
+  phone:       { fontSize: 12.5, color: '#6b7280', marginTop: 2 },
+
+  // ── Pending badge (table picker) ──────────────────────────────────────────
+  pendingBadge:     { backgroundColor: '#f59e0b', borderRadius: 12, minWidth: 22, height: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  pendingBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+
+  // ── Empty state ───────────────────────────────────────────────────────────
+  emptyState: { alignItems: 'center', paddingTop: 50, paddingHorizontal: 30, gap: 10 },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: '#374151' },
+  emptyText:  { fontSize: 13, color: '#9ca3af', textAlign: 'center' },
+
+  // ── Use as walk-in button ─────────────────────────────────────────────────
+  useBtn:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0D76E1', paddingHorizontal: 18, paddingVertical: 11, borderRadius: 10, marginTop: 4 },
   useBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });
 

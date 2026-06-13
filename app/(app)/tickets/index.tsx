@@ -513,358 +513,488 @@ function CreateTicketModal({
     } finally { setSaving(false); }
   }
 
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 860;
+
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={[cf.header, t.chrome]}>
-          <Text style={cf.headerTitle}>New Support Ticket</Text>
-          <Pressable onPress={onClose} style={({ pressed }) => [pressed && { opacity: 0.7 }]}>
-            <Ionicons name="close" size={22} color="#fff" />
-          </Pressable>
-        </View>
-        <ScrollView style={{ flex: 1, backgroundColor: '#f5f6f8' }} contentContainerStyle={{ padding: 16, gap: 16 }}>
-
-          <View style={ef.field}>
-            <Text style={ef.label}>Subject *</Text>
-            <TextInput
-              style={ef.input}
-              value={form.subject}
-              onChangeText={v => setForm(p => ({ ...p, subject: v }))}
-              placeholder="Brief summary of your issue"
-              placeholderTextColor="#9ca3af"
-              autoFocus
-            />
-          </View>
-
-          <View style={ef.field}>
-            <Text style={ef.label}>Description *</Text>
-            <TextInput
-              style={[ef.input, ef.textarea]}
-              value={form.description}
-              onChangeText={v => setForm(p => ({ ...p, description: v }))}
-              placeholder="Describe the issue in detail — steps to reproduce, screenshots info, etc."
-              placeholderTextColor="#9ca3af"
-              multiline
-              textAlignVertical="top"
-            />
-          </View>
-
-          <View style={ef.field}>
-            <Text style={ef.label}>Priority</Text>
-            <View style={ef.optRow}>
-              {(Object.keys(PRIORITY_CFG) as TicketPriority[]).map(p => (
-                <Pressable
-                  key={p}
-                  style={({ pressed }) => [ef.optBtn, form.priority === p && { backgroundColor: PRIORITY_CFG[p].color, borderColor: PRIORITY_CFG[p].color }, pressed && { opacity: 0.8 }]}
-                  onPress={() => setForm(prev => ({ ...prev, priority: p }))}
-                >
-                  <Ionicons name={PRIORITY_CFG[p].icon} size={12} color={form.priority === p ? '#fff' : PRIORITY_CFG[p].color} />
-                  <Text style={[ef.optText, form.priority === p && { color: '#fff' }]}>{PRIORITY_CFG[p].label}</Text>
-                </Pressable>
-              ))}
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <Pressable style={cf.backdrop} onPress={onClose}>
+          <Pressable style={[cf.panel, isDesktop && cf.panelDesktop]} onPress={() => {}}>
+            {/* Header */}
+            <View style={cf.header}>
+              <View style={cf.headerLeft}>
+                <View style={cf.headerIcon}>
+                  <Ionicons name="headset-outline" size={16} color="#C9A52A" />
+                </View>
+                <View>
+                  <Text style={cf.headerTitle}>New Support Ticket</Text>
+                  <Text style={cf.headerSub}>Submit an issue to our support team</Text>
+                </View>
+              </View>
+              <Pressable onPress={onClose} style={({ pressed }) => [cf.closeBtn, pressed && { opacity: 0.7 }]}>
+                <Ionicons name="close" size={20} color="rgba(255,255,255,0.7)" />
+              </Pressable>
             </View>
-          </View>
 
-          <View style={ef.field}>
-            <Text style={ef.label}>Category</Text>
-            <View style={ef.optRow}>
-              {CATEGORIES.map(c => (
-                <Pressable
-                  key={c.key}
-                  style={({ pressed }) => [ef.optBtn, form.category === c.key && { backgroundColor: '#1A2B1A', borderColor: '#1A2B1A' }, pressed && { opacity: 0.8 }]}
-                  onPress={() => setForm(prev => ({ ...prev, category: c.key }))}
-                >
-                  <Text style={[ef.optText, form.category === c.key && { color: '#C9A52A' }]}>{c.label}</Text>
-                </Pressable>
-              ))}
+            <ScrollView
+              style={{ flex: 1 }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ padding: 18, gap: 16 }}
+              keyboardShouldPersistTaps="handled">
+
+              <View style={ef.field}>
+                <Text style={ef.label}>Subject <Text style={{ color: '#ef4444' }}>*</Text></Text>
+                <TextInput
+                  style={ef.input}
+                  value={form.subject}
+                  onChangeText={v => setForm(p => ({ ...p, subject: v }))}
+                  placeholder="Brief summary of your issue"
+                  placeholderTextColor="#9ca3af"
+                  autoFocus
+                />
+              </View>
+
+              <View style={ef.field}>
+                <Text style={ef.label}>Description <Text style={{ color: '#ef4444' }}>*</Text></Text>
+                <TextInput
+                  style={[ef.input, ef.textarea]}
+                  value={form.description}
+                  onChangeText={v => setForm(p => ({ ...p, description: v }))}
+                  placeholder="Describe the issue in detail — steps to reproduce, screenshots info, etc."
+                  placeholderTextColor="#9ca3af"
+                  multiline
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <View style={ef.field}>
+                <Text style={ef.label}>Priority</Text>
+                <View style={ef.optRow}>
+                  {(Object.keys(PRIORITY_CFG) as TicketPriority[]).map(p => (
+                    <Pressable
+                      key={p}
+                      style={({ pressed }) => [ef.optBtn, form.priority === p && { backgroundColor: PRIORITY_CFG[p].color, borderColor: PRIORITY_CFG[p].color }, pressed && { opacity: 0.8 }]}
+                      onPress={() => setForm(prev => ({ ...prev, priority: p }))}
+                    >
+                      <Ionicons name={PRIORITY_CFG[p].icon} size={12} color={form.priority === p ? '#fff' : PRIORITY_CFG[p].color} />
+                      <Text style={[ef.optText, form.priority === p && { color: '#fff' }]}>{PRIORITY_CFG[p].label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View style={ef.field}>
+                <Text style={ef.label}>Category</Text>
+                <View style={ef.optRow}>
+                  {CATEGORIES.map(c => (
+                    <Pressable
+                      key={c.key}
+                      style={({ pressed }) => [ef.optBtn, form.category === c.key && { backgroundColor: '#1A2B1A', borderColor: '#1A2B1A' }, pressed && { opacity: 0.8 }]}
+                      onPress={() => setForm(prev => ({ ...prev, category: c.key }))}
+                    >
+                      <Text style={[ef.optText, form.category === c.key && { color: '#C9A52A' }]}>{c.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={cf.footer}>
+              <Pressable style={({ pressed }) => [cf.cancelBtn, pressed && { opacity: 0.7 }]} onPress={onClose}>
+                <Text style={cf.cancelTxt}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [cf.submitBtn, saving && { opacity: 0.6 }, pressed && { opacity: 0.85 }]}
+                onPress={submit}
+                disabled={saving}
+              >
+                {saving
+                  ? <ActivityIndicator color="#C9A52A" size="small" />
+                  : <>
+                      <Ionicons name="add-circle-outline" size={17} color="#C9A52A" />
+                      <Text style={cf.submitTxt}>Submit Ticket</Text>
+                    </>}
+              </Pressable>
             </View>
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [ef.saveBtn, t.chromeBtn, saving && { opacity: 0.6 }, pressed && { opacity: 0.85 }]}
-            onPress={submit}
-            disabled={saving}
-          >
-            {saving
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <>
-                  <Ionicons name="add-circle-outline" size={18} color="#fff" />
-                  <Text style={ef.saveBtnText}>Submit Ticket</Text>
-                </>}
           </Pressable>
-        </ScrollView>
+        </Pressable>
       </KeyboardAvoidingView>
     </Modal>
   );
 }
 
+// ── Tab options ────────────────────────────────────────────────────────────────
+const TAB_OPTIONS = [
+  { key: 'all',        label: 'All visible tickets' },
+  { key: 'mine',       label: 'My Tickets'          },
+  { key: 'unassigned', label: 'Unassigned'          },
+];
+
+// ── Inline dropdown ────────────────────────────────────────────────────────────
+function FilterDropdown({
+  label, value, options, onChange,
+}: {
+  label: string;
+  value: string;
+  options: { key: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find(o => o.key === value);
+  return (
+    <View style={{ gap: 3, position: 'relative', zIndex: 200 }}>
+      <Text style={fd.lbl}>{label}</Text>
+      <Pressable style={fd.btn} onPress={e => { e.stopPropagation?.(); setOpen(p => !p); }}>
+        <Text style={fd.btnTxt} numberOfLines={1}>{selected?.label ?? 'Any'}</Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={12} color="#6b7280" />
+      </Pressable>
+      {open && (
+        <View style={fd.menu}>
+          {options.map(o => (
+            <Pressable key={o.key} style={[fd.item, value === o.key && fd.itemActive]}
+              onPress={() => { onChange(o.key); setOpen(false); }}>
+              <Text style={[fd.itemTxt, value === o.key && fd.itemTxtActive]}>{o.label}</Text>
+              {value === o.key && <Ionicons name="checkmark" size={12} color="#1A2B1A" />}
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── Table row (desktop) ────────────────────────────────────────────────────────
+function TableRow({ ticket, onView }: { ticket: Ticket; onView: () => void }) {
+  const sc2 = STATUS_CFG[ticket.status] ?? STATUS_CFG.open;
+  const pc  = PRIORITY_CFG[ticket.priority as TicketPriority] ?? PRIORITY_CFG.medium;
+  return (
+    <View style={tr.row}>
+      <Text style={[tr.cell, tr.cellNum]}>#{ticket.ticket_number ?? ticket.id}</Text>
+      <View style={[tr.cell, { flex: 2.5 }]}>
+        <Text style={tr.subject} numberOfLines={1}>{ticket.subject}</Text>
+        {ticket.category ? <Text style={tr.catLabel}>{CATEGORIES.find(c => c.key === ticket.category)?.label ?? ticket.category}</Text> : null}
+      </View>
+      <Text style={[tr.cell, tr.cellFrom]} numberOfLines={1}>{ticket.reporter_name ?? '—'}</Text>
+      <View style={[tr.cell, tr.cellPriority]}>
+        <View style={[tr.badge, { backgroundColor: pc.color + '15', borderColor: pc.color + '40' }]}>
+          <Ionicons name={pc.icon} size={10} color={pc.color} />
+          <Text style={[tr.badgeTxt, { color: pc.color }]}>{pc.label}</Text>
+        </View>
+      </View>
+      <View style={[tr.cell, tr.cellStatus]}>
+        <View style={[tr.badge, { backgroundColor: sc2.bg, borderColor: sc2.color + '40' }]}>
+          <Ionicons name={sc2.icon} size={10} color={sc2.color} />
+          <Text style={[tr.badgeTxt, { color: sc2.color }]}>{sc2.label}</Text>
+        </View>
+      </View>
+      <Text style={[tr.cell, tr.cellAssignee]} numberOfLines={1}>{ticket.assignee_name ?? '—'}</Text>
+      <Text style={[tr.cell, tr.cellDate]}>{ticket.created_at ? format(new Date(ticket.created_at), 'dd MMM yyyy') : '—'}</Text>
+      <View style={[tr.cell, tr.cellActions]}>
+        <Pressable style={({ pressed }) => [tr.viewBtn, pressed && { opacity: 0.7 }]} onPress={onView}>
+          <Ionicons name="eye-outline" size={13} color="#1A2B1A" />
+          <Text style={tr.viewTxt}>View</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 // ── Main screen ────────────────────────────────────────────────────────────────
 export default function TicketsScreen() {
-  const t = useThemedScreen();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 860;
 
-  const [tickets, setTickets]         = useState<Ticket[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [refreshing, setRefreshing]   = useState(false);
-  const [search, setSearch]           = useState('');
-  const [statusFilter, setStatusFilter] = useState<TicketStatus | 'all'>('all');
-  const [selected, setSelected]       = useState<Ticket | null>(null);
-  const [showDetail, setShowDetail]   = useState(false);
-  const [showCreate, setShowCreate]   = useState(false);
+  const [tickets, setTickets]       = useState<Ticket[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selected, setSelected]     = useState<Ticket | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+
+  // Filter state (pending — applied on "Apply")
+  const [tabFilter,      setTabFilter]      = useState('all');
+  const [statusFilter,   setStatusFilter]   = useState('any');
+  const [priorityFilter, setPriorityFilter] = useState('any');
+  const [search,         setSearch]         = useState('');
+  // Applied
+  const [appliedTab,      setAppliedTab]      = useState('all');
+  const [appliedStatus,   setAppliedStatus]   = useState('any');
+  const [appliedPriority, setAppliedPriority] = useState('any');
+  const [appliedSearch,   setAppliedSearch]   = useState('');
 
   const load = useCallback(async () => {
     try {
       const res = await ticketsApi.list({ per_page: 100 });
       const data = res.data?.data ?? res.data ?? [];
       setTickets(Array.isArray(data) ? data : []);
-    } catch { /* offline — keep existing list */ }
+    } catch { /* offline */ }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
   useEffect(() => { load(); }, []);
 
-  const filtered = tickets.filter(tk => {
-    const matchStatus = statusFilter === 'all' || tk.status === statusFilter;
-    const q = search.trim().toLowerCase();
-    const matchSearch = !q
-      || tk.subject.toLowerCase().includes(q)
-      || tk.description.toLowerCase().includes(q)
-      || (tk.ticket_number ?? '').toLowerCase().includes(q);
-    return matchStatus && matchSearch;
-  });
-
-  // Stats for filter pills
-  const countFor = (s: TicketStatus | 'all') =>
-    s === 'all' ? tickets.length : tickets.filter(tk => tk.status === s).length;
-
-  function handleSelect(tk: Ticket) {
-    setSelected(tk);
-    if (!isDesktop) setShowDetail(true);
+  function applyFilter() {
+    setAppliedTab(tabFilter);
+    setAppliedStatus(statusFilter);
+    setAppliedPriority(priorityFilter);
+    setAppliedSearch(search);
   }
 
+  const filtered = tickets.filter(tk => {
+    if (appliedStatus !== 'any'   && tk.status   !== appliedStatus)                     return false;
+    if (appliedPriority !== 'any' && tk.priority  !== appliedPriority)                  return false;
+    const q = appliedSearch.trim().toLowerCase();
+    if (q && !tk.subject.toLowerCase().includes(q) && !tk.description.toLowerCase().includes(q)
+          && !(tk.ticket_number ?? '').toLowerCase().includes(q))                       return false;
+    return true;
+  });
+
+  const countFor = (s: string) =>
+    s === 'all' ? tickets.length : tickets.filter(tk => tk.status === s).length;
+
+  function handleSelect(tk: Ticket) { setSelected(tk); if (!isDesktop) setShowDetail(true); }
   function handleUpdated(updated: Ticket) {
     setSelected(updated);
     setTickets(prev => prev.map(tk => tk.id === updated.id ? { ...tk, ...updated } : tk));
   }
-
   function handleDeleted(id: number) {
     setTickets(prev => prev.filter(tk => tk.id !== id));
-    setSelected(null);
-    setShowDetail(false);
+    setSelected(null); setShowDetail(false);
   }
-
   function handleCreated(tk: Ticket) {
     setTickets(prev => [tk, ...prev]);
     setSelected(tk);
     if (!isDesktop) setShowDetail(true);
   }
 
-  if (loading) {
-    return (
-      <View style={[sc.shell, t.shell, { alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#C9A52A" />
-        <Text style={{ color: '#6b7280', marginTop: 12 }}>Loading tickets...</Text>
-      </View>
-    );
-  }
+  const statusOptions = [
+    { key: 'any', label: 'Any' },
+    { key: 'open', label: 'Open' },
+    { key: 'in_progress', label: 'In Progress' },
+    { key: 'resolved', label: 'Resolved' },
+    { key: 'closed', label: 'Closed' },
+  ];
+  const priorityOptions = [
+    { key: 'any',    label: 'Any'    },
+    { key: 'low',    label: 'Low'    },
+    { key: 'medium', label: 'Medium' },
+    { key: 'high',   label: 'High'   },
+    { key: 'urgent', label: 'Urgent' },
+  ];
 
-  // ── List panel ───────────────────────────────────────────────────────────────
-  const listPanel = (
-    <View style={isDesktop ? sc.listPanel : { flex: 1 }}>
-      {/* Header */}
-      <View style={[sc.panelHeader, t.chrome]}>
-        <Ionicons name="headset-outline" size={18} color="#C9A52A" />
-        <Text style={sc.panelHeaderTitle}>Support Tickets</Text>
-        <Pressable
-          style={({ pressed }) => [sc.newBtn, pressed && { opacity: 0.85 }]}
-          onPress={() => setShowCreate(true)}
-        >
-          <Ionicons name="add" size={16} color="#fff" />
-          <Text style={sc.newBtnText}>New</Text>
-        </Pressable>
-      </View>
+  const STAT_ITEMS = [
+    { key: 'all',         label: 'Total',       color: '#2563eb', bg: '#eff6ff', icon: 'ticket-outline'               as const },
+    { key: 'open',        label: 'Open',        color: '#2563eb', bg: '#eff6ff', icon: 'radio-button-on-outline'      as const },
+    { key: 'in_progress', label: 'In Progress', color: '#d97706', bg: '#fef9ec', icon: 'sync-outline'                 as const },
+    { key: 'resolved',    label: 'Resolved',    color: '#16a34a', bg: '#f0fdf4', icon: 'checkmark-circle-outline'     as const },
+    { key: 'closed',      label: 'Closed',      color: '#d97706', bg: '#fef9ec', icon: 'lock-closed-outline'          as const },
+  ];
 
-      {/* Search */}
-      <View style={sc.searchBox}>
-        <Ionicons name="search" size={14} color="#9ca3af" />
-        <TextInput
-          style={sc.searchInput}
-          placeholder="Search tickets..."
-          value={search}
-          onChangeText={setSearch}
-          placeholderTextColor="#9ca3af"
-        />
-        {search ? (
-          <Pressable onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={14} color="#9ca3af" />
-          </Pressable>
-        ) : null}
-      </View>
-
-      {/* Status filter tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={sc.filterBar}
-        contentContainerStyle={{ paddingHorizontal: 10, paddingVertical: 7, gap: 6 }}
-      >
-        {STATUS_FILTERS.map(s => {
-          const active = statusFilter === s;
-          const color  = s !== 'all' ? STATUS_CFG[s].color : '#374151';
-          const count  = countFor(s);
-          return (
-            <Pressable
-              key={s}
-              style={({ pressed }) => [sc.filterChip, active && { backgroundColor: color + '15', borderColor: color }, pressed && { opacity: 0.8 }]}
-              onPress={() => setStatusFilter(s)}
-            >
-              <Text style={[sc.filterChipText, active && { color, fontWeight: '700' }]}>
-                {s === 'all' ? 'All' : STATUS_CFG[s].label}
-              </Text>
-              <View style={[sc.filterBadge, active && { backgroundColor: color + '25' }]}>
-                <Text style={[sc.filterBadgeText, active && { color }]}>{count}</Text>
-              </View>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {/* List */}
-      <FlatList
-        data={filtered}
-        keyExtractor={tk => String(tk.id)}
-        renderItem={({ item: tk }) => (
-          <TicketCard
-            ticket={tk}
-            selected={selected?.id === tk.id}
-            onPress={() => handleSelect(tk)}
-          />
-        )}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); load(); }}
-            tintColor="#C9A52A"
-          />
-        }
-        contentContainerStyle={{ paddingBottom: 24 }}
-        ListEmptyComponent={
-          <View style={sc.empty}>
-            <Ionicons name="headset-outline" size={44} color="#d1d5db" />
-            <Text style={sc.emptyTitle}>
-              {search || statusFilter !== 'all' ? 'No tickets match' : 'No tickets yet'}
-            </Text>
-            <Text style={sc.emptyText}>
-              {search || statusFilter !== 'all'
-                ? 'Try adjusting the search or filter'
-                : 'Tap "New" to create your first support ticket'}
-            </Text>
-          </View>
-        }
-      />
-    </View>
-  );
-
-  // ── Detail panel (desktop) ───────────────────────────────────────────────────
-  const detailPanel = selected ? (
-    <View style={sc.detailPanel}>
-      <TicketDetail
-        key={selected.id}
-        ticket={selected}
-        onUpdated={handleUpdated}
-        onDeleted={handleDeleted}
-      />
-    </View>
-  ) : (
-    <View style={[sc.detailPanel, sc.detailEmpty]}>
-      <Ionicons name="headset-outline" size={52} color="#d1d5db" />
-      <Text style={sc.detailEmptyTitle}>Select a ticket</Text>
-      <Text style={sc.detailEmptyText}>Click any ticket from the list to view details and reply</Text>
-      <Pressable
-        style={({ pressed }) => [sc.detailNewBtn, t.chromeBtn, pressed && { opacity: 0.85 }]}
-        onPress={() => setShowCreate(true)}
-      >
-        <Ionicons name="add-circle-outline" size={16} color="#fff" />
-        <Text style={sc.detailNewBtnText}>Create New Ticket</Text>
-      </Pressable>
+  const tableHeader = (
+    <View style={tr.header}>
+      <Text style={[tr.hCell, tr.cellNum]}>#</Text>
+      <Text style={[tr.hCell, { flex: 2.5 }]}>Subject</Text>
+      <Text style={[tr.hCell, tr.cellFrom]}>From</Text>
+      <Text style={[tr.hCell, tr.cellPriority]}>Priority</Text>
+      <Text style={[tr.hCell, tr.cellStatus]}>Status</Text>
+      <Text style={[tr.hCell, tr.cellAssignee]}>Assignee</Text>
+      <Text style={[tr.hCell, tr.cellDate]}>Created</Text>
+      <Text style={[tr.hCell, tr.cellActions]}>Actions</Text>
     </View>
   );
 
   return (
-    <View style={[sc.shell, t.shell]}>
+    <Pressable style={{ flex: 1, backgroundColor: '#f4f6f9' }} onPress={() => {}}>
+      {/* ── Header ── */}
+      <View style={sc.header}>
+        <View>
+          <Text style={sc.headerTitle}>Support Tickets</Text>
+          <Text style={sc.headerSub}>Raise issues to the platform admin team and track their status.</Text>
+        </View>
+        <Pressable style={({ pressed }) => [sc.newBtn, pressed && { opacity: 0.85 }]} onPress={() => setShowCreate(true)}>
+          <Ionicons name="add-circle-outline" size={15} color="#fff" />
+          <Text style={sc.newBtnTxt}>New Ticket</Text>
+        </Pressable>
+      </View>
+
+      {/* ── Stat cards ── */}
+      <View style={sc.statsRow}>
+        {STAT_ITEMS.map(s => (
+          <View key={s.key} style={[sc.statCard, s.key !== 'all' && { borderLeftWidth: 1, borderLeftColor: '#e5e7eb' }]}>
+            <View style={[sc.statIconWrap, { backgroundColor: s.bg }]}>
+              <Ionicons name={s.icon} size={18} color={s.color} />
+            </View>
+            <Text style={sc.statLbl}>{s.label}</Text>
+            <Text style={[sc.statVal, { color: s.color }]}>{countFor(s.key)}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* ── Filter bar ── */}
+      <View style={sc.filterBar}>
+        <FilterDropdown label="Tab"      value={tabFilter}      options={TAB_OPTIONS}      onChange={setTabFilter} />
+        <FilterDropdown label="Status"   value={statusFilter}   options={statusOptions}    onChange={setStatusFilter} />
+        <FilterDropdown label="Priority" value={priorityFilter} options={priorityOptions}  onChange={setPriorityFilter} />
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={fd.lbl}>Search</Text>
+          <TextInput
+            style={sc.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Subject or description..."
+            placeholderTextColor="#9ca3af"
+            onSubmitEditing={applyFilter}
+          />
+        </View>
+        <Pressable style={({ pressed }) => [sc.applyBtn, pressed && { opacity: 0.85 }]} onPress={applyFilter}>
+          <Text style={sc.applyBtnTxt}>Apply</Text>
+        </Pressable>
+      </View>
+
+      {/* ── Table / list ── */}
+      {loading ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <ActivityIndicator size="large" color="#1A2B1A" />
+          <Text style={{ color: '#6b7280', fontSize: 14 }}>Loading tickets...</Text>
+        </View>
+      ) : isDesktop ? (
+        /* Desktop table */
+        <View style={{ flex: 1, margin: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden' }}>
+          {tableHeader}
+          <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#1A2B1A" />}>
+            {filtered.length === 0 ? (
+              <View style={sc.empty}>
+                <Text style={sc.emptyTxt}>No tickets match your filters.</Text>
+              </View>
+            ) : (
+              filtered.map((tk, i) => (
+                <View key={tk.id} style={i % 2 === 1 ? { backgroundColor: '#fafafa' } : {}}>
+                  <TableRow ticket={tk} onView={() => handleSelect(tk)} />
+                </View>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      ) : (
+        /* Mobile card list */
+        <FlatList
+          data={filtered}
+          keyExtractor={tk => String(tk.id)}
+          renderItem={({ item: tk }) => (
+            <TicketCard ticket={tk} selected={selected?.id === tk.id} onPress={() => handleSelect(tk)} />
+          )}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#1A2B1A" />}
+          contentContainerStyle={{ padding: 10, gap: 8, paddingBottom: 40, flexGrow: 1 }}
+          ListEmptyComponent={
+            <View style={sc.empty}>
+              <Ionicons name="headset-outline" size={44} color="#d1d5db" />
+              <Text style={sc.emptyTxt}>No tickets match your filters.</Text>
+            </View>
+          }
+        />
+      )}
+
       {/* Create modal */}
-      <CreateTicketModal
-        visible={showCreate}
-        onClose={() => setShowCreate(false)}
-        onCreated={handleCreated}
-      />
+      <CreateTicketModal visible={showCreate} onClose={() => setShowCreate(false)} onCreated={handleCreated} />
 
       {/* Mobile: detail modal */}
       {!isDesktop && (
-        <Modal
-          visible={showDetail}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={() => setShowDetail(false)}
-        >
+        <Modal visible={showDetail} animationType="slide" presentationStyle="pageSheet"
+          onRequestClose={() => setShowDetail(false)}>
           <View style={{ flex: 1, backgroundColor: '#f5f6f8' }}>
             {selected && (
-              <TicketDetail
-                key={selected.id}
-                ticket={selected}
+              <TicketDetail key={selected.id} ticket={selected}
                 onClose={() => setShowDetail(false)}
-                onUpdated={handleUpdated}
-                onDeleted={handleDeleted}
-              />
+                onUpdated={handleUpdated} onDeleted={handleDeleted} />
             )}
           </View>
         </Modal>
       )}
 
-      {/* Desktop: side by side */}
-      {isDesktop ? (
-        <View style={sc.cols}>
-          {listPanel}
-          {detailPanel}
-        </View>
-      ) : (
-        listPanel
+      {/* Desktop: detail modal (centered) */}
+      {isDesktop && selected && (
+        <Modal visible={!!selected} transparent animationType="fade"
+          onRequestClose={() => setSelected(null)}>
+          <Pressable style={sc.modalBackdrop} onPress={() => setSelected(null)}>
+            <Pressable style={sc.modalPanel} onPress={() => {}}>
+              <TicketDetail key={selected.id} ticket={selected}
+                onClose={() => setSelected(null)}
+                onUpdated={handleUpdated} onDeleted={handleDeleted} />
+            </Pressable>
+          </Pressable>
+        </Modal>
       )}
-    </View>
+    </Pressable>
   );
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
 const sc = StyleSheet.create({
-  shell:       { flex: 1, backgroundColor: '#f4f6f9' },
-  cols:        { flex: 1, flexDirection: 'row' },
-  listPanel:   { width: 360, backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: '#e5e7eb', flexDirection: 'column' },
-  detailPanel: { flex: 1, backgroundColor: '#f5f6f8', flexDirection: 'column' },
-  detailEmpty: { alignItems: 'center', justifyContent: 'center', gap: 12 },
-  detailEmptyTitle: { fontSize: 16, fontWeight: '700', color: '#374151' },
-  detailEmptyText:  { fontSize: 13, color: '#9ca3af', textAlign: 'center', maxWidth: 260 },
-  detailNewBtn:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, marginTop: 8 },
-  detailNewBtnText: { fontSize: 14, fontWeight: '700', color: '#C9A52A' },
+  // Header
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#111827' },
+  headerSub:   { fontSize: 12, color: '#C9A52A', marginTop: 2, fontWeight: '600' },
+  newBtn:      { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1A2B1A', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
+  newBtnTxt:   { color: '#fff', fontWeight: '700', fontSize: 13 },
 
-  panelHeader:      { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: '#1A2B1A' },
-  panelHeaderTitle: { flex: 1, fontSize: 14, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
-  newBtn:           { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(201,165,42,0.2)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(201,165,42,0.4)' },
-  newBtnText:       { fontSize: 12.5, fontWeight: '700', color: '#C9A52A' },
+  // Stats
+  statsRow:    { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  statCard:    { flex: 1, alignItems: 'center', paddingVertical: 14, gap: 4 },
+  statIconWrap:{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  statLbl:     { fontSize: 10, color: '#6b7280', fontWeight: '600' },
+  statVal:     { fontSize: 18, fontWeight: '800' },
 
-  searchBox:   { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 10, backgroundColor: '#f3f4f6', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e5e7eb' },
-  searchInput: { flex: 1, fontSize: 13.5, color: '#111827' },
+  // Filter
+  filterBar:   { flexDirection: 'row', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap', backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  searchInput: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: '#111827', minWidth: 160 },
+  applyBtn:    { alignSelf: 'flex-end', paddingHorizontal: 18, paddingVertical: 9, borderRadius: 8, borderWidth: 1.5, borderColor: '#111827', backgroundColor: '#fff' },
+  applyBtnTxt: { fontWeight: '700', fontSize: 13, color: '#111827' },
 
-  filterBar:       { borderBottomWidth: 1, borderBottomColor: '#f3f4f6', maxHeight: 50 },
-  filterChip:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  filterChipText:  { fontSize: 12, fontWeight: '500', color: '#374151' },
-  filterBadge:     { backgroundColor: '#e5e7eb', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
-  filterBadgeText: { fontSize: 10, fontWeight: '700', color: '#374151' },
+  // Empty
+  empty:    { alignItems: 'center', paddingVertical: 60, gap: 10 },
+  emptyTxt: { fontSize: 14, fontWeight: '600', color: '#C9A52A' },
 
-  empty:      { alignItems: 'center', paddingTop: 70, gap: 10, paddingHorizontal: 20 },
-  emptyTitle: { fontSize: 15, fontWeight: '700', color: '#9ca3af' },
-  emptyText:  { fontSize: 12.5, color: '#d1d5db', textAlign: 'center' },
+  // Desktop modal
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  modalPanel:    { width: 720, maxWidth: '95%', maxHeight: '90%', borderRadius: 16, overflow: 'hidden', backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
+});
+
+// FilterDropdown styles
+const fd = StyleSheet.create({
+  lbl:         { fontSize: 10.5, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.4 },
+  btn:         { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fff', minWidth: 130 },
+  btnTxt:      { flex: 1, fontSize: 13, color: '#374151' },
+  menu:        { position: 'absolute', top: 60, left: 0, minWidth: 160, zIndex: 999, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 12, elevation: 10, overflow: 'hidden' },
+  item:        { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  itemActive:  { backgroundColor: '#f0fdf4' },
+  itemTxt:     { flex: 1, fontSize: 13, color: '#374151' },
+  itemTxtActive:{ fontWeight: '700', color: '#1A2B1A' },
+});
+
+// Table row styles
+const tr = StyleSheet.create({
+  header:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#f9fafb', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  hCell:        { fontSize: 11, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.4 },
+  row:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  cell:         { fontSize: 13, color: '#374151' },
+  cellNum:      { width: 70 },
+  cellFrom:     { flex: 1.2 },
+  cellPriority: { flex: 1, alignItems: 'flex-start' },
+  cellStatus:   { flex: 1.2, alignItems: 'flex-start' },
+  cellAssignee: { flex: 1.2 },
+  cellDate:     { flex: 1.2 },
+  cellActions:  { width: 80, alignItems: 'flex-end' },
+  subject:      { fontSize: 13, fontWeight: '700', color: '#111827' },
+  catLabel:     { fontSize: 10, color: '#9ca3af', marginTop: 1 },
+  badge:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+  badgeTxt:     { fontSize: 11, fontWeight: '600' },
+  viewBtn:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  viewTxt:      { fontSize: 11, fontWeight: '700', color: '#1A2B1A' },
 });
 
 const tc = StyleSheet.create({
@@ -951,6 +1081,20 @@ const ef = StyleSheet.create({
 });
 
 const cf = StyleSheet.create({
-  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#1A2B1A' },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: '#C9A52A' },
+  backdrop:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+  panel:        { width: '100%', maxHeight: '90%', borderRadius: 16, overflow: 'hidden', backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
+  panelDesktop: { width: 580, maxWidth: 580 },
+
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, backgroundColor: '#1A2B1A' },
+  headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerIcon:  { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(201,165,42,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(201,165,42,0.25)' },
+  headerTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  headerSub:   { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
+  closeBtn:    { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+
+  footer:      { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6', backgroundColor: '#fff' },
+  cancelBtn:   { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 11, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  cancelTxt:   { fontWeight: '700', color: '#374151', fontSize: 14 },
+  submitBtn:   { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 13, borderRadius: 11, backgroundColor: '#1A2B1A' },
+  submitTxt:   { fontWeight: '800', color: '#C9A52A', fontSize: 14 },
 });

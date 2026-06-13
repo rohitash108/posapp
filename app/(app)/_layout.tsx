@@ -325,16 +325,16 @@ export default function AppLayout() {
             <Tabs.Screen name="orders/index"     options={{ title: 'Orders' }} />
             <Tabs.Screen name="tables/index"     options={{ title: 'Tables' }} />
             <Tabs.Screen name="customers/index"      options={{ title: 'Customers' }} />
-            <Tabs.Screen name="reservations/index"  options={{ title: 'Reservations' }} />
-            <Tabs.Screen name="menu/index"          options={{ title: 'Menu Items' }} />
-            <Tabs.Screen name="categories/index"    options={{ title: 'Categories' }} />
-            <Tabs.Screen name="items/index"         options={{ title: 'Items' }} />
-            <Tabs.Screen name="inventory/index"     options={{ title: 'Inventory' }} />
-            <Tabs.Screen name="invoices/index"      options={{ title: 'Invoices' }} />
-            <Tabs.Screen name="payments/index"      options={{ title: 'Payments' }} />
-            <Tabs.Screen name="coupons/index"       options={{ title: 'Coupons' }} />
-            <Tabs.Screen name="expenses/index"      options={{ title: 'Expenses' }} />
-            <Tabs.Screen name="expense-report/index" options={{ title: 'Expense Report' }} />
+            <Tabs.Screen name="reservations/index"  options={{ headerShown: false }} />
+            <Tabs.Screen name="menu/index"          options={{ headerShown: false }} />
+            <Tabs.Screen name="categories/index"    options={{ headerShown: false }} />
+            <Tabs.Screen name="items/index"         options={{ headerShown: false }} />
+            <Tabs.Screen name="inventory/index"     options={{ headerShown: false }} />
+            <Tabs.Screen name="invoices/index"      options={{ headerShown: false }} />
+            <Tabs.Screen name="payments/index"      options={{ headerShown: false }} />
+            <Tabs.Screen name="coupons/index"       options={{ headerShown: false }} />
+            <Tabs.Screen name="expenses/index"      options={{ headerShown: false }} />
+            <Tabs.Screen name="expense-report/index" options={{ headerShown: false }} />
             <Tabs.Screen name="tickets/index"       options={{ title: 'Support Tickets' }} />
             <Tabs.Screen name="reports/index"       options={{ title: 'Reports' }} />
             <Tabs.Screen name="settings/index"      options={{ title: 'Settings' }} />
@@ -368,16 +368,16 @@ export default function AppLayout() {
       <Tabs.Screen name="orders/index" options={{ title: 'Orders', tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="tables/index" options={{ title: 'Tables', tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" color={color} size={size} />, tabBarStyle: { display: 'none' } }} />
       <Tabs.Screen name="customers/index"       options={{ title: 'Customers',      tabBarButton: () => null }} />
-      <Tabs.Screen name="reservations/index"   options={{ title: 'Reservations',   tabBarButton: () => null }} />
-      <Tabs.Screen name="menu/index"           options={{ title: 'Menu',           tabBarButton: () => null }} />
-      <Tabs.Screen name="categories/index"     options={{ title: 'Categories',     tabBarButton: () => null }} />
-      <Tabs.Screen name="items/index"          options={{ title: 'Items',          tabBarButton: () => null }} />
-      <Tabs.Screen name="inventory/index"      options={{ title: 'Inventory',      tabBarButton: () => null }} />
-      <Tabs.Screen name="invoices/index"       options={{ title: 'Invoices',       tabBarButton: () => null }} />
-      <Tabs.Screen name="payments/index"       options={{ title: 'Payments',       tabBarButton: () => null }} />
-      <Tabs.Screen name="coupons/index"        options={{ title: 'Coupons',        tabBarButton: () => null }} />
-      <Tabs.Screen name="expenses/index"       options={{ title: 'Expenses',       tabBarButton: () => null }} />
-      <Tabs.Screen name="expense-report/index" options={{ title: 'Expense Report', tabBarButton: () => null }} />
+      <Tabs.Screen name="reservations/index"   options={{ headerShown: false, tabBarButton: () => null }} />
+      <Tabs.Screen name="menu/index"           options={{ headerShown: false, tabBarButton: () => null }} />
+      <Tabs.Screen name="categories/index"     options={{ headerShown: false, tabBarButton: () => null }} />
+      <Tabs.Screen name="items/index"          options={{ headerShown: false, tabBarButton: () => null }} />
+      <Tabs.Screen name="inventory/index"      options={{ headerShown: false, tabBarButton: () => null }} />
+      <Tabs.Screen name="invoices/index"       options={{ headerShown: false, tabBarButton: () => null }} />
+      <Tabs.Screen name="payments/index"       options={{ headerShown: false, tabBarButton: () => null }} />
+      <Tabs.Screen name="coupons/index"        options={{ headerShown: false, tabBarButton: () => null }} />
+      <Tabs.Screen name="expenses/index"       options={{ headerShown: false, tabBarButton: () => null }} />
+      <Tabs.Screen name="expense-report/index" options={{ headerShown: false, tabBarButton: () => null }} />
       <Tabs.Screen name="tickets/index"        options={{ title: 'Support Tickets',    tabBarButton: () => null }} />
       <Tabs.Screen name="reports/index"        options={{ title: 'Reports',        tabBarButton: () => null }} />
       <Tabs.Screen name="settings/index"       options={{ title: 'Settings',       tabBarButton: () => null }} />

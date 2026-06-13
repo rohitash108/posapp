@@ -200,7 +200,7 @@ export default function PaymentsScreen() {
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); load(true); }} tintColor={GOLD} />
+            onRefresh={() => { setRefreshing(true); load(true); }} tintColor={FOREST} />
         }>
 
         {/* ── Page header ── */}
@@ -217,9 +217,9 @@ export default function PaymentsScreen() {
 
         {/* ── Stats ── */}
         <View style={s.statsBar}>
-          <View style={[s.statMain, { backgroundColor: FOREST }]}>
-            <Ionicons name="wallet-outline" size={18} color={GOLD} style={{ marginBottom: 4 }} />
-            <Text style={[s.statMainVal, { color: GOLD }]}>₹{totalAmt.toFixed(2)}</Text>
+          <View style={[s.statMain, { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' }]}>
+            <Ionicons name="wallet-outline" size={18} color="#16a34a" style={{ marginBottom: 4 }} />
+            <Text style={[s.statMainVal, { color: '#16a34a' }]}>₹{totalAmt.toFixed(2)}</Text>
             <Text style={s.statMainLbl}>Total Collected</Text>
           </View>
           <View style={s.statGrid}>
@@ -378,7 +378,7 @@ const s = StyleSheet.create({
   statsBar:     { flexDirection: 'row', gap: 10, padding: 12, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
   statMain:     { flex: 1, borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center', minHeight: 90 },
   statMainVal:  { fontSize: 20, fontWeight: '800', marginTop: 2 },
-  statMainLbl:  { fontSize: 10, color: 'rgba(201,165,42,0.8)', marginTop: 2, fontWeight: '600' },
+  statMainLbl:  { fontSize: 10, color: '#16a34a', marginTop: 2, fontWeight: '600' },
   statGrid:     { flex: 2, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   statSmall:    { flex: 1, minWidth: '45%', borderRadius: 10, padding: 10, alignItems: 'center', gap: 2 },
   statSmallVal: { fontSize: 14, fontWeight: '800' },

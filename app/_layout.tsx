@@ -16,6 +16,23 @@ export default function RootLayout() {
   const hydrateTheme = useThemeStore((s) => s.hydrate);
   const statusBarStyle = useThemeStore((s) => s.colors.statusBar);
 
+  // Inject global web CSS once — kills browser focus rings on all inputs/textareas
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    if (document.getElementById('app-global-style')) return;
+    const s = document.createElement('style');
+    s.id = 'app-global-style';
+    s.textContent = [
+      // Remove browser focus ring on all inputs and textareas
+      'input:focus,textarea:focus{outline:none!important;box-shadow:none!important;}',
+      // Remove default input/textarea browser chrome
+      'input,textarea{border:none!important;background:transparent!important;}',
+      // Prevent text selection highlight on interactive elements
+      'button,a,[role="button"]{-webkit-tap-highlight-color:transparent;}',
+    ].join('\n');
+    document.head.appendChild(s);
+  }, []);
+
   useEffect(() => {
     async function bootstrap() {
       await hydrateTheme();

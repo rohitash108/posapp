@@ -1,6 +1,7 @@
 /**
- * Orders Screen — Premium redesign
- * Status summary · Tab pills · Source chips · Date filter · Grid/List toggle
+ * Orders Screen
+ * Three-dot menus use positioned context-menu dropdowns (getBoundingClientRect)
+ * instead of modal sheets — fixes bottom-left corner bug on web.
  */
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
@@ -15,11 +16,11 @@ import { useAppStore } from '@/store/appStore';
 import type { Order, OrderStatus } from '@/types';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const FOREST   = '#1A2B1A';
-const GOLD     = '#C9A52A';
-const PRIMARY  = '#2563eb';
+const FOREST  = '#1A2B1A';
+const GOLD    = '#C9A52A';
+const PRIMARY = '#2563eb';
 
-// ── Status config ─────────────────────────────────────────────────────────────
+// ── Status / source config ────────────────────────────────────────────────────
 const STATUS_CFG = {
   pending:   { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe', dot: '#3b82f6', label: 'Pending',   next: 'confirmed', nextLabel: 'Confirm'       },
   confirmed: { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe', dot: '#3b82f6', label: 'Confirmed', next: 'preparing', nextLabel: 'Start Cooking' },
@@ -37,7 +38,6 @@ const SOURCE_CFG = {
   qr:     { label: 'QR',     color: '#7c3aed', bg: '#f5f3ff', dot: '#8b5cf6' },
 } as const;
 
-// ── Stat cards ────────────────────────────────────────────────────────────────
 const STAT_CARDS = [
   { key: 'pending',   label: 'Pending',    icon: 'time-outline'           as const, color: '#2563eb', bg: '#eff6ff' },
   { key: 'confirmed', label: 'Confirmed',  icon: 'bookmark-outline'       as const, color: '#0891b2', bg: '#ecfeff' },
@@ -75,7 +75,7 @@ const SOURCES = [
 ] as const;
 
 const IN_PROGRESS = ['confirmed', 'preparing', 'ready', 'served'];
-const POLL_MS = 30_000;
+const POLL_MS     = 30_000;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function sCfg(s: string) { return STATUS_CFG[s as keyof typeof STATUS_CFG] ?? STATUS_CFG.pending; }
@@ -143,6 +143,28 @@ ${Number(order.discount_amount)>0?`<tr><td>Discount</td><td align="right" style=
   if (w) { w.document.write(html); w.document.close(); }
 }
 
+// ── Positioned dropdown engine ────────────────────────────────────────────────
+interface DropPos { top: number; left: number; width: number }
+
+/**
+ * Measures an element by nativeID and returns coordinates for a dropdown panel.
+ * Prefers opening below; flips above if insufficient space.
+ */
+function measureDrop(nativeId: string, panelW = 220, panelH = 300): DropPos | null {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return null;
+  const el = document.getElementById(nativeId);
+  if (!el) return null;
+  const r  = el.getBoundingClientRect();
+  if (r.width === 0) return null;
+  const sw = window.innerWidth;
+  const sh = window.innerHeight;
+  // Right-align panel to button, clamped to viewport
+  const left = Math.max(8, Math.min(r.right - panelW, sw - panelW - 8));
+  // Prefer below; flip above if not enough room
+  const top  = sh - r.bottom > panelH ? r.bottom + 6 : Math.max(8, r.top - panelH - 4);
+  return { top, left, width: panelW };
+}
+
 // ── Shared action props ───────────────────────────────────────────────────────
 interface ActionProps {
   onStatusChange:  (id: number, s: string) => void;
@@ -152,76 +174,139 @@ interface ActionProps {
   isUpdating:      boolean;
 }
 
-// ── Status picker modal ───────────────────────────────────────────────────────
-function StatusModal({ order, visible, onClose, onSelect }: {
-  order: Order; visible: boolean; onClose: () => void; onSelect: (s: string) => void;
+// ── Dropdown item ─────────────────────────────────────────────────────────────
+function DDItem({ icon, label, color, danger, onPress }: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string; color: string; danger?: boolean; onPress: () => void;
 }) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={m.backdrop} onPress={onClose}>
-        <View style={m.sheet}>
-          <View style={m.sheetHandle} />
-          <Text style={m.sheetTitle}>Change Status</Text>
-          <Text style={m.sheetSub}>Order #{order.order_number}</Text>
-          {((): OrderStatus[] => {
-            // Only forward transitions from current status; never show 'cancelled'
-            const FORWARD: OrderStatus[] = ['pending','confirmed','preparing','ready','served','completed'];
-            const idx = FORWARD.indexOf(order.status as OrderStatus);
-            // Show current status + all forward states (idx=-1 means unknown → show all)
-            return idx >= 0 ? FORWARD.slice(idx) : FORWARD;
-          })().map(s => {
-            const c = sCfg(s); const active = order.status === s;
-            return (
-              <Pressable key={s} style={[m.item, active && { backgroundColor: c.bg }]}
-                onPress={() => { onClose(); onSelect(s); }}>
-                <View style={[m.dot, { backgroundColor: c.dot }]} />
-                <Text style={[m.itemTxt, active && { color: c.text, fontWeight: '700' }]}>{c.label}</Text>
-                {active && <Ionicons name="checkmark-circle" size={16} color={c.dot} />}
-              </Pressable>
-            );
-          })}
+    <Pressable
+      style={({ pressed }) => [dd.item, pressed && { backgroundColor: color + '14' }]}
+      onPress={onPress}
+    >
+      <View style={[dd.itemIcon, { backgroundColor: color + '16' }]}>
+        <Ionicons name={icon} size={14} color={color} />
+      </View>
+      <Text style={[dd.itemLabel, danger && { color }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+// ── Action dropdown (three-dot menu) ─────────────────────────────────────────
+function ActionDropdown({ order, pos, onClose, onStatusChange, onMarkPaid, onPrint, onShowStatus }: {
+  order: Order; pos: DropPos; onClose: () => void;
+  onStatusChange: (id: number, s: string) => void;
+  onMarkPaid:     (id: number, paid: boolean) => void;
+  onPrint:        (o: Order) => void;
+  onShowStatus:   () => void;
+}) {
+  const isPaid = order.payment_status === 'paid';
+  const agg    = isAgg(order);
+  const done   = ['completed', 'cancelled'].includes(order.status);
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <View style={[dd.panel, { top: pos.top, left: pos.left, width: pos.width }]}>
+        <View style={dd.header}>
+          <Text style={dd.headerTitle}>Order #{order.order_number}</Text>
+          <Text style={dd.headerSub}>
+            {(order.order_type ?? '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+            {order.table_name ? ` · ${order.table_name}` : ''}
+          </Text>
         </View>
-      </Pressable>
+        <View style={dd.sep} />
+        <DDItem icon="swap-horizontal-outline" label="Change Status" color={PRIMARY}
+          onPress={() => { onClose(); onShowStatus(); }} />
+        {!agg && (
+          <DDItem
+            icon={isPaid ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+            label={isPaid ? 'Mark as Unpaid' : 'Mark as Paid'}
+            color={isPaid ? '#d97706' : '#16a34a'}
+            onPress={() => { onClose(); onMarkPaid(order.id, !isPaid); }}
+          />
+        )}
+        {!done && (
+          <DDItem icon="checkmark-done-outline" label="Mark Completed" color="#16a34a"
+            onPress={() => { onClose(); onStatusChange(order.id, 'completed'); }} />
+        )}
+        {!done && (
+          <DDItem icon="close-circle-outline" label="Cancel Order" color="#dc2626" danger
+            onPress={() => { onClose(); onStatusChange(order.id, 'cancelled'); }} />
+        )}
+        {Platform.OS === 'web' && (
+          <>
+            <View style={dd.sep} />
+            <DDItem icon="print-outline" label="Print Receipt" color="#374151"
+              onPress={() => { onClose(); onPrint(order); }} />
+          </>
+        )}
+      </View>
     </Modal>
   );
 }
 
-// ── Action sheet modal ────────────────────────────────────────────────────────
-function ActionModal({ order, visible, onClose, onStatusChange, onMarkPaid, onPrint, onShowStatus }: {
+// ── Status dropdown ───────────────────────────────────────────────────────────
+function StatusDropdown({ order, pos, onClose, onSelect }: {
+  order: Order; pos: DropPos; onClose: () => void; onSelect: (s: string) => void;
+}) {
+  const FORWARD: OrderStatus[] = ['pending','confirmed','preparing','ready','served','completed'];
+  const idx     = FORWARD.indexOf(order.status as OrderStatus);
+  const options = idx >= 0 ? FORWARD.slice(idx) : FORWARD;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <View style={[dd.panel, { top: pos.top, left: pos.left, width: pos.width }]}>
+        <View style={dd.header}>
+          <Text style={dd.headerTitle}>Change Status</Text>
+          <Text style={dd.headerSub}>Order #{order.order_number}</Text>
+        </View>
+        <View style={dd.sep} />
+        {options.map(s => {
+          const c      = sCfg(s);
+          const active = order.status === s;
+          return (
+            <Pressable
+              key={s}
+              style={({ pressed }) => [
+                dd.item,
+                active && { backgroundColor: c.bg },
+                !active && pressed && { backgroundColor: '#f9fafb' },
+              ]}
+              onPress={() => { onClose(); onSelect(s); }}
+            >
+              <View style={[dd.statusDot, { backgroundColor: c.dot }]} />
+              <Text style={[dd.itemLabel, active && { color: c.text, fontWeight: '700' }]}>{c.label}</Text>
+              {active && <Ionicons name="checkmark-circle" size={15} color={c.dot} />}
+            </Pressable>
+          );
+        })}
+      </View>
+    </Modal>
+  );
+}
+
+// ── Fallback sheet modals (native) ────────────────────────────────────────────
+function ActionSheetModal({ order, visible, onClose, onStatusChange, onMarkPaid, onPrint, onShowStatus }: {
   order: Order; visible: boolean; onClose: () => void;
   onStatusChange: (id: number, s: string) => void;
-  onMarkPaid: (id: number, paid: boolean) => void;
-  onPrint: (o: Order) => void;
-  onShowStatus: () => void;
+  onMarkPaid:     (id: number, paid: boolean) => void;
+  onPrint:        (o: Order) => void;
+  onShowStatus:   () => void;
 }) {
   const isPaid = order.payment_status === 'paid';
   const agg    = isAgg(order);
+  const done   = ['completed', 'cancelled'].includes(order.status);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={m.backdrop} onPress={onClose}>
-        <View style={[m.sheet, { position: 'absolute', bottom: 0, left: 0, right: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
-          <View style={m.sheetHandle} />
-          <Text style={m.sheetTitle}>Order #{order.order_number}</Text>
-          <ActionRow icon="swap-horizontal-outline" label="Change Status" color={PRIMARY}
-            onPress={() => { onClose(); onShowStatus(); }} />
-          {!agg && (
-            <ActionRow icon={isPaid ? 'alert-circle-outline' : 'checkmark-circle-outline'}
-              label={isPaid ? 'Mark as Unpaid' : 'Mark as Paid'}
-              color={isPaid ? '#d97706' : '#16a34a'}
-              onPress={() => { onClose(); onMarkPaid(order.id, !isPaid); }} />
-          )}
-          {order.status !== 'completed' && (
-            <ActionRow icon="checkmark-done-outline" label="Mark Completed" color="#16a34a"
-              onPress={() => { onClose(); onStatusChange(order.id, 'completed'); }} />
-          )}
-          {!['completed','cancelled'].includes(order.status) && (
-            <ActionRow icon="close-circle-outline" label="Cancel Order" color="#dc2626"
-              onPress={() => { onClose(); onStatusChange(order.id, 'cancelled'); }} />
-          )}
-          {Platform.OS === 'web' && (
-            <ActionRow icon="print-outline" label="Print Receipt" color="#374151"
-              onPress={() => { onClose(); onPrint(order); }} />
-          )}
+      <Pressable style={ms.backdrop} onPress={onClose}>
+        <View style={ms.sheet}>
+          <View style={ms.handle} />
+          <Text style={ms.title}>Order #{order.order_number}</Text>
+          <SheetRow icon="swap-horizontal-outline" label="Change Status"   color={PRIMARY}     onPress={() => { onClose(); onShowStatus(); }} />
+          {!agg && <SheetRow icon={isPaid ? 'alert-circle-outline' : 'checkmark-circle-outline'} label={isPaid ? 'Mark as Unpaid' : 'Mark as Paid'} color={isPaid ? '#d97706' : '#16a34a'} onPress={() => { onClose(); onMarkPaid(order.id, !isPaid); }} />}
+          {!done && <SheetRow icon="checkmark-done-outline" label="Mark Completed" color="#16a34a" onPress={() => { onClose(); onStatusChange(order.id, 'completed'); }} />}
+          {!done && <SheetRow icon="close-circle-outline"   label="Cancel Order"   color="#dc2626" onPress={() => { onClose(); onStatusChange(order.id, 'cancelled'); }} />}
+          {Platform.OS === 'web' && <SheetRow icon="print-outline" label="Print Receipt" color="#374151" onPress={() => { onClose(); onPrint(order); }} />}
           <View style={{ height: 16 }} />
         </View>
       </Pressable>
@@ -229,15 +314,46 @@ function ActionModal({ order, visible, onClose, onStatusChange, onMarkPaid, onPr
   );
 }
 
-function ActionRow({ icon, label, color, onPress }: {
+function StatusPickerModal({ order, visible, onClose, onSelect }: {
+  order: Order; visible: boolean; onClose: () => void; onSelect: (s: string) => void;
+}) {
+  const FORWARD: OrderStatus[] = ['pending','confirmed','preparing','ready','served','completed'];
+  const idx     = FORWARD.indexOf(order.status as OrderStatus);
+  const options = idx >= 0 ? FORWARD.slice(idx) : FORWARD;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={[ms.backdrop, { justifyContent: 'center', alignItems: 'center' }]} onPress={onClose}>
+        <View style={ms.centeredSheet}>
+          <View style={ms.handle} />
+          <Text style={ms.title}>Change Status</Text>
+          <Text style={ms.sub}>Order #{order.order_number}</Text>
+          {options.map(s => {
+            const c = sCfg(s); const active = order.status === s;
+            return (
+              <Pressable key={s} style={[ms.item, active && { backgroundColor: c.bg }]}
+                onPress={() => { onClose(); onSelect(s); }}>
+                <View style={[ms.dot, { backgroundColor: c.dot }]} />
+                <Text style={[ms.itemTxt, active && { color: c.text, fontWeight: '700' }]}>{c.label}</Text>
+                {active && <Ionicons name="checkmark-circle" size={16} color={c.dot} />}
+              </Pressable>
+            );
+          })}
+          <View style={{ height: 8 }} />
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function SheetRow({ icon, label, color, onPress }: {
   icon: React.ComponentProps<typeof Ionicons>['name']; label: string; color: string; onPress: () => void;
 }) {
   return (
-    <Pressable style={m.item} onPress={onPress}>
-      <View style={[m.actionIcon, { backgroundColor: color + '15' }]}>
+    <Pressable style={ms.item} onPress={onPress}>
+      <View style={[ms.itemIcon, { backgroundColor: color + '15' }]}>
         <Ionicons name={icon} size={17} color={color} />
       </View>
-      <Text style={[m.itemTxt, { color: '#1f2937' }]}>{label}</Text>
+      <Text style={[ms.itemTxt, { color: '#1f2937' }]}>{label}</Text>
       <Ionicons name="chevron-forward" size={14} color="#9ca3af" />
     </Pressable>
   );
@@ -247,6 +363,29 @@ function ActionRow({ icon, label, color, onPress }: {
 function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint, isUpdating }: { order: Order } & ActionProps) {
   const [showAction, setShowAction] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
+  const [actionPos,  setActionPos]  = useState<DropPos | null>(null);
+  const [statusPos,  setStatusPos]  = useState<DropPos | null>(null);
+
+  const menuId   = `ord-act-${order.id}`;
+  const statusId = `ord-sts-${order.id}`;
+
+  function openAction() {
+    const p = measureDrop(menuId, 228, 280);
+    setActionPos(p);
+    setShowAction(true);
+  }
+
+  function openStatus() {
+    const p = measureDrop(statusId, 200, 260);
+    setStatusPos(p);
+    setShowStatus(true);
+  }
+
+  function openStatusFromAction() {
+    setShowAction(false);
+    // measure after action dropdown closes (next tick)
+    setTimeout(() => openStatus(), 50);
+  }
 
   const cfg    = sCfg(order.status);
   const isPaid = order.payment_status === 'paid';
@@ -261,7 +400,6 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
     <View style={cd.wrap}>
       {/* ── Dark header ── */}
       <View style={cd.head}>
-        {/* Left: icon + info */}
         <View style={cd.headL}>
           <View style={cd.avatar}>
             <Ionicons name="bag-handle-outline" size={16} color="rgba(255,255,255,0.85)" />
@@ -282,21 +420,19 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
             </Text>
           </View>
         </View>
-        {/* Right: time + menu */}
         <View style={cd.headR}>
           <Text style={cd.time}>{fmtTime(order.created_at)}</Text>
-          <Pressable style={cd.menuBtn} onPress={() => setShowAction(true)}>
+          {/* Three-dot menu button — nativeID used by measureDrop */}
+          <Pressable nativeID={menuId} style={cd.menuBtn} onPress={openAction}>
             <Ionicons name="ellipsis-vertical" size={14} color="rgba(255,255,255,0.7)" />
           </Pressable>
         </View>
       </View>
 
-      {/* ── Customer row ── */}
+      {/* ── Customer ── */}
       <View style={cd.customerRow}>
         <Ionicons name="person-outline" size={12} color="#6b7280" />
-        <Text style={cd.customerName} numberOfLines={1}>
-          {order.customer_name || 'Walk-in'}
-        </Text>
+        <Text style={cd.customerName} numberOfLines={1}>{order.customer_name || 'Walk-in'}</Text>
         {order.external_id && agg && (
           <Text style={cd.extId} numberOfLines={1}>· ID: {order.external_id}</Text>
         )}
@@ -318,9 +454,7 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
             )}
           </View>
         ))}
-        {more > 0 && (
-          <Text style={cd.moreItems}>+{more} more item{more > 1 ? 's' : ''}</Text>
-        )}
+        {more > 0 && <Text style={cd.moreItems}>+{more} more item{more > 1 ? 's' : ''}</Text>}
         {order.notes ? (
           <View style={cd.notesBox}>
             <Ionicons name="chatbubble-outline" size={11} color="#92400e" />
@@ -353,7 +487,6 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
 
       {/* ── Footer ── */}
       <View style={cd.footer}>
-        {/* Payment pill + Mark as Paid button */}
         <View style={[cd.payPill, isPaid ? cd.paidPill : cd.unpaidPill]}>
           <View style={[cd.payDot, { backgroundColor: isPaid ? '#22c55e' : '#f59e0b' }]} />
           <Text style={[cd.payText, { color: isPaid ? '#16a34a' : '#d97706' }]}>
@@ -361,19 +494,14 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
           </Text>
         </View>
         {!isPaid && !agg && (
-          <Pressable
-            style={({ pressed }) => [cd.markPaidBtn, pressed && { opacity: 0.75 }]}
-            onPress={() => onMarkPaid(order.id, true)}
-            disabled={isUpdating}
-          >
+          <Pressable style={({ pressed }) => [cd.markPaidBtn, pressed && { opacity: 0.75 }]}
+            onPress={() => onMarkPaid(order.id, true)} disabled={isUpdating}>
             <Ionicons name="checkmark-circle-outline" size={12} color="#fff" />
             <Text style={cd.markPaidTxt}>Mark Paid</Text>
           </Pressable>
         )}
-
         <View style={{ flex: 1 }} />
 
-        {/* Status + advance */}
         {isUpdating ? (
           <ActivityIndicator size="small" color={PRIMARY} />
         ) : agg && order.status === 'pending' ? (
@@ -381,21 +509,21 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
             <Pressable style={cd.acceptBtn} onPress={() => onStatusChange(order.id, 'confirmed')}>
               <Text style={cd.acceptTxt}>Accept</Text>
             </Pressable>
-            <Pressable style={cd.rejectBtn}
-              onPress={() => onStatusChange(order.id, 'cancelled')}>
+            <Pressable style={cd.rejectBtn} onPress={() => onStatusChange(order.id, 'cancelled')}>
               <Text style={cd.rejectTxt}>Reject</Text>
             </Pressable>
           </View>
         ) : (
-          <Pressable style={[cd.statusPill, { backgroundColor: cfg.bg, borderColor: cfg.border }]}
-            onPress={() => setShowStatus(true)}>
+          /* Status pill — nativeID used by measureDrop */
+          <Pressable nativeID={statusId}
+            style={[cd.statusPill, { backgroundColor: cfg.bg, borderColor: cfg.border }]}
+            onPress={openStatus}>
             <View style={[cd.statusDot, { backgroundColor: cfg.dot }]} />
             <Text style={[cd.statusTxt, { color: cfg.text }]}>{cfg.label}</Text>
             <Ionicons name="chevron-down" size={10} color={cfg.text} />
           </Pressable>
         )}
 
-        {/* Print/KOT icon */}
         {Platform.OS === 'web' && (
           <Pressable style={cd.iconBtn} onPress={() => onPrint(order)}>
             <Ionicons name="print-outline" size={14} color="#64748b" />
@@ -403,11 +531,30 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
         )}
       </View>
 
-      <StatusModal order={order} visible={showStatus} onClose={() => setShowStatus(false)}
-        onSelect={(s) => onStatusChange(order.id, s)} />
-      <ActionModal order={order} visible={showAction} onClose={() => setShowAction(false)}
-        onStatusChange={onStatusChange} onMarkPaid={onMarkPaid} onPrint={onPrint}
-        onShowStatus={() => setShowStatus(true)} />
+      {/* ── Dropdowns (web positioned) ── */}
+      {showAction && actionPos && (
+        <ActionDropdown order={order} pos={actionPos}
+          onClose={() => setShowAction(false)}
+          onStatusChange={onStatusChange} onMarkPaid={onMarkPaid} onPrint={onPrint}
+          onShowStatus={openStatusFromAction} />
+      )}
+      {showStatus && statusPos && (
+        <StatusDropdown order={order} pos={statusPos}
+          onClose={() => setShowStatus(false)}
+          onSelect={(s) => onStatusChange(order.id, s)} />
+      )}
+      {/* ── Fallback sheets (native / no measurement) ── */}
+      {showAction && !actionPos && (
+        <ActionSheetModal order={order} visible
+          onClose={() => setShowAction(false)}
+          onStatusChange={onStatusChange} onMarkPaid={onMarkPaid} onPrint={onPrint}
+          onShowStatus={openStatusFromAction} />
+      )}
+      {showStatus && !statusPos && (
+        <StatusPickerModal order={order} visible
+          onClose={() => setShowStatus(false)}
+          onSelect={(s) => onStatusChange(order.id, s)} />
+      )}
     </View>
   );
 }
@@ -416,6 +563,25 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
 function OrderListRow({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint, isUpdating }: { order: Order } & ActionProps) {
   const [showAction, setShowAction] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
+  const [actionPos,  setActionPos]  = useState<DropPos | null>(null);
+  const [statusPos,  setStatusPos]  = useState<DropPos | null>(null);
+
+  const menuId   = `ord-lact-${order.id}`;
+  const statusId = `ord-lsts-${order.id}`;
+
+  function openAction() {
+    setActionPos(measureDrop(menuId, 228, 280));
+    setShowAction(true);
+  }
+  function openStatus() {
+    setStatusPos(measureDrop(statusId, 200, 260));
+    setShowStatus(true);
+  }
+  function openStatusFromAction() {
+    setShowAction(false);
+    setTimeout(() => openStatus(), 50);
+  }
+
   const cfg    = sCfg(order.status);
   const isPaid = order.payment_status === 'paid';
   const agg    = isAgg(order);
@@ -423,7 +589,6 @@ function OrderListRow({ order, onStatusChange, onPaymentChange, onMarkPaid, onPr
 
   return (
     <View style={lr.row}>
-      {/* Order */}
       <View style={lr.c1}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
           <Text style={lr.orderNum}>#{order.order_number}</Text>
@@ -436,36 +601,32 @@ function OrderListRow({ order, onStatusChange, onPaymentChange, onMarkPaid, onPr
         </View>
         <Text style={lr.sub}>{fmtTime(order.created_at)}</Text>
       </View>
-      {/* Customer */}
       <View style={lr.c2}>
         <Text style={lr.customer} numberOfLines={1}>{order.customer_name || 'Walk-in'}</Text>
         {order.table_name ? <Text style={lr.sub}>Table {order.table_name}</Text> : null}
       </View>
-      {/* Type */}
       <View style={lr.c3}>
         <Text style={lr.type}>
           {(order.order_type ?? 'dine_in').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}
         </Text>
       </View>
-      {/* Items count */}
       <View style={[lr.c4, { alignItems: 'center' }]}>
         <View style={lr.countBadge}>
           <Text style={lr.countTxt}>{order.items?.length ?? 0}</Text>
         </View>
       </View>
-      {/* Total */}
       <View style={[lr.c5, { alignItems: 'flex-end' }]}>
         <Text style={lr.total}>₹{Number(order.total ?? 0).toFixed(2)}</Text>
       </View>
-      {/* Status */}
       <View style={lr.c6}>
-        <Pressable style={[lr.statusChip, { backgroundColor: cfg.bg, borderColor: cfg.border }]}
-          onPress={() => setShowStatus(true)}>
+        {/* Status chip — nativeID for measurement */}
+        <Pressable nativeID={statusId}
+          style={[lr.statusChip, { backgroundColor: cfg.bg, borderColor: cfg.border }]}
+          onPress={openStatus}>
           <View style={[lr.statusDot, { backgroundColor: cfg.dot }]} />
           <Text style={[lr.statusTxt, { color: cfg.text }]}>{cfg.label}</Text>
         </Pressable>
       </View>
-      {/* Payment */}
       <View style={lr.c7}>
         <View style={[lr.payChip, isPaid ? lr.paidChip : lr.unpaidChip]}>
           <Text style={[lr.payTxt, { color: isPaid ? '#16a34a' : '#d97706' }]}>
@@ -489,7 +650,6 @@ function OrderListRow({ order, onStatusChange, onPaymentChange, onMarkPaid, onPr
           </View>
         )}
       </View>
-      {/* Actions */}
       <View style={[lr.c8, { alignItems: 'flex-end', gap: 4 }]}>
         {agg && order.status === 'pending' && (
           <View style={{ flexDirection: 'row', gap: 4 }}>
@@ -510,34 +670,53 @@ function OrderListRow({ order, onStatusChange, onPaymentChange, onMarkPaid, onPr
               <Ionicons name="print-outline" size={13} color={PRIMARY} />
             </Pressable>
           )}
-          <Pressable style={[lr.iconBtn, { backgroundColor: '#f1f5f9', borderColor: '#e2e8f0' }]}
-            onPress={() => setShowAction(true)}>
+          {/* Three-dot button — nativeID for measurement */}
+          <Pressable nativeID={menuId}
+            style={[lr.iconBtn, { backgroundColor: '#f1f5f9', borderColor: '#e2e8f0' }]}
+            onPress={openAction}>
             <Ionicons name="ellipsis-horizontal" size={13} color="#64748b" />
           </Pressable>
         </View>
       </View>
 
-      <StatusModal order={order} visible={showStatus} onClose={() => setShowStatus(false)}
-        onSelect={(s) => onStatusChange(order.id, s)} />
-      <ActionModal order={order} visible={showAction} onClose={() => setShowAction(false)}
-        onStatusChange={onStatusChange} onMarkPaid={onMarkPaid} onPrint={onPrint}
-        onShowStatus={() => setShowStatus(true)} />
+      {showAction && actionPos && (
+        <ActionDropdown order={order} pos={actionPos}
+          onClose={() => setShowAction(false)}
+          onStatusChange={onStatusChange} onMarkPaid={onMarkPaid} onPrint={onPrint}
+          onShowStatus={openStatusFromAction} />
+      )}
+      {showStatus && statusPos && (
+        <StatusDropdown order={order} pos={statusPos}
+          onClose={() => setShowStatus(false)}
+          onSelect={(s) => onStatusChange(order.id, s)} />
+      )}
+      {showAction && !actionPos && (
+        <ActionSheetModal order={order} visible
+          onClose={() => setShowAction(false)}
+          onStatusChange={onStatusChange} onMarkPaid={onMarkPaid} onPrint={onPrint}
+          onShowStatus={openStatusFromAction} />
+      )}
+      {showStatus && !statusPos && (
+        <StatusPickerModal order={order} visible
+          onClose={() => setShowStatus(false)}
+          onSelect={(s) => onStatusChange(order.id, s)} />
+      )}
     </View>
   );
 }
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function OrdersScreen() {
-  const [orders,      setOrders]      = useState<Order[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [tab,         setTab]         = useState<TabKey>('all');
-  const [srcFilter,   setSrcFilter]   = useState('all');
-  const [dateRange,   setDateRange]   = useState('today');
-  const [search,      setSearch]      = useState('');
-  const [viewMode,    setViewMode]    = useState<'grid' | 'list'>('grid');
-  const [isUpdating,  setIsUpdating]  = useState(false);
-  const [toastMsg,    setToastMsg]    = useState('');
+  const [orders,     setOrders]     = useState<Order[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [tab,        setTab]        = useState<TabKey>('all');
+  const [srcFilter,  setSrcFilter]  = useState('all');
+  const [dateRange,  setDateRange]  = useState('today');
+  const [search,     setSearch]     = useState('');
+  const [viewMode,   setViewMode]   = useState<'grid' | 'list'>('grid');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [toastMsg,   setToastMsg]   = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { restaurant } = useAppStore();
   const { width } = useWindowDimensions();
@@ -545,7 +724,6 @@ export default function OrdersScreen() {
   const contentW  = isDesktop ? width - 220 : width;
   const numCols   = contentW >= 2200 ? 5 : contentW >= 1700 ? 4 : contentW >= 1200 ? 3 : contentW >= 700 ? 2 : 1;
 
-  // ── Data ──────────────────────────────────────────────────────────────────
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -565,13 +743,11 @@ export default function OrdersScreen() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [load]);
 
-  // ── Toast helper (replaces Alert.alert which is blocked on web) ──────────
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 3500);
   }, []);
 
-  // ── Actions ───────────────────────────────────────────────────────────────
   const handleStatusChange = useCallback(async (id: number, status: string) => {
     setIsUpdating(true);
     try {
@@ -601,7 +777,6 @@ export default function OrdersScreen() {
 
   const handlePrint = useCallback((order: Order) => printReceipt(order, restaurant), [restaurant]);
 
-  // ── Derived ───────────────────────────────────────────────────────────────
   const filtered = useMemo(() => orders.filter(o => {
     if (!matchTab(o, tab)) return false;
     if (srcFilter !== 'all' && (o.source ?? 'pos') !== srcFilter) return false;
@@ -618,11 +793,11 @@ export default function OrdersScreen() {
     const c: Record<TabKey, number> = { all: 0, pending: 0, inprogress: 0, completed: 0, cancelled: 0, paid: 0, unpaid: 0 };
     for (const o of orders) {
       c.all++;
-      if (o.status === 'pending')             c.pending++;
-      if (IN_PROGRESS.includes(o.status))     c.inprogress++;
-      if (o.status === 'completed')           c.completed++;
-      if (o.status === 'cancelled')           c.cancelled++;
-      if (o.payment_status === 'paid')        c.paid++;
+      if (o.status === 'pending')           c.pending++;
+      if (IN_PROGRESS.includes(o.status))   c.inprogress++;
+      if (o.status === 'completed')         c.completed++;
+      if (o.status === 'cancelled')         c.cancelled++;
+      if (o.payment_status === 'paid')      c.paid++;
       if (o.payment_status !== 'paid' && o.status !== 'cancelled') c.unpaid++;
     }
     return c;
@@ -640,14 +815,14 @@ export default function OrdersScreen() {
     return c;
   }, [orders]);
 
-  const dateLabel = DATE_PRESETS.find(r => r.key === dateRange)?.label ?? 'All Time';
+  const dateLabel  = DATE_PRESETS.find(r => r.key === dateRange)?.label ?? 'All Time';
+  const actionProps: ActionProps = {
+    onStatusChange: handleStatusChange, onPaymentChange: handlePaymentChange,
+    onMarkPaid: handleMarkPaid, onPrint: handlePrint, isUpdating,
+  };
 
-  const actionProps: ActionProps = { onStatusChange: handleStatusChange, onPaymentChange: handlePaymentChange, onMarkPaid: handleMarkPaid, onPrint: handlePrint, isUpdating };
-
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={s.shell}>
-      {/* ── Toast error banner ── */}
       {!!toastMsg && (
         <View style={s.toast}>
           <Ionicons name="alert-circle" size={14} color="#fff" />
@@ -658,7 +833,7 @@ export default function OrdersScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={GOLD} />}
         showsVerticalScrollIndicator={false}>
 
-        {/* ── Stat summary cards ── */}
+        {/* ── Stat summary ── */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           style={s.statsScroll} contentContainerStyle={[s.statsRow, isDesktop && { minWidth: '100%' }]}>
           {STAT_CARDS.map(sc => (
@@ -674,22 +849,17 @@ export default function OrdersScreen() {
           ))}
         </ScrollView>
 
-        {/* ── Filter section ── */}
+        {/* ── Filters ── */}
         <View style={s.filterSection}>
-
-          {/* Row 1: Tab pills */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabRow}>
             {TABS.map(t => {
               const active = tab === t.key;
               const count  = tabCounts[t.key];
               const accent = t.key === 'paid' ? '#16a34a' : t.key === 'unpaid' ? '#d97706' : FOREST;
               return (
-                <Pressable key={t.key}
-                  style={[s.tabPill, active && { backgroundColor: accent }]}
+                <Pressable key={t.key} style={[s.tabPill, active && { backgroundColor: accent }]}
                   onPress={() => setTab(t.key)}>
-                  <Text style={[s.tabPillTxt, active && { color: '#fff' }]}>
-                    {t.label}
-                  </Text>
+                  <Text style={[s.tabPillTxt, active && { color: '#fff' }]}>{t.label}</Text>
                   {count > 0 && (
                     <View style={[s.tabCount, active ? { backgroundColor: 'rgba(255,255,255,0.25)' } : {}]}>
                       <Text style={[s.tabCountTxt, active && { color: '#fff' }]}>{count}</Text>
@@ -700,9 +870,7 @@ export default function OrdersScreen() {
             })}
           </ScrollView>
 
-          {/* Row 2: Source chips + Date pills */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.row2}>
-            {/* Source chips */}
             {SOURCES.map(src => {
               const active = srcFilter === src.key;
               const sc     = src.key !== 'all' ? SOURCE_CFG[src.key as keyof typeof SOURCE_CFG] : null;
@@ -722,43 +890,31 @@ export default function OrdersScreen() {
                 </Pressable>
               );
             })}
-
             <View style={s.divider} />
-
-            {/* Date presets */}
             {DATE_PRESETS.map(dp => {
               const active = dateRange === dp.key;
               return (
-                <Pressable key={dp.key}
-                  style={[s.datePill, active && s.datePillActive]}
+                <Pressable key={dp.key} style={[s.datePill, active && s.datePillActive]}
                   onPress={() => setDateRange(dp.key)}>
-                  {dp.key === 'today' || dp.key === 'yesterday' || dp.key === 'week' || dp.key === 'month'
-                    ? <Ionicons name="calendar-outline" size={11} color={active ? '#fff' : '#64748b'} />
-                    : <Ionicons name="time-outline" size={11} color={active ? '#fff' : '#64748b'} />}
+                  <Ionicons name={dp.key === 'all' ? 'time-outline' : 'calendar-outline'} size={11}
+                    color={active ? '#fff' : '#64748b'} />
                   <Text style={[s.datePillTxt, active && { color: '#fff' }]}>{dp.label}</Text>
                 </Pressable>
               );
             })}
           </ScrollView>
 
-          {/* Row 3: Search + View toggle */}
           <View style={s.row3}>
             <View style={s.searchBox}>
               <Ionicons name="search-outline" size={14} color="#9ca3af" />
-              <TextInput
-                style={s.searchInput}
-                placeholder="Search by order #, customer, table…"
-                value={search}
-                onChangeText={setSearch}
-                placeholderTextColor="#9ca3af"
-              />
+              <TextInput style={s.searchInput} placeholder="Search by order #, customer, table…"
+                value={search} onChangeText={setSearch} placeholderTextColor="#9ca3af" />
               {search ? (
                 <Pressable onPress={() => setSearch('')}>
                   <Ionicons name="close-circle" size={15} color="#9ca3af" />
                 </Pressable>
               ) : null}
             </View>
-
             <View style={s.viewToggle}>
               <Pressable style={[s.viewBtn, viewMode === 'grid' && s.viewBtnActive]} onPress={() => setViewMode('grid')}>
                 <Ionicons name="grid-outline" size={15} color={viewMode === 'grid' ? '#fff' : '#64748b'} />
@@ -769,7 +925,6 @@ export default function OrdersScreen() {
             </View>
           </View>
 
-          {/* Active filter summary */}
           {(tab !== 'all' || srcFilter !== 'all' || dateRange !== 'today' || search) && (
             <View style={s.activeFilters}>
               <Ionicons name="funnel" size={12} color="#64748b" />
@@ -825,7 +980,7 @@ export default function OrdersScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator>
               <View style={{ minWidth: isDesktop ? contentW - 24 : 940 }}>
                 <View style={lr.header}>
-                  {['Order', 'Customer', 'Type', 'Items', 'Total', 'Status', 'Payment', 'Actions'].map((h, i) => (
+                  {['Order','Customer','Type','Items','Total','Status','Payment','Actions'].map((h, i) => (
                     <Text key={h} style={[lr.hCell, [lr.c1,lr.c2,lr.c3,lr.c4,lr.c5,lr.c6,lr.c7,lr.c8][i]]}>{h}</Text>
                   ))}
                 </View>
@@ -838,7 +993,6 @@ export default function OrdersScreen() {
             </ScrollView>
           </View>
         )}
-
         <View style={{ height: 48 }} />
       </ScrollView>
     </View>
@@ -847,78 +1001,82 @@ export default function OrdersScreen() {
 
 // ── StyleSheets ───────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  shell:        { flex: 1, backgroundColor: '#f0f2f7' },
-  toast:        { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#dc2626', paddingHorizontal: 14, paddingVertical: 10, zIndex: 99 },
-  toastTxt:     { flex: 1, fontSize: 13, color: '#fff', fontWeight: '600' },
-
-  // Stat cards
-  statsScroll:  { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  statsRow:     { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
-  statCard:     { minWidth: 148, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
-  statLabel:    { fontSize: 12, fontWeight: '500', color: '#64748b', marginBottom: 4 },
-  statNum:      { fontSize: 26, fontWeight: '800', color: '#0f172a', letterSpacing: -0.5 },
-  statIconBox:  { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-
-  // Filter section
-  filterSection: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-
-  // Tab pills row
-  tabRow:       { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4, gap: 6 },
-  tabPill:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1.5, borderColor: 'transparent' },
-  tabPillTxt:   { fontSize: 12.5, fontWeight: '700', color: '#475569' },
-  tabCount:     { backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 10, minWidth: 18, paddingHorizontal: 5, paddingVertical: 1, alignItems: 'center', justifyContent: 'center' },
-  tabCountTxt:  { fontSize: 10, fontWeight: '800', color: '#374151' },
-
-  // Source + date row
-  row2:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, gap: 6 },
-  srcChip:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
-  srcDot:       { width: 6, height: 6, borderRadius: 3 },
-  srcChipTxt:   { fontSize: 12, fontWeight: '700', color: '#374151' },
-  srcCount:     { backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1 },
-  srcCountTxt:  { fontSize: 9.5, fontWeight: '800', color: '#374151' },
-  divider:      { width: 1, height: 20, backgroundColor: '#e2e8f0', marginHorizontal: 4 },
-  datePill:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  shell:          { flex: 1, backgroundColor: '#f0f2f7' },
+  toast:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#dc2626', paddingHorizontal: 14, paddingVertical: 10, zIndex: 99 },
+  toastTxt:       { flex: 1, fontSize: 13, color: '#fff', fontWeight: '600' },
+  statsScroll:    { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  statsRow:       { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
+  statCard:       { minWidth: 148, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  statLabel:      { fontSize: 12, fontWeight: '500', color: '#64748b', marginBottom: 4 },
+  statNum:        { fontSize: 26, fontWeight: '800', color: '#0f172a', letterSpacing: -0.5 },
+  statIconBox:    { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  filterSection:  { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  tabRow:         { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4, gap: 6 },
+  tabPill:        { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1.5, borderColor: 'transparent' },
+  tabPillTxt:     { fontSize: 12.5, fontWeight: '700', color: '#475569' },
+  tabCount:       { backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 10, minWidth: 18, paddingHorizontal: 5, paddingVertical: 1, alignItems: 'center', justifyContent: 'center' },
+  tabCountTxt:    { fontSize: 10, fontWeight: '800', color: '#374151' },
+  row2:           { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, gap: 6 },
+  srcChip:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  srcDot:         { width: 6, height: 6, borderRadius: 3 },
+  srcChipTxt:     { fontSize: 12, fontWeight: '700', color: '#374151' },
+  srcCount:       { backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1 },
+  srcCountTxt:    { fontSize: 9.5, fontWeight: '800', color: '#374151' },
+  divider:        { width: 1, height: 20, backgroundColor: '#e2e8f0', marginHorizontal: 4 },
+  datePill:       { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
   datePillActive: { backgroundColor: FOREST, borderColor: FOREST },
-  datePillTxt:  { fontSize: 12, fontWeight: '600', color: '#374151' },
-
-  // Search + toggle row
-  row3:         { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
-  searchBox:    { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f8fafc', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9, borderWidth: 1.5, borderColor: '#e2e8f0' },
-  searchInput:  { flex: 1, fontSize: 13, color: '#111827' },
-  viewToggle:   { flexDirection: 'row', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, overflow: 'hidden', backgroundColor: '#f8fafc', padding: 2, gap: 2 },
-  viewBtn:      { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 7 },
-  viewBtnActive:{ backgroundColor: FOREST },
-
-  // Active filter summary
+  datePillTxt:    { fontSize: 12, fontWeight: '600', color: '#374151' },
+  row3:           { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
+  searchBox:      { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f8fafc', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9, borderWidth: 1.5, borderColor: '#e2e8f0' },
+  searchInput:    { flex: 1, fontSize: 13, color: '#111827' },
+  viewToggle:     { flexDirection: 'row', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, overflow: 'hidden', backgroundColor: '#f8fafc', padding: 2, gap: 2 },
+  viewBtn:        { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 7 },
+  viewBtnActive:  { backgroundColor: FOREST },
   activeFilters:  { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingBottom: 10 },
   activeFiltersTxt: { flex: 1, fontSize: 11.5, color: '#64748b', fontWeight: '500' },
   clearFilters:   { fontSize: 11.5, fontWeight: '700', color: '#dc2626' },
+  resultsBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8 },
+  resultsCount:   { fontSize: 12.5, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 },
+  loadWrap:       { paddingTop: 80, alignItems: 'center', gap: 12 },
+  loadTxt:        { fontSize: 14, color: '#9ca3af' },
+  emptyWrap:      { paddingTop: 80, alignItems: 'center', gap: 12 },
+  emptyIcon:      { width: 72, height: 72, borderRadius: 36, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
+  emptyTitle:     { fontSize: 16, fontWeight: '700', color: '#374151' },
+  emptySub:       { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 40 },
+  grid:           { padding: 6, width: '100%' },
+  gridRow:        { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
+  listWrap:       { margin: 12, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+});
 
-  // Results bar
-  resultsBar:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8 },
-  resultsCount: { fontSize: 12.5, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 },
-
-  // States
-  loadWrap:     { paddingTop: 80, alignItems: 'center', gap: 12 },
-  loadTxt:      { fontSize: 14, color: '#9ca3af' },
-  emptyWrap:    { paddingTop: 80, alignItems: 'center', gap: 12 },
-  emptyIcon:    { width: 72, height: 72, borderRadius: 36, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
-  emptyTitle:   { fontSize: 16, fontWeight: '700', color: '#374151' },
-  emptySub:     { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 40 },
-
-  // Grid
-  grid:         { padding: 6, width: '100%' },
-  gridRow:      { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
-
-  // List
-  listWrap:     { margin: 12, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+// Positioned dropdown styles
+const dd = StyleSheet.create({
+  panel: {
+    position: 'absolute',
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 24,
+    paddingVertical: 6,
+    zIndex: 9999,
+  },
+  header:      { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 6 },
+  headerTitle: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  headerSub:   { fontSize: 11, color: '#9ca3af', marginTop: 2 },
+  sep:         { height: 1, backgroundColor: '#f1f5f9', marginVertical: 4, marginHorizontal: 8 },
+  item:        { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 9, marginHorizontal: 4, marginVertical: 1 },
+  itemIcon:    { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  itemLabel:   { flex: 1, fontSize: 13, fontWeight: '600', color: '#1f2937' },
+  statusDot:   { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
 });
 
 // Order card styles
 const cd = StyleSheet.create({
   wrap:        { backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: '#e8edf2', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
-
-  // Dark header
   head:        { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: FOREST, paddingHorizontal: 14, paddingVertical: 12 },
   headL:       { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
   avatar:      { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
@@ -930,13 +1088,9 @@ const cd = StyleSheet.create({
   headR:       { alignItems: 'flex-end', gap: 4, flexShrink: 0 },
   time:        { fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
   menuBtn:     { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
-
-  // Customer
   customerRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 2 },
   customerName:{ fontSize: 12.5, fontWeight: '600', color: '#374151', flex: 1 },
   extId:       { fontSize: 11, color: '#9ca3af' },
-
-  // Items
   itemsWrap:   { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   itemRow:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 3 },
   itemDot:     { width: 5, height: 5, borderRadius: 3, backgroundColor: '#cbd5e1', flexShrink: 0 },
@@ -947,24 +1101,20 @@ const cd = StyleSheet.create({
   noItems:     { fontSize: 12, color: '#f59e0b', fontStyle: 'italic' },
   notesBox:    { flexDirection: 'row', alignItems: 'flex-start', gap: 5, backgroundColor: '#fffbeb', borderRadius: 7, padding: 7, marginTop: 6 },
   notesText:   { flex: 1, fontSize: 11.5, color: '#92400e', lineHeight: 16 },
-
-  // Total bar
   totalBar:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 8, backgroundColor: '#fafbfc', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   totalAmt:    { fontSize: 18, fontWeight: '800', color: '#0f172a', letterSpacing: -0.3 },
   payMethodRow:{ flexDirection: 'row', gap: 5 },
   pmBtn:       { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff' },
   pmBtnActive: { backgroundColor: FOREST, borderColor: FOREST },
   pmText:      { fontSize: 11, fontWeight: '700', color: '#374151' },
-
-  // Footer
   footer:      { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10, flexWrap: 'wrap' },
-  payPill:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
-  payDot:       { width: 6, height: 6, borderRadius: 3 },
-  payText:      { fontSize: 11, fontWeight: '700' },
-  paidPill:     { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
-  unpaidPill:   { backgroundColor: '#fff7ed', borderColor: '#fde68a' },
-  markPaidBtn:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20, backgroundColor: '#16a34a' },
-  markPaidTxt:  { fontSize: 11, fontWeight: '700', color: '#fff' },
+  payPill:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
+  payDot:      { width: 6, height: 6, borderRadius: 3 },
+  payText:     { fontSize: 11, fontWeight: '700' },
+  paidPill:    { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  unpaidPill:  { backgroundColor: '#fff7ed', borderColor: '#fde68a' },
+  markPaidBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20, backgroundColor: '#16a34a' },
+  markPaidTxt: { fontSize: 11, fontWeight: '700', color: '#fff' },
   statusPill:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
   statusDot:   { width: 6, height: 6, borderRadius: 3 },
   statusTxt:   { fontSize: 11.5, fontWeight: '700' },
@@ -1015,15 +1165,16 @@ const lr = StyleSheet.create({
   iconBtn:   { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
 });
 
-// Modal styles
-const m = StyleSheet.create({
-  backdrop:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
-  sheet:     { backgroundColor: '#fff', borderRadius: 20, paddingTop: 8, width: 320, maxWidth: '90%', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: { width: 0, height: 8 }, elevation: 16 },
-  sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0', alignSelf: 'center', marginBottom: 4 },
-  sheetTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a', paddingHorizontal: 18, paddingTop: 6, paddingBottom: 2 },
-  sheetSub:   { fontSize: 12, color: '#9ca3af', paddingHorizontal: 18, paddingBottom: 8 },
-  item:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 10, marginHorizontal: 6, marginVertical: 1 },
-  itemTxt:   { flex: 1, fontSize: 14, color: '#374151', fontWeight: '500' },
-  dot:       { width: 8, height: 8, borderRadius: 4 },
-  actionIcon:{ width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+// Fallback sheet modal styles (native)
+const ms = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet:        { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 8, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 16 },
+  centeredSheet:{ backgroundColor: '#fff', borderRadius: 20, paddingTop: 8, width: 320, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: { width: 0, height: 8 }, elevation: 16 },
+  handle:   { width: 36, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0', alignSelf: 'center', marginBottom: 8 },
+  title:    { fontSize: 15, fontWeight: '800', color: '#0f172a', paddingHorizontal: 18, paddingTop: 4, paddingBottom: 2 },
+  sub:      { fontSize: 12, color: '#9ca3af', paddingHorizontal: 18, paddingBottom: 8 },
+  item:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 10, marginHorizontal: 6, marginVertical: 1 },
+  itemTxt:  { flex: 1, fontSize: 14, color: '#374151', fontWeight: '500' },
+  dot:      { width: 8, height: 8, borderRadius: 4 },
+  itemIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
 });
