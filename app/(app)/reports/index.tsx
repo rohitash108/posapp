@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator
 import { Ionicons } from '@expo/vector-icons';
 import { format, subDays } from 'date-fns';
 import { reportsApi } from '@/api/reports';
+import { useThemedScreen } from '@/theme/useThemedScreen';
 
 const PERIODS = [
   { label: 'Today',    days: 0 },
@@ -16,6 +17,7 @@ const METHOD_COLORS: Record<string, string> = { cash: '#16a34a', card: '#2563eb'
 const BAR_COLORS = ['#C9A52A', '#1A2B1A', '#2563eb', '#16a34a', '#7c3aed', '#dc2626', '#d97706'];
 
 export default function ReportsScreen() {
+  const t = useThemedScreen();
   const [activeTab, setActiveTab] = useState(0);
   const [period, setPeriod]       = useState(1);
   const [showCustom, setShowCustom] = useState(false);
@@ -66,16 +68,16 @@ export default function ReportsScreen() {
   const maxSales = Math.max(...salesEntries.map((e: any) => e.revenue ?? e.sales ?? 0), 1);
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
+    <View style={[t.shell, { flex: 1 }]}>
       {/* Period selector */}
       <View style={s.periodBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {PERIODS.map((p, idx) => (
-            <TouchableOpacity key={p.label} style={[s.periodChip, period === idx && !showCustom && s.periodActive]} onPress={() => { setShowCustom(false); setPeriod(idx); }}>
+            <TouchableOpacity key={p.label} style={[s.periodChip, period === idx && !showCustom && t.chromeBtn, period === idx && !showCustom && { borderColor: t.colors.sidebar }]} onPress={() => { setShowCustom(false); setPeriod(idx); }}>
               <Text style={[s.periodText, period === idx && !showCustom && s.periodTextActive]}>{p.label}</Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity style={[s.periodChip, showCustom && s.periodActive]} onPress={() => setShowCustom(true)}>
+          <TouchableOpacity style={[s.periodChip, showCustom && t.chromeBtn, showCustom && { borderColor: t.colors.sidebar }]} onPress={() => setShowCustom(true)}>
             <Ionicons name="calendar-outline" size={13} color={showCustom ? '#fff' : '#374151'} />
             <Text style={[s.periodText, showCustom && s.periodTextActive]}>Custom</Text>
           </TouchableOpacity>
@@ -84,14 +86,14 @@ export default function ReportsScreen() {
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'flex-end' }}>
             <View style={{ flex: 1 }}><Text style={s.dl}>From</Text><TextInput style={s.di} value={dateFrom} onChangeText={setDateFrom} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" /></View>
             <View style={{ flex: 1 }}><Text style={s.dl}>To</Text><TextInput style={s.di} value={dateTo} onChangeText={setDateTo} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" /></View>
-            <TouchableOpacity style={s.applyBtn} onPress={() => { setLoading(true); load(); }}><Text style={s.applyText}>Apply</Text></TouchableOpacity>
+            <TouchableOpacity style={[s.applyBtn, t.chromeBtn]} onPress={() => { setLoading(true); load(); }}><Text style={s.applyText}>Apply</Text></TouchableOpacity>
           </View>
         )}
       </View>
 
       {/* Summary stats */}
       {summary && (
-        <View style={s.statsRow}>
+        <View style={[s.statsRow, t.chrome]}>
           {[
             { label: "Today's Sales", val: `₹${Number(summary.today_sales ?? 0).toFixed(0)}`, color: '#C9A52A' },
             { label: 'Total Orders', val: String(summary.total_orders ?? 0), color: '#2563eb' },
@@ -109,8 +111,8 @@ export default function ReportsScreen() {
       {/* Tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabBar} contentContainerStyle={{ paddingHorizontal: 10, gap: 4 }}>
         {TABS.map((tab, idx) => (
-          <TouchableOpacity key={tab} style={[s.tab, activeTab === idx && s.tabActive]} onPress={() => setActiveTab(idx)}>
-            <Text style={[s.tabText, activeTab === idx && s.tabTextActive]}>{tab}</Text>
+          <TouchableOpacity key={tab} style={[s.tab, activeTab === idx && { backgroundColor: t.colors.surfaceAlt }]} onPress={() => setActiveTab(idx)}>
+            <Text style={[s.tabText, activeTab === idx && { color: t.colors.sidebar, fontWeight: '800' }]}>{tab}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -144,7 +146,7 @@ export default function ReportsScreen() {
                   </View>
                 )}
                 {salesData?.total_revenue !== undefined && (
-                  <View style={s.totalRow}><Text style={s.totalLabel}>Total Revenue</Text><Text style={s.totalVal}>₹{Number(salesData.total_revenue).toFixed(2)}</Text></View>
+                  <View style={s.totalRow}><Text style={s.totalLabel}>Total Revenue</Text><Text style={[s.totalVal, { color: t.colors.sidebar }]}>₹{Number(salesData.total_revenue).toFixed(2)}</Text></View>
                 )}
               </View>
             )}
@@ -182,7 +184,8 @@ export default function ReportsScreen() {
                   topItems.map((item: any, idx: number) => {
                     const val = item.total_revenue ?? item.quantity ?? 0;
                     const pct = (val / maxTopItem) * 100;
-                    const color = BAR_COLORS[idx % BAR_COLORS.length];
+                    const rawColor = BAR_COLORS[idx % BAR_COLORS.length];
+                    const color = rawColor === '#1A2B1A' ? t.colors.sidebar : rawColor;
                     return (
                       <View key={idx} style={s.itemRow}>
                         <Text style={s.itemRank}>#{idx + 1}</Text>
@@ -234,7 +237,7 @@ export default function ReportsScreen() {
                     })}
                     <View style={[s.totalRow, { marginTop: 16 }]}>
                       <Text style={s.totalLabel}>Grand Total</Text>
-                      <Text style={s.totalVal}>₹{totalRevenue.toFixed(2)}</Text>
+                      <Text style={[s.totalVal, { color: t.colors.sidebar }]}>₹{totalRevenue.toFixed(2)}</Text>
                     </View>
                   </>
                 )}

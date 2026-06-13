@@ -7,7 +7,7 @@
  */
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, Image,
+  View, Text, FlatList, Pressable, StyleSheet, Image,
   TextInput, ScrollView, Modal, Alert, ActivityIndicator, Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -25,6 +25,7 @@ import { ordersApi } from '@/api/orders';
 import { couponsApi } from '@/api/coupons';
 import client, { API_BASE_URL } from '@/api/client';
 import type { Category, Item, Variation, RestaurantTable, Customer, StaffMember, Order } from '@/types';
+import { useThemedScreen } from '@/theme/useThemedScreen';
 
 const SERVER_URL = API_BASE_URL.replace('/api/mobile', '');
 
@@ -212,6 +213,7 @@ ${receivedAmt > 0 ? `<div class="row"><span>Received</span><span>${currency}${re
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function POSScreen() {
+  const t = useThemedScreen();
   const [categories, setCategories]       = useState<Category[]>([]);
   const [allItems, setAllItems]           = useState<Item[]>([]);
   const [tables, setTables]               = useState<RestaurantTable[]>([]);
@@ -226,16 +228,30 @@ export default function POSScreen() {
   const [showCart, setShowCart]           = useState(false);
   const [showCustPicker, setShowCustPicker] = useState(false);
   const [showWaiterPicker, setShowWaiterPicker] = useState(false);
+  const [showTablePicker, setShowTablePicker] = useState(false);
   const [showCustomItem, setShowCustomItem] = useState(false);
   const [placing, setPlacing]             = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [walkInName, setWalkInName]       = useState('');
+  // Restored from cartStore on mount so values survive navigation away and back
+  const [walkInName, setWalkInName]       = useState(() => {
+    const c = useCartStore.getState().cart;
+    return !c.customer_id && c.customer_name && c.customer_name !== 'Walk-in'
+      ? c.customer_name : '';
+  });
   const [custSearch, setCustSearch]       = useState('');
   const [waiterSearch, setWaiterSearch]   = useState('');
-  const [discountInput, setDiscountInput] = useState('');
-  const [couponInput, setCouponInput]     = useState('');
+  const [tableSearch, setTableSearch]     = useState('');
+  const [discountInput, setDiscountInput] = useState(() => {
+    const d = useCartStore.getState().cart.discount_amount ?? 0;
+    return d > 0 ? String(d) : '';
+  });
+  const [couponInput, setCouponInput]     = useState(
+    () => useCartStore.getState().cart.coupon_code ?? ''
+  );
   const [couponLoading, setCouponLoading] = useState(false);
-  const [notesInput, setNotesInput]       = useState('');
+  const [notesInput, setNotesInput]       = useState(
+    () => useCartStore.getState().cart.notes ?? ''
+  );
   const [receivedInput, setReceivedInput] = useState('');
   const [customItemName, setCustomItemName] = useState('');
   const [customItemPrice, setCustomItemPrice] = useState('');
@@ -248,9 +264,30 @@ export default function POSScreen() {
 
   const {
     cart, addItem, updateQuantity, clearCart, getSubtotal, getTotal,
-    setOrderType, setTable, setCustomer, setWaiter, setDiscount, setNotes,
+    setOrderType, setTable, switchTable, setCustomer, setWaiter, setDiscount, setNotes,
     setCoupon, setKotPrinted,
   } = useCartStore();
+
+  /**
+   * After switchTable() replaces the active cart in the store, this helper
+   * reads the new cart and syncs the local mirror state (the TextInput values
+   * that drive discount / notes / coupon / walkInName in the UI).
+   * Must be called immediately after every switchTable() call.
+   */
+  function syncLocalFromCart() {
+    const c = useCartStore.getState().cart;
+    const d = c.discount_amount ?? 0;
+    setDiscountInput(d > 0 ? String(d) : '');
+    setNotesInput(c.notes ?? '');
+    setCouponInput(c.coupon_code ?? '');
+    setWalkInName(
+      !c.customer_id && c.customer_name && c.customer_name !== 'Walk-in'
+        ? c.customer_name
+        : ''
+    );
+    setQuickPct(null);
+    setCustomPctInput('');
+  }
   const { isOnline, taxes, restaurant } = useAppStore();
   const taxRate = taxes[0]?.rate ?? 0;
   const { width } = useWindowDimensions();
@@ -612,31 +649,33 @@ export default function POSScreen() {
             </View>
           )}
           {/* Action buttons */}
-          <TouchableOpacity style={su.kotBtn}
+          <Pressable
+            style={({ pressed }) => [su.kotBtn, pressed && { opacity: 0.8 }]}
             onPress={() => lastOrderData && printKOT(
               lastOrderData.items, lastOrderData.order_type,
               lastOrderData.restaurant_table_id, tables,
               lastOrderNum ?? undefined, lastOrderData.notes, restaurant?.name
             )}
           >
-            <Ionicons name="print-outline" size={16} color="#1A2B1A" />
-            <Text style={su.kotText}>Print KOT</Text>
+            <Ionicons name="print-outline" size={16} color={t.colors.brandDark} />
+            <Text style={[su.kotText, { color: t.colors.brandDark }]}>Print KOT</Text>
             <Text style={su.kotSub}>(Kitchen)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={su.billBtn}
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [su.billBtn, t.chromeBtn, pressed && { opacity: 0.85 }]}
             onPress={() => lastOrderData && printOrderReceipt(lastOrderData, restaurant, taxRate)}
           >
             <Ionicons name="print" size={16} color="#fff" />
             <Text style={su.billText}>Print Bill</Text>
             <Text style={su.billSub}>(Customer)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={su.completeBtn} onPress={handleCompleteOrder}>
+          </Pressable>
+          <Pressable style={({ pressed }) => [su.completeBtn, pressed && { opacity: 0.85 }]} onPress={handleCompleteOrder}>
             <Ionicons name="checkmark-circle" size={16} color="#fff" />
             <Text style={su.completeText}>Complete Order</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={su.closeBtn} onPress={handleNewOrder}>
+          </Pressable>
+          <Pressable style={({ pressed }) => [su.closeBtn, pressed && { opacity: 0.85 }]} onPress={handleNewOrder}>
             <Text style={su.closeText}>× Close</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
     </Modal>
@@ -648,14 +687,14 @@ export default function POSScreen() {
       {/* ── Order type tabs ── */}
       <View style={cp.orderTypes}>
         {ORDER_TYPES.map(t => (
-          <TouchableOpacity
+          <Pressable
             key={t.key}
-            style={[cp.typeBtn, cart.order_type === t.key && cp.typeBtnActive]}
+            style={({ pressed }) => [cp.typeBtn, cart.order_type === t.key && cp.typeBtnActive, pressed && { opacity: 0.8 }]}
             onPress={() => setOrderType(t.key as any)}
           >
             <Ionicons name={t.icon} size={13} color={cart.order_type === t.key ? '#fff' : '#6b7280'} />
             <Text style={[cp.typeBtnText, cart.order_type === t.key && cp.typeBtnTextActive]}>{t.label}</Text>
-          </TouchableOpacity>
+          </Pressable>
         ))}
       </View>
 
@@ -664,17 +703,17 @@ export default function POSScreen() {
         {/* Waiter */}
         <View style={cp.halfField}>
           <Text style={cp.fieldLabel}>Waiter</Text>
-          <TouchableOpacity style={cp.fieldBox} onPress={() => setShowWaiterPicker(true)}>
+          <Pressable style={cp.fieldBox} onPress={() => setShowWaiterPicker(true)}>
             <Ionicons name="person-circle-outline" size={13} color="#9ca3af" />
             <Text style={[cp.fieldBoxText, cart.waiter_name && { color: '#111827' }]} numberOfLines={1}>
               {cart.waiter_name || 'Waiter'}
             </Text>
             {cart.waiter_name ? (
-              <TouchableOpacity onPress={() => setWaiter(undefined, undefined)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Pressable onPress={() => setWaiter(undefined, undefined)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                 <Ionicons name="close-circle" size={13} color="#9ca3af" />
-              </TouchableOpacity>
+              </Pressable>
             ) : null}
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         {/* Customer */}
@@ -690,37 +729,50 @@ export default function POSScreen() {
                 placeholderTextColor="#9ca3af"
               />
               {(walkInName || cart.customer_name) ? (
-                <TouchableOpacity onPress={() => { setWalkInName(''); setCustomer(undefined, undefined, undefined); }}>
+                <Pressable onPress={() => { setWalkInName(''); setCustomer(undefined, undefined, undefined); }}>
                   <Ionicons name="close-circle" size={13} color="#9ca3af" />
-                </TouchableOpacity>
+                </Pressable>
               ) : null}
             </View>
-            <TouchableOpacity style={cp.iconSmBtn} onPress={() => setShowCustPicker(true)}>
+            <Pressable style={[cp.iconSmBtn, t.chromeBtn]} onPress={() => setShowCustPicker(true)}>
               <Ionicons name="add" size={14} color="#fff" />
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       </View>
 
-      {/* ── Table selector ── */}
+      {/* ── Table selector (searchable picker — scales to 50+ tables) ── */}
       {cart.order_type === 'dine_in' && tables.length > 0 && (
         <View style={cp.tableSection}>
           <View style={cp.tableLabelRow}>
             <Text style={cp.fieldLabel}>Table</Text>
-            <View style={cp.requiredDot}><Text style={cp.requiredStar}>*</Text></View>
+            <View style={cp.requiredDot}><Text style={[cp.requiredStar, { color: t.colors.danger }]}>*</Text></View>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-            <TouchableOpacity style={[cp.tableChip, !cart.table_id && cp.tableChipActive]} onPress={() => setTable(undefined)}>
-              <Text style={[cp.tableChipText, !cart.table_id && cp.tableChipTextActive]}>—</Text>
-            </TouchableOpacity>
-            {tables.map(t => (
-              <TouchableOpacity key={t.id}
-                style={[cp.tableChip, cart.table_id === t.id && cp.tableChipActive]}
-                onPress={() => setTable(t.id)}>
-                <Text style={[cp.tableChipText, cart.table_id === t.id && cp.tableChipTextActive]}>{t.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          <View style={cp.fieldRow}>
+            <Pressable
+              style={({ pressed }) => [cp.fieldBox, { flex: 1 }, pressed && { opacity: 0.8 }]}
+              onPress={() => setShowTablePicker(true)}
+            >
+              <Ionicons name="grid-outline" size={13} color={cart.table_id ? '#0D76E1' : '#9ca3af'} />
+              <Text
+                style={[cp.fieldBoxText, { flex: 1 }, cart.table_id ? { color: '#111827', fontWeight: '600' as const } : undefined]}
+                numberOfLines={1}
+              >
+                {cart.table_id
+                  ? tables.find(tb => tb.id === cart.table_id)?.name ?? `Table ${cart.table_id}`
+                  : 'Select table...'}
+              </Text>
+              <Ionicons name="chevron-down" size={13} color="#9ca3af" />
+            </Pressable>
+            {cart.table_id ? (
+              <Pressable
+                style={({ pressed }) => [cp.iconSmBtn, { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fca5a5' }, pressed && { opacity: 0.75 }]}
+                onPress={() => { switchTable(undefined); syncLocalFromCart(); }}
+              >
+                <Ionicons name="close" size={14} color="#dc2626" />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       )}
 
@@ -728,16 +780,17 @@ export default function POSScreen() {
       <View style={cp.orderedHeader}>
         <Text style={cp.orderedTitle}>Ordered Menus</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <TouchableOpacity style={cp.addCustomBtn} onPress={() => setShowCustomItem(true)}>
+          <Pressable style={cp.addCustomBtn} onPress={() => setShowCustomItem(true)}>
             <Ionicons name="add" size={13} color="#374151" />
             <Text style={cp.addCustomText}>Add custom item</Text>
-          </TouchableOpacity>
+          </Pressable>
           <Text style={cp.totalMenus}>Total Menus : {cart.items.length}</Text>
         </View>
       </View>
 
-      {/* ── Cart items ── */}
-      <ScrollView style={cp.itemList} showsVerticalScrollIndicator={false}>
+      {/* ── Cart items + summary + buttons (single scroll so Place Order is always reachable) ── */}
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        {/* Cart items */}
         {cart.items.length === 0 ? (
           <View style={cp.emptyCart}>
             <Ionicons name="cart-outline" size={32} color="#d1d5db" />
@@ -753,17 +806,17 @@ export default function POSScreen() {
                 {item.variation && <Text style={cp.cartVar}>{item.variation}</Text>}
               </View>
               <View style={cp.qtyRow}>
-                <TouchableOpacity style={cp.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity - 1)}>
+                <Pressable style={cp.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity - 1)}>
                   <Ionicons name="remove" size={11} color="#374151" />
-                </TouchableOpacity>
+                </Pressable>
                 <Text style={cp.qtyNum}>{item.quantity}</Text>
-                <TouchableOpacity style={cp.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity + 1)}>
+                <Pressable style={cp.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity + 1)}>
                   <Ionicons name="add" size={11} color="#374151" />
-                </TouchableOpacity>
+                </Pressable>
               </View>
-              <TouchableOpacity style={cp.removeBtn} onPress={() => updateQuantity(item.uuid, 0)}>
+              <Pressable style={cp.removeBtn} onPress={() => updateQuantity(item.uuid, 0)}>
                 <Ionicons name="close" size={13} color="#6b7280" />
-              </TouchableOpacity>
+              </Pressable>
             </View>
             {/* Item Rate | Amount | Total */}
             <View style={cp.cartItemMeta}>
@@ -782,7 +835,6 @@ export default function POSScreen() {
             </View>
           </View>
         ))}
-      </ScrollView>
 
       {/* ── Payment Summary ── */}
       <View style={cp.paymentSummary}>
@@ -810,9 +862,9 @@ export default function POSScreen() {
           <View style={[cp.couponActive]}>
             <Ionicons name="ticket-outline" size={13} color="#16a34a" />
             <Text style={cp.couponActiveText}>{cart.coupon_code} (−₹{(cart.coupon_discount ?? 0).toFixed(2)})</Text>
-            <TouchableOpacity onPress={handleRemoveCoupon}>
+            <Pressable onPress={handleRemoveCoupon}>
               <Ionicons name="close-circle" size={15} color="#16a34a" />
-            </TouchableOpacity>
+            </Pressable>
           </View>
         ) : (
           <View style={cp.couponRow}>
@@ -826,7 +878,7 @@ export default function POSScreen() {
                 placeholderTextColor="#9ca3af"
               />
             </View>
-            <TouchableOpacity
+            <Pressable
               style={[cp.couponApplyBtn, (!couponInput.trim() || couponLoading) && { opacity: 0.5 }]}
               onPress={handleApplyCoupon}
               disabled={couponLoading || !couponInput.trim()}
@@ -834,7 +886,7 @@ export default function POSScreen() {
               {couponLoading
                 ? <ActivityIndicator size={11} color="#fff" />
                 : <Text style={cp.couponApplyText}>Apply</Text>}
-            </TouchableOpacity>
+            </Pressable>
           </View>
         )}
 
@@ -843,11 +895,11 @@ export default function POSScreen() {
         <Text style={cp.quickDiscLabel}>Quick Discount %</Text>
         <View style={cp.quickDiscRow}>
           {[5, 10, 15, 20].map(pct => (
-            <TouchableOpacity key={pct}
+            <Pressable key={pct}
               style={[cp.quickDiscBtn, quickPct === pct && cp.quickDiscBtnActive]}
               onPress={() => handleQuickDiscount(pct)}>
               <Text style={[cp.quickDiscText, quickPct === pct && cp.quickDiscTextActive]}>{pct}%</Text>
-            </TouchableOpacity>
+            </Pressable>
           ))}
         </View>
 
@@ -864,12 +916,12 @@ export default function POSScreen() {
             />
             <Text style={cp.customPctSymbol}>%</Text>
           </View>
-          <TouchableOpacity style={cp.customApplyBtn} onPress={handleCustomPctApply}>
+          <Pressable style={[cp.customApplyBtn, t.chromeBtn]} onPress={handleCustomPctApply}>
             <Text style={cp.customApplyText}>Apply</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={cp.customClearBtn} onPress={handleDiscountClear}>
+          </Pressable>
+          <Pressable style={cp.customClearBtn} onPress={handleDiscountClear}>
             <Text style={cp.customClearText}>Clear</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         {/* Discount ₹ manual input */}
@@ -912,7 +964,7 @@ export default function POSScreen() {
         {/* Change / Balance due */}
         <View style={cp.changeDueRow}>
           <Text style={cp.changeDueLabel}>Change / Balance due</Text>
-          <Text style={[cp.changeDueVal, { color: received > 0 && change >= 0 ? '#16a34a' : '#ef4444' }]}>
+          <Text style={[cp.changeDueVal, { color: received > 0 && change >= 0 ? t.colors.success : t.colors.danger }]}>
             ₹{received > 0 ? change.toFixed(2) : total.toFixed(2)}
           </Text>
         </View>
@@ -923,12 +975,12 @@ export default function POSScreen() {
         <Text style={cp.sectionTitle}>Payment Method</Text>
         <View style={cp.payRow}>
           {PAYMENT_METHODS.map(pm => (
-            <TouchableOpacity key={pm.key}
-              style={[cp.payBtn, paymentMethod === pm.key && cp.payBtnActive]}
+            <Pressable key={pm.key}
+              style={[cp.payBtn, paymentMethod === pm.key && t.chromeBtn, paymentMethod === pm.key && { borderColor: t.colors.sidebar }]}
               onPress={() => setPaymentMethod(pm.key)}>
               <Ionicons name={pm.icon} size={14} color={paymentMethod === pm.key ? '#fff' : '#374151'} />
               <Text style={[cp.payText, paymentMethod === pm.key && cp.payTextActive]}>{pm.label}</Text>
-            </TouchableOpacity>
+            </Pressable>
           ))}
         </View>
       </View>
@@ -954,8 +1006,8 @@ export default function POSScreen() {
 
       {/* ── Primary: Place an Order ── */}
       <View style={cp.btnSection}>
-        <TouchableOpacity
-          style={[cp.placeBtn, (placing || cartCount === 0) && { opacity: 0.5 }]}
+        <Pressable
+          style={({ pressed }) => [cp.placeBtn, t.chromeBtn, (placing || cartCount === 0) && { opacity: 0.5 }, pressed && { opacity: 0.85 }]}
           onPress={() => handlePlaceOrder(false)}
           disabled={placing || cartCount === 0}
         >
@@ -963,10 +1015,10 @@ export default function POSScreen() {
             ? <ActivityIndicator color="#fff" size="small" />
             : <Text style={cp.placeBtnLabel}>{isOnline ? 'Place an Order' : 'Save Offline'}</Text>
           }
-        </TouchableOpacity>
+        </Pressable>
 
         {/* Print KOT */}
-        <TouchableOpacity
+        <Pressable
           style={[cp.kotBtn, cartCount === 0 && { opacity: 0.4 }]}
           onPress={handleKOTPrint}
           disabled={cartCount === 0}
@@ -974,29 +1026,29 @@ export default function POSScreen() {
           <Ionicons name="print-outline" size={15} color="#16a34a" />
           <Text style={cp.kotBtnText}>Print KOT</Text>
           {cart.kot_printed && <View style={cp.kotDot} />}
-        </TouchableOpacity>
+        </Pressable>
 
         {/* Row 1: Print | Invoice | Draft */}
         <View style={cp.btnRow3}>
-          <TouchableOpacity style={cp.btn3} onPress={() => handlePlaceOrder(false)}>
+          <Pressable style={cp.btn3} onPress={() => handlePlaceOrder(false)}>
             <Ionicons name="print-outline" size={14} color="#374151" />
             <Text style={cp.btn3Text}>Print</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={cp.btn3} onPress={() => printOrderReceipt(lastOrderData ?? { ...cart, order_number: 'DRAFT', items: cart.items, total, table_name: tables.find(t => t.id === cart.table_id)?.name ?? null }, restaurant, taxRate)}>
+          </Pressable>
+          <Pressable style={cp.btn3} onPress={() => printOrderReceipt(lastOrderData ?? { ...cart, order_number: 'DRAFT', items: cart.items, total, table_name: tables.find(t => t.id === cart.table_id)?.name ?? null }, restaurant, taxRate)}>
             <Ionicons name="document-outline" size={14} color="#374151" />
             <Text style={cp.btn3Text}>Invoice</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={cp.btn3}
+          </Pressable>
+          <Pressable style={cp.btn3}
             onPress={() => handlePlaceOrder(true)}
             disabled={placing || cartCount === 0}>
             <Ionicons name="save-outline" size={14} color="#374151" />
             <Text style={cp.btn3Text}>Draft</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         {/* Row 2: × Cancel | Void | Transactions */}
         <View style={cp.btnRow3}>
-          <TouchableOpacity style={[cp.btn3, cp.btn3Danger]}
+          <Pressable style={[cp.btn3, cp.btn3Danger]}
             onPress={() => {
               if (cartCount === 0) return;
               Alert.alert('Cancel Order', 'Clear all items from this order?', [
@@ -1010,19 +1062,20 @@ export default function POSScreen() {
             }}>
             <Ionicons name="close" size={14} color="#dc2626" />
             <Text style={[cp.btn3Text, { color: '#dc2626' }]}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={cp.btn3}
+          </Pressable>
+          <Pressable style={cp.btn3}
             onPress={() => Alert.alert('Void', 'Void is available for placed orders in the Orders screen.')}>
             <Ionicons name="flash-outline" size={14} color="#374151" />
             <Text style={cp.btn3Text}>Void</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={cp.btn3}
+          </Pressable>
+          <Pressable style={cp.btn3}
             onPress={() => Alert.alert('Transactions', 'View all transactions in the Orders screen.')}>
             <Ionicons name="document-text-outline" size={14} color="#374151" />
             <Text style={cp.btn3Text}>Transactions</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
+      </ScrollView>
     </View>
   );
 
@@ -1033,10 +1086,9 @@ export default function POSScreen() {
     const ft     = item.food_type;
     const imgErr = imgErrors.has(item.id);
     return (
-      <TouchableOpacity
-        style={[ic.card, qty > 0 && ic.cardActive, !item.is_available && ic.cardUnavail]}
+      <Pressable
+        style={({ pressed }) => [ic.card, qty > 0 && ic.cardActive, !item.is_available && ic.cardUnavail, pressed && { opacity: 0.82 }]}
         onPress={() => item.is_available !== false && handleAdd(item)}
-        activeOpacity={0.82}
       >
         {qty > 0 && <View style={ic.badge}><Text style={ic.badgeText}>×{qty}</Text></View>}
         {ft && (
@@ -1060,7 +1112,7 @@ export default function POSScreen() {
         {!item.is_available && (
           <View style={ic.unavailOverlay}><Text style={ic.unavailText}>Unavailable</Text></View>
         )}
-      </TouchableOpacity>
+      </Pressable>
     );
   }
 
@@ -1069,18 +1121,18 @@ export default function POSScreen() {
     <Modal visible={!!variationItem} transparent animationType="fade" onRequestClose={() => setVariationItem(null)}>
       <View style={vm.overlay}>
         <View style={vm.sheet}>
-          <View style={vm.header}>
+          <View style={[vm.header, t.chrome]}>
             <View style={{ flex: 1 }}>
               <Text style={vm.title}>{variationItem?.name}</Text>
               <Text style={vm.sub}>Select a variation</Text>
             </View>
-            <TouchableOpacity onPress={() => setVariationItem(null)} style={vm.closeBtn}>
+            <Pressable onPress={() => setVariationItem(null)} style={vm.closeBtn}>
               <Ionicons name="close" size={18} color="#6b7280" />
-            </TouchableOpacity>
+            </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ paddingVertical: 4 }}>
             {variationItem?.variations.map(v => (
-              <TouchableOpacity
+              <Pressable
                 key={v.id}
                 style={vm.row}
                 onPress={() => { addToCart(variationItem!, v); setVariationItem(null); }}
@@ -1089,7 +1141,7 @@ export default function POSScreen() {
                 <Text style={vm.varName}>{v.name}</Text>
                 <Text style={vm.varPrice}>₹{v.price.toFixed(2)}</Text>
                 <Ionicons name="add-circle" size={22} color="#0D76E1" />
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </ScrollView>
         </View>
@@ -1100,11 +1152,11 @@ export default function POSScreen() {
   const custPickerModal = (
     <Modal visible={showCustPicker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCustPicker(false)}>
       <View style={{ flex: 1, backgroundColor: '#f5f6f8' }}>
-        <View style={cpm.header}>
+        <View style={[cpm.header, t.chrome]}>
           <Text style={cpm.title}>Select Customer</Text>
-          <TouchableOpacity onPress={() => setShowCustPicker(false)}>
+          <Pressable onPress={() => setShowCustPicker(false)}>
             <Ionicons name="close" size={22} color="#374151" />
-          </TouchableOpacity>
+          </Pressable>
         </View>
         <View style={cpm.search}>
           <Ionicons name="search" size={16} color="#9ca3af" />
@@ -1117,7 +1169,7 @@ export default function POSScreen() {
             autoFocus
           />
         </View>
-        <TouchableOpacity
+        <Pressable
           style={cpm.row}
           onPress={() => { setCustomer(undefined, undefined, undefined); setWalkInName(''); setShowCustPicker(false); setCustSearch(''); }}
         >
@@ -1128,10 +1180,10 @@ export default function POSScreen() {
             <Text style={cpm.name}>Walk-in Customer</Text>
             <Text style={cpm.phone}>No account</Text>
           </View>
-        </TouchableOpacity>
+        </Pressable>
         <ScrollView>
           {filteredCustomers.map(c => (
-            <TouchableOpacity
+            <Pressable
               key={c.id}
               style={cpm.row}
               onPress={() => { setCustomer(c.id, c.name, c.phone); setWalkInName(''); setShowCustPicker(false); setCustSearch(''); }}
@@ -1144,14 +1196,14 @@ export default function POSScreen() {
                 {c.phone && <Text style={cpm.phone}>{c.phone}</Text>}
               </View>
               {cart.customer_id === c.id && <Ionicons name="checkmark-circle" size={20} color="#10b981" />}
-            </TouchableOpacity>
+            </Pressable>
           ))}
           {filteredCustomers.length === 0 && custSearch.length > 0 && (
             <View style={{ padding: 30, alignItems: 'center', gap: 12 }}>
               <Text style={{ color: '#9ca3af', fontSize: 14 }}>No customers found</Text>
-              <TouchableOpacity style={cpm.useBtn} onPress={() => { setWalkInName(custSearch); setShowCustPicker(false); setCustSearch(''); }}>
+              <Pressable style={cpm.useBtn} onPress={() => { setWalkInName(custSearch); setShowCustPicker(false); setCustSearch(''); }}>
                 <Text style={cpm.useBtnText}>Use "{custSearch}" as walk-in name</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           )}
         </ScrollView>
@@ -1166,26 +1218,26 @@ export default function POSScreen() {
   const waiterPickerModal = (
     <Modal visible={showWaiterPicker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowWaiterPicker(false)}>
       <View style={{ flex: 1, backgroundColor: '#f5f6f8' }}>
-        <View style={cpm.header}>
+        <View style={[cpm.header, t.chrome]}>
           <Text style={cpm.title}>Select Waiter</Text>
-          <TouchableOpacity onPress={() => setShowWaiterPicker(false)}>
+          <Pressable onPress={() => setShowWaiterPicker(false)}>
             <Ionicons name="close" size={22} color="#374151" />
-          </TouchableOpacity>
+          </Pressable>
         </View>
         <View style={cpm.search}>
           <Ionicons name="search" size={16} color="#9ca3af" />
           <TextInput style={cpm.searchInput} placeholder="Search staff..." value={waiterSearch} onChangeText={setWaiterSearch} placeholderTextColor="#9ca3af" autoFocus />
         </View>
-        <TouchableOpacity style={cpm.row} onPress={() => { setWaiter(undefined, undefined); setShowWaiterPicker(false); }}>
+        <Pressable style={cpm.row} onPress={() => { setWaiter(undefined, undefined); setShowWaiterPicker(false); }}>
           <View style={[cpm.avatar, { backgroundColor: '#6b7280' }]}><Ionicons name="person-outline" size={18} color="#fff" /></View>
           <View style={{ flex: 1 }}>
             <Text style={cpm.name}>No Waiter</Text>
             <Text style={cpm.phone}>Remove selection</Text>
           </View>
-        </TouchableOpacity>
+        </Pressable>
         <ScrollView>
           {filteredStaff.map(s => (
-            <TouchableOpacity key={s.id} style={cpm.row} onPress={() => { setWaiter(s.id, s.name); setShowWaiterPicker(false); setWaiterSearch(''); }}>
+            <Pressable key={s.id} style={cpm.row} onPress={() => { setWaiter(s.id, s.name); setShowWaiterPicker(false); setWaiterSearch(''); }}>
               <View style={[cpm.avatar, { backgroundColor: '#7c3aed' }]}>
                 <Text style={cpm.avatarText}>{s.name.charAt(0).toUpperCase()}</Text>
               </View>
@@ -1194,8 +1246,77 @@ export default function POSScreen() {
                 <Text style={cpm.phone}>{s.role}</Text>
               </View>
               {cart.waiter_id === s.id && <Ionicons name="checkmark-circle" size={20} color="#7c3aed" />}
-            </TouchableOpacity>
+            </Pressable>
           ))}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+
+  // ── Table picker modal ────────────────────────────────────────────────────
+  const filteredTables = tables.filter(tb =>
+    !tableSearch || tb.name.toLowerCase().includes(tableSearch.toLowerCase())
+  );
+  const tablePickerModal = (
+    <Modal visible={showTablePicker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowTablePicker(false)}>
+      <View style={{ flex: 1, backgroundColor: '#f5f6f8' }}>
+        <View style={[cpm.header, t.chrome]}>
+          <Text style={cpm.title}>Select Table</Text>
+          <Pressable onPress={() => setShowTablePicker(false)}>
+            <Ionicons name="close" size={22} color="#374151" />
+          </Pressable>
+        </View>
+        <View style={cpm.search}>
+          <Ionicons name="search" size={16} color="#9ca3af" />
+          <TextInput
+            style={cpm.searchInput}
+            placeholder={`Search ${tables.length} tables...`}
+            value={tableSearch}
+            onChangeText={setTableSearch}
+            placeholderTextColor="#9ca3af"
+            autoFocus
+          />
+          {tableSearch ? (
+            <Pressable onPress={() => setTableSearch('')}>
+              <Ionicons name="close-circle" size={16} color="#9ca3af" />
+            </Pressable>
+          ) : null}
+        </View>
+        <Pressable
+          style={({ pressed }) => [cpm.row, pressed && { backgroundColor: '#f5f6f8' }]}
+          onPress={() => { switchTable(undefined); syncLocalFromCart(); setShowTablePicker(false); setTableSearch(''); }}
+        >
+          <View style={[cpm.avatar, { backgroundColor: '#6b7280' }]}>
+            <Ionicons name="close-outline" size={18} color="#fff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={cpm.name}>No Table</Text>
+            <Text style={cpm.phone}>Walk-in / Takeaway</Text>
+          </View>
+          {!cart.table_id && <Ionicons name="checkmark-circle" size={20} color="#10b981" />}
+        </Pressable>
+        <ScrollView>
+          {filteredTables.map(tb => (
+            <Pressable
+              key={tb.id}
+              style={({ pressed }) => [cpm.row, pressed && { backgroundColor: '#f5f6f8' }]}
+              onPress={() => { switchTable(tb.id); syncLocalFromCart(); setShowTablePicker(false); setTableSearch(''); }}
+            >
+              <View style={[cpm.avatar, { backgroundColor: '#0D76E1' }]}>
+                <Text style={cpm.avatarText}>{tb.name.charAt(0).toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={cpm.name}>{tb.name}</Text>
+                {(tb as any).capacity ? <Text style={cpm.phone}>Capacity: {(tb as any).capacity}</Text> : null}
+              </View>
+              {cart.table_id === tb.id && <Ionicons name="checkmark-circle" size={20} color="#10b981" />}
+            </Pressable>
+          ))}
+          {filteredTables.length === 0 && tableSearch.length > 0 && (
+            <View style={{ padding: 30, alignItems: 'center' }}>
+              <Text style={{ color: '#9ca3af', fontSize: 14 }}>No tables found for "{tableSearch}"</Text>
+            </View>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -1206,14 +1327,14 @@ export default function POSScreen() {
     <Modal visible={showCustomItem} transparent animationType="fade" onRequestClose={() => setShowCustomItem(false)}>
       <View style={vm.overlay}>
         <View style={vm.sheet}>
-          <View style={vm.header}>
+          <View style={[vm.header, t.chrome]}>
             <View style={{ flex: 1 }}>
               <Text style={vm.title}>Add Custom Item</Text>
               <Text style={vm.sub}>Enter item details manually</Text>
             </View>
-            <TouchableOpacity onPress={() => setShowCustomItem(false)} style={vm.closeBtn}>
+            <Pressable onPress={() => setShowCustomItem(false)} style={vm.closeBtn}>
               <Ionicons name="close" size={18} color="#fff" />
-            </TouchableOpacity>
+            </Pressable>
           </View>
           <View style={{ padding: 16, gap: 10 }}>
             <View style={[cp.extraInput, { borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#e5e7eb' }]}>
@@ -1230,12 +1351,12 @@ export default function POSScreen() {
                 <TextInput style={[cp.extraInputText, { flex: 1 }]} placeholder="Qty" value={customItemQty} onChangeText={setCustomItemQty} keyboardType="number-pad" placeholderTextColor="#9ca3af" />
               </View>
             </View>
-            <TouchableOpacity style={[cp.placeBtn, { paddingVertical: 14 }]} onPress={handleAddCustomItem}>
+            <Pressable style={[cp.placeBtn, t.chromeBtn, { paddingVertical: 14 }]} onPress={handleAddCustomItem}>
               <Ionicons name="add-circle" size={18} color="#fff" />
               <View style={{ marginLeft: 8 }}>
                 <Text style={cp.placeBtnLabel}>Add to Order</Text>
               </View>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       </View>
@@ -1245,19 +1366,20 @@ export default function POSScreen() {
   // ── Desktop (3-col) layout ─────────────────────────────────────────────────
   if (isDesktop) {
     return (
-      <View style={sh.shell}>
+      <View style={[sh.shell, t.shell]}>
         {successModal}
         {variationModal}
         {custPickerModal}
         {waiterPickerModal}
+        {tablePickerModal}
         {customItemModal}
 
         {/* Top header bar */}
-        <View style={sh.posHeader}>
-          <TouchableOpacity style={sh.posBackBtn} onPress={() => router.replace('/(app)/dashboard')}>
+        <View style={[sh.posHeader, t.chrome]}>
+          <Pressable style={sh.posBackBtn} onPress={() => router.replace('/(app)/dashboard')}>
             <Ionicons name="arrow-back" size={15} color="#fff" />
             <Text style={sh.posBackText}>Dashboard</Text>
-          </TouchableOpacity>
+          </Pressable>
           <Text style={sh.posTitle}>Point of Sale</Text>
         </View>
 
@@ -1277,11 +1399,10 @@ export default function POSScreen() {
             ].map(c => {
               const active = activeCatId === c.id;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={String(c.id ?? 'all')}
-                  style={[sh.railItem, active && sh.railItemActive]}
+                  style={({ pressed }) => [sh.railItem, active && sh.railItemActive, pressed && { opacity: 0.75 }]}
                   onPress={() => setActiveCatId(c.id)}
-                  activeOpacity={0.75}
                 >
                   {active && <View style={sh.railActiveBar} />}
                   <View style={[sh.railIcon, active && sh.railIconActive]}>
@@ -1291,7 +1412,7 @@ export default function POSScreen() {
                   <View style={[sh.railBadge, active && sh.railBadgeActive]}>
                     <Text style={[sh.railBadgeText, active && sh.railBadgeTextActive]}>{c.count}</Text>
                   </View>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </ScrollView>
@@ -1300,30 +1421,30 @@ export default function POSScreen() {
         {/* Column 2: Item grid */}
         <View style={sh.grid}>
           {/* Top nav bar */}
-          <View style={sh.posTopBar}>
-            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/dashboard' as any)}>
+          <View style={[sh.posTopBar, t.chrome]}>
+            <Pressable style={sh.navBtn} onPress={() => router.push('/(app)/dashboard' as any)}>
               <Ionicons name="home-outline" size={16} color="#5A7A5A" />
-            </TouchableOpacity>
-            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/orders' as any)}>
+            </Pressable>
+            <Pressable style={sh.navBtn} onPress={() => router.push('/(app)/orders' as any)}>
               <Ionicons name="receipt-outline" size={16} color="#5A7A5A" />
               <Text style={sh.navBtnText}>Orders</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/kitchen' as any)}>
+            </Pressable>
+            <Pressable style={sh.navBtn} onPress={() => router.push('/(app)/kitchen' as any)}>
               <Ionicons name="flame-outline" size={16} color="#5A7A5A" />
               <Text style={sh.navBtnText}>Kitchen</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/tables' as any)}>
+            </Pressable>
+            <Pressable style={sh.navBtn} onPress={() => router.push('/(app)/tables' as any)}>
               <Ionicons name="grid-outline" size={16} color="#5A7A5A" />
               <Text style={sh.navBtnText}>Tables</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/reports' as any)}>
+            </Pressable>
+            <Pressable style={sh.navBtn} onPress={() => router.push('/(app)/reports' as any)}>
               <Ionicons name="bar-chart-outline" size={16} color="#5A7A5A" />
               <Text style={sh.navBtnText}>Reports</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={sh.navBtn} onPress={() => router.push('/(app)/settings' as any)}>
+            </Pressable>
+            <Pressable style={sh.navBtn} onPress={() => router.push('/(app)/settings' as any)}>
               <Ionicons name="settings-outline" size={16} color="#5A7A5A" />
               <Text style={sh.navBtnText}>Settings</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
           {/* Recent orders strip */}
           {recentOrders.length > 0 && (
@@ -1356,11 +1477,11 @@ export default function POSScreen() {
                 onChangeText={setSearch}
                 placeholderTextColor="#9ca3af"
               />
-              {search ? <TouchableOpacity onPress={() => setSearch('')}><Ionicons name="close-circle" size={15} color="#9ca3af" /></TouchableOpacity> : null}
+              {search ? <Pressable onPress={() => setSearch('')}><Ionicons name="close-circle" size={15} color="#9ca3af" /></Pressable> : null}
             </View>
             <View style={sh.foodFilters}>
               {(['veg', 'non_veg', 'egg'] as const).map(ft => (
-                <TouchableOpacity
+                <Pressable
                   key={ft}
                   style={[sh.foodChip, foodFilter[ft] && sh.foodChipActive]}
                   onPress={() => setFoodFilter(p => ({ ...p, [ft]: !p[ft] }))}
@@ -1369,7 +1490,7 @@ export default function POSScreen() {
                   <Text style={[sh.foodChipText, foodFilter[ft] && sh.foodChipTextActive]}>
                     {ft === 'veg' ? 'Veg' : ft === 'non_veg' ? 'Non-Veg' : 'Egg'}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -1394,12 +1515,12 @@ export default function POSScreen() {
 
         {/* Column 3: Cart / Order panel */}
         <View style={sh.cartPanel}>
-          <View style={sh.cartHeader}>
+          <View style={[sh.cartHeader, t.chrome]}>
             <Ionicons name="receipt-outline" size={16} color="#C9A52A" />
             <Text style={sh.cartHeaderTitle}>Current Order</Text>
             {cartCount > 0 && (
               <View style={sh.cartBadge}>
-                <Text style={sh.cartBadgeText}>{cartCount}</Text>
+                <Text style={[sh.cartBadgeText, { color: t.colors.brandDark }]}>{cartCount}</Text>
               </View>
             )}
           </View>
@@ -1412,28 +1533,29 @@ export default function POSScreen() {
 
   // ── Mobile layout ──────────────────────────────────────────────────────────
   return (
-    <View style={mb.shell}>
+    <View style={[mb.shell, t.shell]}>
       {successModal}
       {variationModal}
       {custPickerModal}
       {waiterPickerModal}
+      {tablePickerModal}
       {customItemModal}
 
       <View style={mb.topBar}>
-        <TouchableOpacity style={mb.backBtn} onPress={() => router.replace('/(app)/dashboard')}>
+        <Pressable style={mb.backBtn} onPress={() => router.replace('/(app)/dashboard')}>
           <Ionicons name="arrow-back" size={18} color="#374151" />
-        </TouchableOpacity>
+        </Pressable>
         <Text style={mb.topTitle}>POS</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={mb.catBar} contentContainerStyle={{ paddingHorizontal: 10, gap: 7 }}>
         {[{ id: null as null, name: 'All' }, ...categories.map(c => ({ id: c.id, name: c.name }))].map(c => (
-          <TouchableOpacity
+          <Pressable
             key={String(c.id ?? 'all')}
             style={[mb.catChip, activeCatId === c.id && mb.catChipActive]}
             onPress={() => setActiveCatId(c.id)}
           >
             <Text style={[mb.catChipText, activeCatId === c.id && mb.catChipTextActive]}>{c.name}</Text>
-          </TouchableOpacity>
+          </Pressable>
         ))}
       </ScrollView>
 
@@ -1453,23 +1575,23 @@ export default function POSScreen() {
       />
 
       {cartCount > 0 && (
-        <TouchableOpacity style={mb.fab} onPress={() => setShowCart(true)}>
+        <Pressable style={[mb.fab, t.chromeBtn]} onPress={() => setShowCart(true)}>
           <Ionicons name="cart" size={20} color="#fff" />
-          <View style={mb.fabBadge}><Text style={mb.fabBadgeText}>{cartCount}</Text></View>
+          <View style={mb.fabBadge}><Text style={[mb.fabBadgeText, { color: t.colors.brandDark }]}>{cartCount}</Text></View>
           <Text style={mb.fabTotal}>₹{total.toFixed(2)}</Text>
           <Ionicons name="chevron-up" size={16} color="rgba(255,255,255,0.7)" style={{ marginLeft: 'auto' }} />
-        </TouchableOpacity>
+        </Pressable>
       )}
 
       <Modal visible={showCart} animationType="slide" presentationStyle="pageSheet">
         <View style={{ flex: 1, backgroundColor: '#fff' }}>
-          <View style={sh.cartHeader}>
+          <View style={[sh.cartHeader, t.chrome]}>
             <Ionicons name="receipt-outline" size={16} color="#C9A52A" />
             <Text style={sh.cartHeaderTitle}>Order Summary</Text>
-            {cartCount > 0 && <View style={sh.cartBadge}><Text style={sh.cartBadgeText}>{cartCount}</Text></View>}
-            <TouchableOpacity style={{ marginLeft: 'auto' }} onPress={() => setShowCart(false)}>
+            {cartCount > 0 && <View style={sh.cartBadge}><Text style={[sh.cartBadgeText, { color: t.colors.brandDark }]}>{cartCount}</Text></View>}
+            <Pressable style={{ marginLeft: 'auto' }} onPress={() => setShowCart(false)}>
               <Ionicons name="close" size={22} color="#fff" />
-            </TouchableOpacity>
+            </Pressable>
           </View>
           {cartPanel}
         </View>

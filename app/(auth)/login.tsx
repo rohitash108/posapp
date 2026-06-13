@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, TextInput, StyleSheet,
   ActivityIndicator, Alert, Image, useWindowDimensions, ScrollView, KeyboardAvoidingView, Platform,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -9,7 +10,10 @@ import { authApi } from '@/api/auth';
 import { useAppStore } from '@/store/appStore';
 import { syncService } from '@/sync/SyncService';
 import { webSyncService } from '@/sync/WebSyncService';
-import { setItem } from '@/utils/storage';
+import { setItem, getItem, deleteItem } from '@/utils/storage';
+import { useTheme } from '@/store/themeStore';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import type { ThemeColors } from '@/theme/tokens';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -17,10 +21,29 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(false);
+
+  // Load saved credentials on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await getItem('remember_me_credentials');
+        if (saved) {
+          const { email: savedEmail, password: savedPassword } = JSON.parse(saved);
+          setEmail(savedEmail ?? '');
+          setPassword(savedPassword ?? '');
+          setRememberMe(true);
+        }
+      } catch { /* ignore */ }
+    })();
+  }, []);
   const setAuth = useAppStore((s) => s.setAuth);
   const isOnline = useAppStore((s) => s.isOnline);
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
+  const { colors } = useTheme();
+  const d = useMemo(() => createDesktopStyles(colors), [colors]);
+  const m = useMemo(() => createMobileStyles(colors), [colors]);
 
   async function handleLogin() {
     if (!email.trim() || !password.trim()) {
@@ -34,6 +57,12 @@ export default function LoginScreen() {
       await setItem('sanctum_token', token);
       await setItem('auth_user', JSON.stringify(user));
       await setItem('auth_restaurant', JSON.stringify(restaurant));
+      // Save or clear remembered credentials
+      if (rememberMe) {
+        await setItem('remember_me_credentials', JSON.stringify({ email: email.trim(), password }));
+      } else {
+        await deleteItem('remember_me_credentials');
+      }
       setAuth(user, restaurant, token);
       // Web: sync data to IndexedDB for offline use
       // Native: sync to SQLite
@@ -71,7 +100,7 @@ export default function LoginScreen() {
             </View>
 
             <Text style={d.brandName}>GLOBAL TEA CAFE</Text>
-            <Text style={d.brandTagline}>Point of Sale System</Text>
+            <Text style={d.brandTagline}>Billing System</Text>
 
             <View style={d.divider}>
               <View style={d.dividerLine} />
@@ -106,6 +135,9 @@ export default function LoginScreen() {
           {/* Subtle background decoration */}
           <View style={d.rightBlob1} />
           <View style={d.rightBlob2} />
+          <View style={{ position: 'absolute', top: 24, right: 24, zIndex: 2 }}>
+            <ThemeToggle variant="card" size={20} />
+          </View>
 
           <View style={d.formBox}>
             {/* Gold accent bar */}
@@ -159,22 +191,33 @@ export default function LoginScreen() {
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => setFocusedField(null)}
                 />
-                <TouchableOpacity onPress={() => setShowPassword(v => !v)} style={d.eyeBtn}>
+                <Pressable onPress={() => setShowPassword(v => !v)} style={d.eyeBtn}>
                   <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#94A3B8" />
-                </TouchableOpacity>
+                </Pressable>
               </View>
             </View>
 
-            <TouchableOpacity style={[d.btn, loading && { opacity: 0.75 }]} onPress={handleLogin} disabled={loading}>
+            {/* Remember Me */}
+            <Pressable style={d.rememberRow} onPress={() => setRememberMe(v => !v)}>
+              <View style={[d.checkbox, rememberMe && d.checkboxChecked]}>
+                {rememberMe && <Ionicons name="checkmark" size={12} color="#fff" />}
+              </View>
+              <Text style={d.rememberTxt}>Remember me</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [d.btn, loading && { opacity: 0.75 }, pressed && { opacity: 0.85 }]}
+              onPress={handleLogin}
+              disabled={loading}>
               {loading ? (
-                <ActivityIndicator color="#1A2B1A" />
+                <ActivityIndicator color={colors.brandDark} />
               ) : (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={d.btnText}>Sign In</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#1A2B1A" />
+                  <Ionicons name="arrow-forward" size={18} color={colors.brandDark} />
                 </View>
               )}
-            </TouchableOpacity>
+            </Pressable>
 
             <Text style={d.secureNote}>
               <Ionicons name="shield-checkmark-outline" size={12} color="#94A3B8" /> Secured with end-to-end encryption
@@ -194,6 +237,9 @@ export default function LoginScreen() {
       <View style={m.bgCircle3} />
 
       <ScrollView contentContainerStyle={m.container} keyboardShouldPersistTaps="handled">
+        <View style={{ alignSelf: 'flex-end', marginBottom: 8 }}>
+          <ThemeToggle variant="sidebar" size={18} />
+        </View>
         <View style={m.brand}>
           <View style={m.logoWrap}>
             <View style={m.ring2} />
@@ -201,7 +247,7 @@ export default function LoginScreen() {
             <Image source={require('../../assets/gtc-logo.png')} style={m.logo} resizeMode="contain" />
           </View>
           <Text style={m.brandName}>GLOBAL TEA CAFE</Text>
-          <Text style={m.brandSub}>Point of Sale System</Text>
+          <Text style={m.brandSub}>Billing System</Text>
         </View>
 
         <View style={m.card}>
@@ -249,22 +295,33 @@ export default function LoginScreen() {
                 onFocus={() => setFocusedField('password')}
                 onBlur={() => setFocusedField(null)}
               />
-              <TouchableOpacity onPress={() => setShowPassword(v => !v)} style={m.eyeBtn}>
+              <Pressable onPress={() => setShowPassword(v => !v)} style={m.eyeBtn}>
                 <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#94A3B8" />
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
 
-          <TouchableOpacity style={[m.btn, loading && { opacity: 0.75 }]} onPress={handleLogin} disabled={loading}>
+          {/* Remember Me */}
+          <Pressable style={m.rememberRow} onPress={() => setRememberMe(v => !v)}>
+            <View style={[m.checkbox, rememberMe && m.checkboxChecked]}>
+              {rememberMe && <Ionicons name="checkmark" size={11} color="#fff" />}
+            </View>
+            <Text style={m.rememberTxt}>Remember me</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [m.btn, loading && { opacity: 0.75 }, pressed && { opacity: 0.85 }]}
+            onPress={handleLogin}
+            disabled={loading}>
             {loading ? (
-              <ActivityIndicator color="#1A2B1A" />
+              <ActivityIndicator color={colors.brandDark} />
             ) : (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text style={m.btnText}>Sign In</Text>
-                <Ionicons name="arrow-forward" size={16} color="#1A2B1A" />
+                <Ionicons name="arrow-forward" size={16} color={colors.brandDark} />
               </View>
             )}
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         <Text style={m.footer}>© 2025 Global Tea Cafe</Text>
@@ -274,111 +331,96 @@ export default function LoginScreen() {
 }
 
 // ─── Desktop styles ────────────────────────────────────────────────────────────
-const d = StyleSheet.create({
-  container: { flex: 1, flexDirection: 'row', backgroundColor: '#fff' },
-
-  // Left panel
-  left: { width: '44%', backgroundColor: '#1A2B1A', justifyContent: 'space-between', overflow: 'hidden' },
+function createDesktopStyles(c: ThemeColors) {
+  return StyleSheet.create({
+  container: { flex: 1, flexDirection: 'row', backgroundColor: c.surface },
+  left: { width: '44%', backgroundColor: c.loginPanel, justifyContent: 'space-between', overflow: 'hidden' },
   blob1: { position: 'absolute', top: -80, right: -80, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(201,165,42,0.07)' },
   blob2: { position: 'absolute', bottom: -60, left: -60, width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(201,165,42,0.05)' },
   blob3: { position: 'absolute', top: '45%', left: -30, width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(255,255,255,0.02)' },
   leftContent: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 48 },
-
-  // Logo with rings
   logoWrap: { width: 280, height: 280, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   ring1: { position: 'absolute', width: 160, height: 160, borderRadius: 80, borderWidth: 1.5, borderColor: 'rgba(201,165,42,0.45)' },
   ring2: { position: 'absolute', width: 210, height: 210, borderRadius: 105, borderWidth: 1, borderColor: 'rgba(201,165,42,0.22)' },
   ring3: { position: 'absolute', width: 262, height: 262, borderRadius: 131, borderWidth: 1, borderColor: 'rgba(201,165,42,0.10)' },
   logo: { width: 120, height: 120, zIndex: 1 },
-
-  brandName: { color: '#C9A52A', fontSize: 22, fontWeight: '800', letterSpacing: 4, textAlign: 'center', marginBottom: 6 },
-  brandTagline: { color: 'rgba(201,165,42,0.7)', fontSize: 13, fontWeight: '500', letterSpacing: 2, textAlign: 'center' },
-
+  brandName: { color: c.brandName, fontSize: 22, fontWeight: '800', letterSpacing: 4, textAlign: 'center', marginBottom: 6 },
+  brandTagline: { color: c.brandTagline, fontSize: 13, fontWeight: '500', letterSpacing: 2, textAlign: 'center' },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 24 },
   dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(201,165,42,0.3)', maxWidth: 40 },
-
-  brandDesc: { color: '#7A9A7A', fontSize: 13, textAlign: 'center', marginBottom: 28, lineHeight: 20 },
+  brandDesc: { color: c.brandMuted, fontSize: 13, textAlign: 'center', marginBottom: 28, lineHeight: 20 },
   featureList: { gap: 14, width: '100%', maxWidth: 260 },
   featureItem: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   featureIconBg: { width: 30, height: 30, borderRadius: 8, backgroundColor: 'rgba(201,165,42,0.12)', alignItems: 'center', justifyContent: 'center' },
-  featureText: { color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '500' },
-
-  copyright: { color: '#4A6A4A', fontSize: 12, textAlign: 'center', paddingBottom: 24 },
-
-  // Right panel
-  right: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 48, backgroundColor: '#F7F6F3', overflow: 'hidden' },
+  featureText: { color: c.sidebarText, fontSize: 14, fontWeight: '500' },
+  copyright: { color: c.brandMuted, fontSize: 12, textAlign: 'center', paddingBottom: 24 },
+  right: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 48, backgroundColor: c.loginFormBg, overflow: 'hidden' },
   rightBlob1: { position: 'absolute', top: -120, right: -120, width: 350, height: 350, borderRadius: 175, backgroundColor: 'rgba(26,43,26,0.03)' },
   rightBlob2: { position: 'absolute', bottom: -80, left: -80, width: 250, height: 250, borderRadius: 125, backgroundColor: 'rgba(201,165,42,0.04)' },
-
-  // Form card
   formBox: {
-    width: '100%', maxWidth: 440, backgroundColor: '#fff', borderRadius: 24,
+    width: '100%', maxWidth: 440, backgroundColor: c.loginCard, borderRadius: 24,
     paddingHorizontal: 40, paddingBottom: 40, paddingTop: 0,
-    shadowColor: '#1A2B1A', shadowOpacity: 0.12, shadowRadius: 32, shadowOffset: { width: 0, height: 8 },
+    shadowColor: c.brandDark, shadowOpacity: 0.12, shadowRadius: 32, shadowOffset: { width: 0, height: 8 },
     elevation: 12, overflow: 'hidden',
   },
-  formAccent: { height: 4, backgroundColor: '#C9A52A', marginBottom: 32 },
-
+  formAccent: { height: 4, backgroundColor: c.brand, marginBottom: 32 },
   formHeader: { alignItems: 'center', marginBottom: 28 },
-  formLogoWrap: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#F0F7F0', alignItems: 'center', justifyContent: 'center', marginBottom: 16, borderWidth: 1, borderColor: '#E2EDE2' },
+  formLogoWrap: { width: 56, height: 56, borderRadius: 16, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 16, borderWidth: 1, borderColor: c.border },
   formLogo: { width: 38, height: 38 },
-  welcome: { fontSize: 26, fontWeight: '800', color: '#0F172A', marginBottom: 6, textAlign: 'center' },
-  subtitle: { fontSize: 14, color: '#64748B', textAlign: 'center', lineHeight: 20 },
-
+  welcome: { fontSize: 26, fontWeight: '800', color: c.heading, marginBottom: 6, textAlign: 'center' },
+  subtitle: { fontSize: 14, color: c.textMuted, textAlign: 'center', lineHeight: 20 },
   offlineBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fef3c7', borderRadius: 10, padding: 12, marginBottom: 16, gap: 6 },
   offlineText: { fontSize: 12, color: '#92400e', flexShrink: 1 },
-
   fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 8 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 14, backgroundColor: '#FAFBFC', paddingHorizontal: 14 },
-  inputWrapFocused: { borderColor: '#C9A52A', backgroundColor: '#FFFDF7', shadowColor: '#C9A52A', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 0 }, elevation: 2 },
+  label: { fontSize: 13, fontWeight: '600', color: c.heading, marginBottom: 8 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: c.inputBorder, borderRadius: 14, backgroundColor: c.inputBg, paddingHorizontal: 14 },
+  inputWrapFocused: { borderColor: c.inputFocusedBorder, backgroundColor: c.surfaceAlt, shadowColor: c.brand, shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 0 }, elevation: 2 },
   inputIcon: { marginRight: 10 },
-  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: '#0F172A' },
+  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: c.heading },
   eyeBtn: { paddingLeft: 10, paddingVertical: 14 },
+  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16, marginTop: 4 },
+  checkbox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1.5, borderColor: c.inputBorder, alignItems: 'center', justifyContent: 'center', backgroundColor: c.inputBg },
+  checkboxChecked: { backgroundColor: '#C9A52A', borderColor: '#C9A52A' },
+  rememberTxt: { fontSize: 13, color: c.textMuted, fontWeight: '500' },
+  btn: { backgroundColor: c.brand, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8, flexDirection: 'row', justifyContent: 'center', shadowColor: c.brand, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  btnText: { color: c.brandDark, fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
+  secureNote: { textAlign: 'center', color: c.textMuted, fontSize: 12, marginTop: 20 },
+  });
+}
 
-  btn: { backgroundColor: '#C9A52A', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8, flexDirection: 'row', justifyContent: 'center', shadowColor: '#C9A52A', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
-  btnText: { color: '#1A2B1A', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
-
-  secureNote: { textAlign: 'center', color: '#94A3B8', fontSize: 12, marginTop: 20 },
-});
-
-// ─── Mobile styles ─────────────────────────────────────────────────────────────
-const m = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#1A2B1A' },
-
-  // Background decoration circles
+function createMobileStyles(c: ThemeColors) {
+  return StyleSheet.create({
+  flex: { flex: 1, backgroundColor: c.loginBrandBg },
   bgCircle1: { position: 'absolute', top: -100, right: -80, width: 280, height: 280, borderRadius: 140, backgroundColor: 'rgba(201,165,42,0.08)' },
   bgCircle2: { position: 'absolute', bottom: -60, left: -60, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(201,165,42,0.06)' },
   bgCircle3: { position: 'absolute', top: '40%', right: -40, width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(255,255,255,0.02)' },
-
   container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-
   brand: { alignItems: 'center', marginBottom: 28 },
   logoWrap: { width: 180, height: 180, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   ring1: { position: 'absolute', width: 130, height: 130, borderRadius: 65, borderWidth: 1.5, borderColor: 'rgba(201,165,42,0.4)' },
   ring2: { position: 'absolute', width: 170, height: 170, borderRadius: 85, borderWidth: 1, borderColor: 'rgba(201,165,42,0.18)' },
   logo: { width: 90, height: 90, zIndex: 1 },
-  brandName: { color: '#C9A52A', fontSize: 18, fontWeight: '800', letterSpacing: 3, textAlign: 'center' },
-  brandSub: { color: 'rgba(201,165,42,0.65)', fontSize: 12, marginTop: 4, letterSpacing: 2, textAlign: 'center' },
-
-  card: { backgroundColor: '#fff', borderRadius: 24, paddingHorizontal: 24, paddingBottom: 28, paddingTop: 0, elevation: 12, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, overflow: 'hidden' },
-  cardAccent: { height: 4, backgroundColor: '#C9A52A', marginBottom: 24 },
-  cardTitle: { fontSize: 22, fontWeight: '800', color: '#0F172A', textAlign: 'center', marginBottom: 4 },
-  cardSubtitle: { fontSize: 13, color: '#64748B', textAlign: 'center', marginBottom: 20 },
-
+  brandName: { color: c.brandName, fontSize: 18, fontWeight: '800', letterSpacing: 3, textAlign: 'center' },
+  brandSub: { color: c.brandTagline, fontSize: 12, marginTop: 4, letterSpacing: 2, textAlign: 'center' },
+  card: { backgroundColor: c.loginCard, borderRadius: 24, paddingHorizontal: 24, paddingBottom: 28, paddingTop: 0, elevation: 12, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, overflow: 'hidden' },
+  cardAccent: { height: 4, backgroundColor: c.brand, marginBottom: 24 },
+  cardTitle: { fontSize: 22, fontWeight: '800', color: c.heading, textAlign: 'center', marginBottom: 4 },
+  cardSubtitle: { fontSize: 13, color: c.textMuted, textAlign: 'center', marginBottom: 20 },
   offlineBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fef3c7', borderRadius: 10, padding: 10, marginBottom: 12, gap: 4 },
   offlineText: { fontSize: 12, color: '#92400e', flexShrink: 1 },
-
   fieldGroup: { marginBottom: 14 },
-  label: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 8 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, backgroundColor: '#FAFBFC', paddingHorizontal: 12 },
-  inputWrapFocused: { borderColor: '#C9A52A', backgroundColor: '#FFFDF7' },
+  label: { fontSize: 13, fontWeight: '600', color: c.heading, marginBottom: 8 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: c.inputBorder, borderRadius: 12, backgroundColor: c.inputBg, paddingHorizontal: 12 },
+  inputWrapFocused: { borderColor: c.inputFocusedBorder, backgroundColor: c.surfaceAlt },
   inputIcon: { marginRight: 8 },
-  input: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#0F172A' },
+  input: { flex: 1, paddingVertical: 12, fontSize: 15, color: c.heading },
   eyeBtn: { paddingLeft: 8, paddingVertical: 12 },
-
-  btn: { backgroundColor: '#C9A52A', borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 8, flexDirection: 'row', justifyContent: 'center', shadowColor: '#C9A52A', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
-  btnText: { color: '#1A2B1A', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
-
-  footer: { textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: 12, marginTop: 28 },
-});
+  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14, marginTop: 2 },
+  checkbox: { width: 17, height: 17, borderRadius: 4, borderWidth: 1.5, borderColor: c.inputBorder, alignItems: 'center', justifyContent: 'center', backgroundColor: c.inputBg },
+  checkboxChecked: { backgroundColor: '#C9A52A', borderColor: '#C9A52A' },
+  rememberTxt: { fontSize: 13, color: c.textMuted, fontWeight: '500' },
+  btn: { backgroundColor: c.brand, borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 8, flexDirection: 'row', justifyContent: 'center', shadowColor: c.brand, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  btnText: { color: c.brandDark, fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
+  footer: { textAlign: 'center', color: c.sidebarTextMuted, fontSize: 12, marginTop: 28 },
+  });
+}

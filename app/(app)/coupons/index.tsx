@@ -4,8 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { couponsApi } from '@/api/coupons';
 import type { Coupon } from '@/types';
+import { useThemedScreen } from '@/theme/useThemedScreen';
 
 function CouponForm({ coupon, onSave, onClose }: { coupon?: Coupon | null; onSave: () => void; onClose: () => void }) {
+  const t = useThemedScreen();
   const [code, setCode]             = useState(coupon?.code ?? '');
   const [type, setType]             = useState<'percentage' | 'fixed'>(coupon?.discount_type ?? 'percentage');
   const [value, setValue]           = useState(coupon ? String(coupon.discount_value) : '');
@@ -50,11 +52,11 @@ function CouponForm({ coupon, onSave, onClose }: { coupon?: Coupon | null; onSav
         <View>
           <Text style={f.label}>Discount Type</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
-            <TouchableOpacity style={[f.typeChip, type === 'percentage' && f.typeChipActive]} onPress={() => setType('percentage')}>
+            <TouchableOpacity style={[f.typeChip, type === 'percentage' && t.chromeBtn, type === 'percentage' && { borderColor: t.colors.sidebar }]} onPress={() => setType('percentage')}>
               <Ionicons name="pricetag-outline" size={14} color={type === 'percentage' ? '#fff' : '#374151'} />
               <Text style={[f.typeText, type === 'percentage' && { color: '#fff', fontWeight: '800' }]}>Percentage</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[f.typeChip, type === 'fixed' && f.typeChipActive]} onPress={() => setType('fixed')}>
+            <TouchableOpacity style={[f.typeChip, type === 'fixed' && t.chromeBtn, type === 'fixed' && { borderColor: t.colors.sidebar }]} onPress={() => setType('fixed')}>
               <Text style={[f.typeText, type === 'fixed' && { color: '#fff', fontWeight: '800' }]}>₹ Fixed Amount</Text>
             </TouchableOpacity>
           </View>
@@ -79,7 +81,7 @@ function CouponForm({ coupon, onSave, onClose }: { coupon?: Coupon | null; onSav
       </ScrollView>
       <View style={f.footer}>
         <TouchableOpacity style={f.cancelBtn} onPress={onClose}><Text style={f.cancelText}>Cancel</Text></TouchableOpacity>
-        <TouchableOpacity style={f.saveBtn} onPress={save} disabled={loading}>
+        <TouchableOpacity style={[f.saveBtn, t.chromeBtn]} onPress={save} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={f.saveText}>{coupon ? 'Update' : 'Create'}</Text>}
         </TouchableOpacity>
       </View>
@@ -88,6 +90,7 @@ function CouponForm({ coupon, onSave, onClose }: { coupon?: Coupon | null; onSav
 }
 
 export default function CouponsScreen() {
+  const t = useThemedScreen();
   const [coupons, setCoupons]       = useState<Coupon[]>([]);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -134,8 +137,8 @@ export default function CouponsScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
-      <View style={s.statsBar}>
+    <View style={[t.shell, { flex: 1 }]}>
+      <View style={[s.statsBar, t.chrome]}>
         <View style={s.statItem}><Text style={[s.statNum, { color: '#C9A52A' }]}>{coupons.length}</Text><Text style={s.statLabel}>Total</Text></View>
         <View style={s.statDiv} />
         <View style={s.statItem}><Text style={[s.statNum, { color: '#16a34a' }]}>{activeCount}</Text><Text style={s.statLabel}>Active</Text></View>
@@ -148,7 +151,7 @@ export default function CouponsScreen() {
           <TextInput style={s.searchInput} value={search} onChangeText={setSearch} placeholder="Search by code..." placeholderTextColor="#9ca3af" autoCapitalize="characters" />
           {search ? <TouchableOpacity onPress={() => setSearch('')}><Ionicons name="close-circle" size={16} color="#9ca3af" /></TouchableOpacity> : null}
         </View>
-        <TouchableOpacity style={s.addBtn} onPress={() => { setEditing(null); setFormVisible(true); }}>
+        <TouchableOpacity style={[s.addBtn, t.chromeBtn]} onPress={() => { setEditing(null); setFormVisible(true); }}>
           <Ionicons name="add" size={18} color="#fff" />
           <Text style={s.addBtnText}>Add</Text>
         </TouchableOpacity>
@@ -202,7 +205,7 @@ export default function CouponsScreen() {
             <View style={{ alignItems: 'center', paddingTop: 70, gap: 10 }}>
               <Ionicons name="pricetags-outline" size={40} color="#e5e7eb" />
               <Text style={{ color: '#9ca3af', fontSize: 14, fontWeight: '600' }}>No coupons yet</Text>
-              <TouchableOpacity style={s.addBtn} onPress={() => { setEditing(null); setFormVisible(true); }}>
+              <TouchableOpacity style={[s.addBtn, t.chromeBtn]} onPress={() => { setEditing(null); setFormVisible(true); }}>
                 <Ionicons name="add" size={16} color="#fff" /><Text style={s.addBtnText}>Create First Coupon</Text>
               </TouchableOpacity>
             </View>

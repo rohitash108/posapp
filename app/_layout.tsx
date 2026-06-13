@@ -8,13 +8,17 @@ import { initDatabase } from '@/database/schema';
 import { syncService } from '@/sync/SyncService';
 import { webSyncService } from '@/sync/WebSyncService';
 import { useAppStore } from '@/store/appStore';
+import { useThemeStore } from '@/store/themeStore';
 
 export default function RootLayout() {
   const setAuth = useAppStore((s) => s.setAuth);
   const setHydrated = useAppStore((s) => s.setHydrated);
+  const hydrateTheme = useThemeStore((s) => s.hydrate);
+  const statusBarStyle = useThemeStore((s) => s.colors.statusBar);
 
   useEffect(() => {
     async function bootstrap() {
+      await hydrateTheme();
       // Native: init SQLite
       if (Platform.OS !== 'web') {
         await initDatabase();
@@ -63,7 +67,7 @@ export default function RootLayout() {
   return (
     <>
       <Stack screenOptions={{ headerShown: false }} />
-      <StatusBar style="light" />
+      <StatusBar style={statusBarStyle} />
       <Toast />
     </>
   );

@@ -9,6 +9,7 @@ import { syncService } from '@/sync/SyncService';
 import { useAppStore } from '@/store/appStore';
 import client from '@/api/client';
 import type { RestaurantTable } from '@/types';
+import { useThemedScreen } from '@/theme/useThemedScreen';
 
 const STATUS_CFG = {
   available: { color: '#16a34a', bg: '#f0fdf4', border: '#86efac', icon: 'checkmark-circle' as const, label: 'Available', dotColor: '#22c55e' },
@@ -17,6 +18,7 @@ const STATUS_CFG = {
 };
 
 export default function TablesScreen() {
+  const t = useThemedScreen();
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const { isOnline } = useAppStore();
@@ -83,7 +85,7 @@ export default function TablesScreen() {
   };
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, t.shell]}>
       {/* Stats bar */}
       <View style={s.statsBar}>
         {(Object.entries(STATUS_CFG) as [keyof typeof STATUS_CFG, typeof STATUS_CFG[keyof typeof STATUS_CFG]][]).map(([key, cfg]) => (
@@ -99,10 +101,10 @@ export default function TablesScreen() {
         ))}
         <View style={s.statCard}>
           <View style={[s.statIconBg, { backgroundColor: '#F0F7F0' }]}>
-            <Ionicons name="grid-outline" size={18} color="#1A2B1A" />
+            <Ionicons name="grid-outline" size={18} color={t.colors.sidebar} />
           </View>
           <View>
-            <Text style={[s.statNum, { color: '#1A2B1A' }]}>{tables.length}</Text>
+            <Text style={[s.statNum, { color: t.colors.sidebar }]}>{tables.length}</Text>
             <Text style={s.statLabel}>Total</Text>
           </View>
         </View>

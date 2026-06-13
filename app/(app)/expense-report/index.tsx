@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator
 import { Ionicons } from '@expo/vector-icons';
 import { format, subDays } from 'date-fns';
 import { reportsApi } from '@/api/reports';
+import { useThemedScreen } from '@/theme/useThemedScreen';
 
 interface ExpenseEntry {
   category?: string;
@@ -26,6 +27,7 @@ const PERIODS = [
 const CATEGORY_COLORS = ['#2563eb', '#7c3aed', '#dc2626', '#d97706', '#16a34a', '#0891b2', '#db2777'];
 
 export default function ExpenseReportScreen() {
+  const t = useThemedScreen();
   const [data, setData]             = useState<ExpenseData | null>(null);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,9 +61,9 @@ export default function ExpenseReportScreen() {
   const maxCat       = Math.max(...byCategory.map(c => c.total), 1);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#f8f9fa' }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor="#C9A52A" />}>
+    <ScrollView style={[t.shell, { flex: 1 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor="#C9A52A" />}>
       {/* Header card */}
-      <View style={s.headerCard}>
+      <View style={[s.headerCard, t.chrome]}>
         <Text style={s.headerLabel}>Total Expenses</Text>
         <Text style={s.totalAmt}>₹{Number(totalExpense).toFixed(2)}</Text>
         <Text style={s.headerSub}>{byCategory.length > 0 ? `${byCategory.length} categories` : 'No data yet'}</Text>
@@ -71,11 +73,11 @@ export default function ExpenseReportScreen() {
       <View style={s.section}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
           {PERIODS.map((p, idx) => (
-            <TouchableOpacity key={p.label} style={[s.periodChip, period === idx && !showCustom && s.periodChipActive]} onPress={() => { setShowCustom(false); setPeriod(idx); }}>
+            <TouchableOpacity key={p.label} style={[s.periodChip, period === idx && !showCustom && t.chromeBtn, period === idx && !showCustom && { borderColor: t.colors.sidebar }]} onPress={() => { setShowCustom(false); setPeriod(idx); }}>
               <Text style={[s.periodText, period === idx && !showCustom && s.periodTextActive]}>{p.label}</Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity style={[s.periodChip, showCustom && s.periodChipActive]} onPress={() => setShowCustom(true)}>
+          <TouchableOpacity style={[s.periodChip, showCustom && t.chromeBtn, showCustom && { borderColor: t.colors.sidebar }]} onPress={() => setShowCustom(true)}>
             <Ionicons name="calendar-outline" size={13} color={showCustom ? '#fff' : '#374151'} />
             <Text style={[s.periodText, showCustom && s.periodTextActive]}>Custom</Text>
           </TouchableOpacity>
@@ -90,7 +92,7 @@ export default function ExpenseReportScreen() {
               <Text style={s.dateLabel}>To</Text>
               <TextInput style={s.dateInput} value={dateTo} onChangeText={setDateTo} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" />
             </View>
-            <TouchableOpacity style={s.applyBtn} onPress={() => { setLoading(true); load(); }}>
+            <TouchableOpacity style={[s.applyBtn, t.chromeBtn]} onPress={() => { setLoading(true); load(); }}>
               <Text style={s.applyText}>Apply</Text>
             </TouchableOpacity>
           </View>
@@ -138,7 +140,7 @@ export default function ExpenseReportScreen() {
                     {e.category && <Text style={s.entryMeta}>{e.category}</Text>}
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={s.entryAmt}>₹{Number(e.amount).toFixed(2)}</Text>
+                    <Text style={[s.entryAmt, { color: t.colors.sidebar }]}>₹{Number(e.amount).toFixed(2)}</Text>
                     {e.date && <Text style={s.entryDate}>{format(new Date(e.date), 'dd MMM')}</Text>}
                   </View>
                 </View>

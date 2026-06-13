@@ -14,30 +14,22 @@ import { router } from 'expo-router';
 import { format, subDays, startOfMonth } from 'date-fns';
 import { ordersApi } from '@/api/orders';
 import { useAppStore } from '@/store/appStore';
+import { AppBrandLogo, APP_BRAND_NAME, APP_BRAND_TAGLINE } from '@/components/AppBrandLogo';
+import { useTheme } from '@/store/themeStore';
+import { themes, type DashboardColors } from '@/theme/tokens';
 import type { Order } from '@/types';
+
+const DashC = React.createContext<DashboardColors>(themes.light.dashboard);
+const useDashC = () => React.useContext(DashC);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const POLL_MS  = 60_000;
 const SIDEBAR  = 220;
 const CUR      = '₹';
 
-const C = {
-  primary:  '#0D76E1',
-  success:  '#14B51D',
-  danger:   '#ef4444',
-  warning:  '#FFA80B',
-  purple:   '#A91CFF',
-  info:     '#0891b2',
-  orange:   '#f97316',
-  dark:     '#1A2B1A',
-  gold:     '#C9A52A',
-  indigo:   '#1B36E0',
-  bg:       '#f0f2f7',
-  white:    '#fff',
-  border:   '#e5e7eb',
-  text:     '#111827',
-  muted:    '#6b7280',
-};
+const SEM = themes.light.dashboard;
+
+const C = SEM;
 
 const PM_CFG: Record<string, { label: string; icon: any; color: string }> = {
   cash:     { label: 'Cash',         icon: 'cash-outline',        color: C.success },
@@ -190,11 +182,12 @@ function computeStats(todayOrders: Order[], monthOrders: Order[], allOrders: Ord
 // ── Pure sub-components (defined outside main to prevent remount) ─────────────
 
 function SectionHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+  const C = useDashC();
   return (
     <View style={sh.row}>
       <View style={sh.titleWrap}>
         <View style={sh.accent} />
-        <Text style={sh.title}>{title}</Text>
+        <Text style={[sh.title, { color: C.text }]}>{title}</Text>
       </View>
       {action && (
         <TouchableOpacity onPress={onAction} style={sh.actionBtn}>
@@ -210,8 +203,9 @@ function BigCard({ label, value, sub, icon, color, bg, onPress }: {
   label: string; value: string; sub: string; icon: any;
   color: string; bg: string; onPress?: () => void;
 }) {
+  const C = useDashC();
   return (
-    <TouchableOpacity style={bc.wrap} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity style={[bc.wrap, { backgroundColor: C.white, borderColor: C.border }]} onPress={onPress} activeOpacity={0.85}>
       <View style={bc.top}>
         <View style={[bc.iconWrap, { backgroundColor: bg }]}>
           <Ionicons name={icon} size={22} color={color} />
@@ -220,8 +214,8 @@ function BigCard({ label, value, sub, icon, color, bg, onPress }: {
           <Text style={[bc.badgeText, { color }]}>{sub}</Text>
         </View>
       </View>
-      <Text style={bc.value}>{value}</Text>
-      <Text style={bc.label}>{label}</Text>
+      <Text style={[bc.value, { color: C.text }]}>{value}</Text>
+      <Text style={[bc.label, { color: C.muted }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -230,18 +224,19 @@ function SmallCard({ label, value, sub, icon, color, bg, danger, onPress }: {
   label: string; value: string | number; sub?: string; icon: any;
   color: string; bg: string; danger?: boolean; onPress?: () => void;
 }) {
+  const C = useDashC();
   return (
     <TouchableOpacity
-      style={[sc.wrap, danger && sc.dangerBorder]}
+      style={[sc.wrap, { backgroundColor: C.white, borderColor: C.border }, danger && sc.dangerBorder]}
       onPress={onPress}
       activeOpacity={0.85}
     >
       <View style={[sc.iconWrap, { backgroundColor: bg }]}>
         <Ionicons name={icon} size={16} color={color} />
       </View>
-      <Text style={[sc.value, danger && { color: C.danger }]}>{String(value)}</Text>
-      <Text style={sc.label} numberOfLines={1}>{label}</Text>
-      {sub ? <Text style={sc.sub} numberOfLines={1}>{sub}</Text> : null}
+      <Text style={[sc.value, { color: C.text }, danger && { color: C.danger }]}>{String(value)}</Text>
+      <Text style={[sc.label, { color: C.text }]} numberOfLines={1}>{label}</Text>
+      {sub ? <Text style={[sc.sub, { color: C.muted }]} numberOfLines={1}>{sub}</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -250,15 +245,16 @@ function MiniCard({ label, value, icon, color, bg, onPress }: {
   label: string; value: string | number; icon: any;
   color: string; bg: string; onPress?: () => void;
 }) {
+  const C = useDashC();
   return (
-    <TouchableOpacity style={mc.wrap} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity style={[mc.wrap, { backgroundColor: C.white, borderColor: C.border }]} onPress={onPress} activeOpacity={0.85}>
       <View style={mc.row}>
         <View style={[mc.icon, { backgroundColor: bg }]}>
           <Ionicons name={icon} size={14} color={color} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={mc.value} numberOfLines={1}>{String(value)}</Text>
-          <Text style={mc.label} numberOfLines={1}>{label}</Text>
+          <Text style={[mc.value, { color: C.text }]} numberOfLines={1}>{String(value)}</Text>
+          <Text style={[mc.label, { color: C.muted }]} numberOfLines={1}>{label}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -449,6 +445,8 @@ export default function DashboardScreen() {
   const [refreshing,   setRefreshing]   = useState(false);
 
   const { restaurant, isOnline } = useAppStore();
+  const { colors } = useTheme();
+  const dashC = colors.dashboard;
   const { width } = useWindowDimensions();
   const contentW  = width >= 640 ? width - SIDEBAR : width;
   const cols3     = contentW >= 900 ? 3 : contentW >= 600 ? 2 : 1;
@@ -506,25 +504,37 @@ export default function DashboardScreen() {
   // ── Render ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-        <ActivityIndicator color={C.gold} size="large" />
-        <Text style={{ color: C.muted, fontSize: 13 }}>Loading dashboard…</Text>
+      <View style={{ flex: 1, backgroundColor: dashC.bg, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <ActivityIndicator color={dashC.gold} size="large" />
+        <Text style={{ color: dashC.muted, fontSize: 13 }}>Loading dashboard…</Text>
       </View>
     );
   }
 
+  const cardStyle = { backgroundColor: dashC.white, borderColor: dashC.border };
+  const cardText = { color: dashC.text };
+  const cardMuted = { color: dashC.muted };
+
   return (
+    <DashC.Provider value={dashC}>
     <ScrollView
-      style={s.shell}
+      style={[s.shell, { backgroundColor: dashC.bg }]}
       contentContainerStyle={{ flexGrow: 1 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.gold} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={dashC.gold} />}
       showsVerticalScrollIndicator={false}
     >
       {/* ── Hero header ── */}
-      <View style={s.hero}>
-        <View>
-          <Text style={s.heroName}>{restaurant?.name?.toUpperCase() ?? 'RESTAURANT'}</Text>
-          <Text style={s.heroDate}>{format(new Date(), 'EEEE, dd MMMM yyyy')}</Text>
+      <View style={[s.hero, { backgroundColor: colors.sidebar }]}>
+        <View style={s.heroBrand}>
+          <AppBrandLogo size={48} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[s.heroName, { color: colors.brandName }]}>{APP_BRAND_NAME}</Text>
+            <Text style={[s.heroTagline, { color: colors.brandTagline }]}>{APP_BRAND_TAGLINE}</Text>
+            {restaurant?.name ? (
+              <Text style={s.heroSub} numberOfLines={1}>{restaurant.name}</Text>
+            ) : null}
+            <Text style={s.heroDate}>{format(new Date(), 'EEEE, dd MMMM yyyy')}</Text>
+          </View>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <View style={[s.onlinePill, { backgroundColor: isOnline ? 'rgba(20,181,29,0.15)' : 'rgba(239,68,68,0.15)' }]}>
@@ -608,11 +618,11 @@ export default function DashboardScreen() {
         <View style={s.section}>
           <View style={[s.row, { gap: 12, alignItems: 'flex-start' }]}>
             {/* Bar chart */}
-            <View style={[s.card, { flex: isWide ? 2 : 1 }]}>
+            <View style={[s.card, cardStyle, { flex: isWide ? 2 : 1 }]}>
               <View style={s.cardHeader}>
                 <View>
-                  <Text style={s.cardTitle}>Sale Analysis</Text>
-                  <Text style={s.cardSub}>Revenue · Last 7 days</Text>
+                  <Text style={[s.cardTitle, cardText]}>Sale Analysis</Text>
+                  <Text style={[s.cardSub, cardMuted]}>Revenue · Last 7 days</Text>
                 </View>
                 <View style={[s.legendRow]}>
                   <View style={s.legendDot} />
@@ -644,9 +654,9 @@ export default function DashboardScreen() {
 
             {/* Payment breakdown */}
             {isWide && (
-              <View style={[s.card, { flex: 1 }]}>
-                <Text style={s.cardTitle}>Payment Types</Text>
-                <Text style={s.cardSub}>By payment method</Text>
+              <View style={[s.card, cardStyle, { flex: 1 }]}>
+                <Text style={[s.cardTitle, cardText]}>Payment Types</Text>
+                <Text style={[s.cardSub, cardMuted]}>By payment method</Text>
                 <View style={{ marginTop: 12, gap: 8 }}>
                   {stats.paymentMethods.slice(0, 6).map((pm, i) => (
                     <ProgressItem key={i}
@@ -665,9 +675,9 @@ export default function DashboardScreen() {
 
           {/* Payment breakdown on mobile (below chart) */}
           {!isWide && stats.paymentMethods.length > 0 && (
-            <View style={[s.card, { marginTop: 12 }]}>
-              <Text style={s.cardTitle}>Payment Types</Text>
-              <Text style={s.cardSub}>By payment method</Text>
+            <View style={[s.card, cardStyle, { marginTop: 12 }]}>
+              <Text style={[s.cardTitle, cardText]}>Payment Types</Text>
+              <Text style={[s.cardSub, cardMuted]}>By payment method</Text>
               <View style={{ marginTop: 12, gap: 8 }}>
                 {stats.paymentMethods.slice(0, 6).map((pm, i) => (
                   <ProgressItem key={i}
@@ -701,9 +711,9 @@ export default function DashboardScreen() {
         <View style={s.section}>
           <View style={[s.row, { gap: 12, alignItems: 'flex-start' }]}>
             {/* Bill status */}
-            <View style={[s.card, { flex: 1 }]}>
-              <Text style={s.cardTitle}>Bill Status</Text>
-              <Text style={s.cardSub}>Special bill types</Text>
+            <View style={[s.card, cardStyle, { flex: 1 }]}>
+              <Text style={[s.cardTitle, cardText]}>Bill Status</Text>
+              <Text style={[s.cardSub, cardMuted]}>Special bill types</Text>
               <View style={{ marginTop: 12, gap: 6 }}>
                 {[
                   { label: 'Cancelled Bills', value: stats.cancelledBills, icon: 'close-circle-outline', color: C.danger  },
@@ -718,9 +728,9 @@ export default function DashboardScreen() {
             </View>
 
             {/* Top selling items */}
-            <View style={[s.card, { flex: isWide ? 2 : 1 }]}>
-              <Text style={s.cardTitle}>Top Selling Items</Text>
-              <Text style={s.cardSub}>By quantity ordered</Text>
+            <View style={[s.card, cardStyle, { flex: isWide ? 2 : 1 }]}>
+              <Text style={[s.cardTitle, cardText]}>Top Selling Items</Text>
+              <Text style={[s.cardSub, cardMuted]}>By quantity ordered</Text>
               {stats.topItems.length > 0 ? (
                 <View style={{ marginTop: 12, gap: 10 }}>
                   {stats.topItems.map((item, i) => (
@@ -741,11 +751,11 @@ export default function DashboardScreen() {
         <View style={s.section}>
           <View style={[s.row, { gap: 12, alignItems: 'flex-start' }]}>
             {/* Active orders */}
-            <View style={[s.card, { flex: 1 }]}>
+            <View style={[s.card, cardStyle, { flex: 1 }]}>
               <View style={s.cardHeader}>
                 <View>
-                  <Text style={s.cardTitle}>Active Orders</Text>
-                  <Text style={s.cardSub}>{stats.activeOrders.length} in-flight</Text>
+                  <Text style={[s.cardTitle, cardText]}>Active Orders</Text>
+                  <Text style={[s.cardSub, cardMuted]}>{stats.activeOrders.length} in-flight</Text>
                 </View>
                 <TouchableOpacity onPress={() => go('/(app)/orders')}>
                   <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700' }}>View all</Text>
@@ -764,11 +774,11 @@ export default function DashboardScreen() {
             </View>
 
             {/* Recent orders */}
-            <View style={[s.card, { flex: 1 }]}>
+            <View style={[s.card, cardStyle, { flex: 1 }]}>
               <View style={s.cardHeader}>
                 <View>
-                  <Text style={s.cardTitle}>Recent Orders</Text>
-                  <Text style={s.cardSub}>Last 5 orders</Text>
+                  <Text style={[s.cardTitle, cardText]}>Recent Orders</Text>
+                  <Text style={[s.cardSub, cardMuted]}>Last 5 orders</Text>
                 </View>
                 <TouchableOpacity onPress={() => go('/(app)/orders')}>
                   <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700' }}>See all</Text>
@@ -794,7 +804,7 @@ export default function DashboardScreen() {
           <View style={[s.grid, { gap: 8 }]}>
             {QUICK_LINKS.map(ql => (
               <View key={ql.route} style={{ width: `${100 / cols4}%` as any, padding: 4 }}>
-                <TouchableOpacity style={ql_s.card} onPress={() => go(ql.route)} activeOpacity={0.85}>
+                <TouchableOpacity style={[ql_s.card, cardStyle]} onPress={() => go(ql.route)} activeOpacity={0.85}>
                   <View style={[ql_s.icon, { backgroundColor: ql.color + '15' }]}>
                     <Ionicons name={ql.icon as any} size={22} color={ql.color} />
                   </View>
@@ -808,6 +818,7 @@ export default function DashboardScreen() {
       </View>
       <View style={{ height: 32 }} />
     </ScrollView>
+    </DashC.Provider>
   );
 }
 
@@ -827,8 +838,11 @@ const s = StyleSheet.create({
   emptyText: { fontSize: 12.5, color: C.muted },
 
   hero: { backgroundColor: C.dark, paddingHorizontal: 20, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 },
-  heroName: { fontSize: 18, fontWeight: '900', color: C.gold, letterSpacing: 0.5 },
-  heroDate: { fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 3 },
+  heroBrand: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
+  heroName: { fontSize: 16, fontWeight: '900', color: C.gold, letterSpacing: 0.5 },
+  heroTagline: { fontSize: 12, fontWeight: '600', color: 'rgba(201,165,42,0.75)', marginTop: 2, letterSpacing: 1 },
+  heroSub: { fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 2 },
+  heroDate: { fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 3 },
   onlinePill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   onlineDot: { width: 7, height: 7, borderRadius: 4 },
   onlineText: { fontSize: 12, fontWeight: '700' },

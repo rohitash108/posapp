@@ -56,10 +56,16 @@
       { "from": "dist", "to": "dist" }
     ],
     "win": {
-      "target": "portable"
+      "target": "portable",
+      "icon": "assets/global-tea-cafe-logo.png"
     },
     "portable": {
       "requestExecutionLevel": "user"
+    },
+    "nsis": {
+      "artifactName": "GTC-POS-Setup.exe",
+      "shortcutName": "GTC POS",
+      "uninstallDisplayName": "GTC POS — Global Tea Cafe"
     }
   }
 }

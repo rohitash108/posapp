@@ -1,10 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Tabs, usePathname, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text, Image, TouchableOpacity, useWindowDimensions, ScrollView, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, useWindowDimensions, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useAppStore } from '@/store/appStore';
-import { API_BASE_URL } from '@/api/client';
+import { useTheme } from '@/store/themeStore';
 import { webSyncService } from '@/sync/WebSyncService';
+import { AppBrandLogo, APP_BRAND_NAME, APP_BRAND_TAGLINE } from '@/components/AppBrandLogo';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import type { ThemeColors } from '@/theme/tokens';
 
 type NavItem = { name: string; route: string; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] };
 type NavSection = { label: string; items: NavItem[] };
@@ -46,9 +49,14 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'FINANCE',
     items: [
-      { name: 'expenses/index',       route: '/(app)/expenses',       label: 'Expenses',       icon: 'wallet-outline'   as const },
+      { name: 'expenses/index',       route: '/(app)/expenses',       label: 'Expenses',       icon: 'wallet-outline'      as const },
       { name: 'expense-report/index', route: '/(app)/expense-report', label: 'Expense Report', icon: 'stats-chart-outline' as const },
-      { name: 'tickets/index',        route: '/(app)/tickets',        label: 'Tickets',        icon: 'print-outline'    as const },
+    ],
+  },
+  {
+    label: 'SUPPORT',
+    items: [
+      { name: 'tickets/index', route: '/(app)/tickets', label: 'Tickets', icon: 'headset-outline' as const },
     ],
   },
   {
@@ -81,7 +89,8 @@ const SOURCE_BADGE_ROUTES = ['kitchen/index'];
 
 function SyncDot() {
   const { isSyncing, isOnline } = useAppStore();
-  const color = isSyncing ? '#f59e0b' : isOnline ? '#22c55e' : '#ef4444';
+  const { colors } = useTheme();
+  const color = isSyncing ? colors.warning : isOnline ? colors.success : colors.danger;
   return <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: color }} />;
 }
 
@@ -90,14 +99,46 @@ const NAV_BADGE_KEY: Record<string, string> = {
   'kitchen/index': 'preparing,confirmed',
 };
 
+function createSidebarStyles(c: ThemeColors) {
+  return StyleSheet.create({
+    container: { width: 220, backgroundColor: c.sidebar, height: '100%', overflow: 'hidden' },
+    blobTop: { position: 'absolute', top: -50, right: -50, width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(201,165,42,0.07)' },
+    blobBottom: { position: 'absolute', bottom: -40, left: -40, width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(201,165,42,0.05)' },
+    brand: { alignItems: 'center', paddingTop: 10, paddingHorizontal: 16 },
+    logoWrap: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+    ring1: { position: 'absolute', width: 52, height: 52, borderRadius: 26, borderWidth: 1.5, borderColor: 'rgba(201,165,42,0.45)' },
+    ring2: { position: 'absolute', width: 62, height: 62, borderRadius: 31, borderWidth: 1, borderColor: 'rgba(201,165,42,0.15)' },
+    logo: { width: 42, height: 42, borderRadius: 21, zIndex: 1 },
+    restName: { color: c.brandName, fontWeight: '800', fontSize: 10, letterSpacing: 1.5, textAlign: 'center' },
+    restSub: { color: c.brandTagline, fontSize: 9, marginTop: 1, letterSpacing: 1.2 },
+    restContext: { color: c.sidebarTextMuted, fontSize: 8.5, marginTop: 3, letterSpacing: 0.5, maxWidth: 180, textAlign: 'center' },
+    divider: { width: 28, height: 2, backgroundColor: 'rgba(201,165,42,0.35)', borderRadius: 1, marginTop: 6, marginBottom: 2 },
+    navScroll: { flex: 1, paddingTop: 2 },
+    navSection: { color: c.sidebarTextMuted, fontSize: 8.5, fontWeight: '700', letterSpacing: 2, paddingHorizontal: 18, marginBottom: 2, marginTop: 8, opacity: 0.55 },
+    navItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 7, marginHorizontal: 8, borderRadius: 8, marginBottom: 1, position: 'relative', overflow: 'hidden' },
+    navItemActive: { backgroundColor: 'rgba(201,165,42,0.12)' },
+    activeBar: { position: 'absolute', left: 0, top: 8, bottom: 8, width: 3, backgroundColor: c.brandName, borderRadius: 2 },
+    iconBox: { width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', marginRight: 8 },
+    iconBoxActive: { backgroundColor: 'rgba(201,165,42,0.18)' },
+    navLabel: { fontSize: 12.5, fontWeight: '500', color: c.sidebarTextMuted, flex: 1 },
+    navLabelActive: { color: c.sidebarText, fontWeight: '700' },
+    footer: { paddingHorizontal: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: c.sidebarBorder },
+    footerTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    statusPill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
+    statusDot: { width: 7, height: 7, borderRadius: 4 },
+    statusText: { fontSize: 12, fontWeight: '600' },
+    logoutBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(239,68,68,0.12)', alignItems: 'center', justifyContent: 'center' },
+    navBadge: { marginLeft: 'auto', backgroundColor: c.brandName, borderRadius: 999, minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
+    navBadgeText: { fontSize: 9.5, fontWeight: '800', color: c.sidebar },
+  });
+}
+
 function Sidebar() {
   const restaurant = useAppStore((s) => s.restaurant);
   const { isSyncing, isOnline, clearAuth } = useAppStore();
+  const { colors } = useTheme();
+  const sb = useMemo(() => createSidebarStyles(colors), [colors]);
   const pathname = usePathname();
-  const logoUrl = restaurant?.logo
-    ? (restaurant.logo.startsWith('http') ? restaurant.logo : `${API_BASE_URL.replace('/api/mobile', '')}/${restaurant.logo}`)
-    : null;
-  const [logoError, setLogoError] = React.useState(false);
 
   // Live order counts for nav badges
   const [navCounts, setNavCounts] = React.useState<Record<string, number>>({});
@@ -137,22 +178,15 @@ function Sidebar() {
         <View style={sb.logoWrap}>
           <View style={sb.ring1} />
           <View style={sb.ring2} />
-          {logoUrl && !logoError ? (
-            <Image
-              source={{ uri: logoUrl }}
-              style={sb.logo}
-              onError={() => setLogoError(true)}
-            />
-          ) : (
-            <View style={sb.logoFallback}>
-              <Ionicons name="restaurant" size={26} color="#C9A52A" />
-            </View>
-          )}
+          <AppBrandLogo size={42} style={sb.logo} />
         </View>
         <Text style={sb.restName} numberOfLines={2}>
-          {restaurant?.name?.toUpperCase() ?? 'RESTAURANT'}
+          {APP_BRAND_NAME}
         </Text>
-        <Text style={sb.restSub}>POS System</Text>
+        <Text style={sb.restSub}>{APP_BRAND_TAGLINE}</Text>
+        {restaurant?.name ? (
+          <Text style={sb.restContext} numberOfLines={1}>{restaurant.name}</Text>
+        ) : null}
         <View style={sb.divider} />
       </View>
 
@@ -164,15 +198,14 @@ function Sidebar() {
             {section.items.map((item) => {
               const active = isActive(item.name);
               return (
-                <TouchableOpacity
+                <Pressable
                   key={item.name}
                   onPress={() => router.push(item.route as any)}
-                  style={[sb.navItem, active && sb.navItemActive]}
-                  activeOpacity={0.75}
+                  style={({ pressed }) => [sb.navItem, active && sb.navItemActive, pressed && { opacity: 0.75 }]}
                 >
                   {active && <View style={sb.activeBar} />}
                   <View style={[sb.iconBox, active && sb.iconBoxActive]}>
-                    <Ionicons name={item.icon} size={14} color={active ? '#C9A52A' : 'rgba(255,255,255,0.55)'} />
+                    <Ionicons name={item.icon} size={14} color={active ? colors.brandName : colors.sidebarTextMuted} />
                   </View>
                   <Text style={[sb.navLabel, active && sb.navLabelActive]}>{item.label}</Text>
                   {active && item.name === 'pos/index' && (
@@ -183,7 +216,7 @@ function Sidebar() {
                       <Text style={sb.navBadgeText}>{navCounts[item.name]}</Text>
                     </View>
                   )}
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
@@ -194,40 +227,42 @@ function Sidebar() {
       <View style={sb.footer}>
         <View style={sb.footerTop}>
           <View style={[sb.statusPill, { backgroundColor: isOnline ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)' }]}>
-            <View style={[sb.statusDot, { backgroundColor: isOnline ? '#22c55e' : '#ef4444' }]} />
-            <Text style={[sb.statusText, { color: isOnline ? '#4ade80' : '#f87171' }]}>
+            <View style={[sb.statusDot, { backgroundColor: isOnline ? colors.success : colors.danger }]} />
+            <Text style={[sb.statusText, { color: isOnline ? colors.success : colors.danger }]}>
               {isSyncing ? 'Syncing...' : isOnline ? 'Online' : 'Offline'}
             </Text>
           </View>
-          <TouchableOpacity style={sb.logoutBtn} onPress={handleLogout}>
+          <ThemeToggle variant="sidebar" size={16} />
+          <Pressable style={({ pressed }) => [sb.logoutBtn, pressed && { opacity: 0.7 }]} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={16} color="#f87171" />
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
     </View>
   );
 }
 
+function HeaderActions() {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 16 }}>
+      <ThemeToggle variant="header" size={16} />
+      <SyncDot />
+    </View>
+  );
+}
+
 function RestaurantHeader() {
-  const restaurant = useAppStore((s) => s.restaurant);
-  const logoUrl = restaurant?.logo
-    ? (restaurant.logo.startsWith('http') ? restaurant.logo : `${API_BASE_URL.replace('/api/mobile', '')}/${restaurant.logo}`)
-    : null;
-  const [err, setErr] = React.useState(false);
+  const { colors, isDark } = useTheme();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-      {logoUrl && !err ? (
-        <Image source={{ uri: logoUrl }} style={{ width: 34, height: 34, borderRadius: 17 }} onError={() => setErr(true)} />
-      ) : (
-        <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#2D4A2D', alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="restaurant" size={16} color="#C9A52A" />
-        </View>
-      )}
+      <AppBrandLogo size={34} />
       <View>
-        <Text style={{ color: '#C9A52A', fontWeight: '800', fontSize: 13, letterSpacing: 1 }}>
-          {restaurant?.name?.toUpperCase() ?? 'RESTAURANT'}
+        <Text style={{ color: isDark ? colors.brandName : colors.brandDark, fontWeight: '800', fontSize: 13, letterSpacing: 1 }}>
+          {APP_BRAND_NAME}
         </Text>
-        <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>POS System</Text>
+        <Text style={{ color: isDark ? colors.brandTagline : colors.textMuted, fontSize: 11 }}>
+          {APP_BRAND_TAGLINE}
+        </Text>
       </View>
     </View>
   );
@@ -238,6 +273,7 @@ export default function AppLayout() {
   const isLarge = width >= 640;
   const token = useAppStore((s) => s.token);
   const store = useAppStore();
+  const { colors } = useTheme();
   const pathname = usePathname();
   const isPOS = pathname.includes('/pos');
 
@@ -270,19 +306,20 @@ export default function AppLayout() {
   }, [token]);
 
   const tabScreenOptions = {
-    headerStyle: { backgroundColor: '#1A2B1A' },
-    headerTintColor: '#fff',
+    headerStyle: { backgroundColor: colors.header },
+    headerTintColor: colors.headerText,
     headerTitleStyle: { fontWeight: '700' as const },
     tabBarStyle: { display: 'none' as const },
+    sceneStyle: { backgroundColor: colors.background },
   };
 
   if (isLarge) {
     return (
-      <View style={{ flex: 1, flexDirection: 'row' }}>
+      <View style={{ flex: 1, flexDirection: 'row', backgroundColor: colors.background }}>
         {!isPOS && <Sidebar />}
         <View style={{ flex: 1 }}>
           <Tabs screenOptions={tabScreenOptions}>
-            <Tabs.Screen name="dashboard/index" options={{ headerTitle: () => <RestaurantHeader />, headerRight: () => <View style={{ marginRight: 16 }}><SyncDot /></View> }} />
+            <Tabs.Screen name="dashboard/index" options={{ headerShown: false }} />
             <Tabs.Screen name="pos/index" options={{ headerShown: false }} />
             <Tabs.Screen name="kitchen/index"    options={{ title: 'Kitchen Display' }} />
             <Tabs.Screen name="orders/index"     options={{ title: 'Orders' }} />
@@ -298,7 +335,7 @@ export default function AppLayout() {
             <Tabs.Screen name="coupons/index"       options={{ title: 'Coupons' }} />
             <Tabs.Screen name="expenses/index"      options={{ title: 'Expenses' }} />
             <Tabs.Screen name="expense-report/index" options={{ title: 'Expense Report' }} />
-            <Tabs.Screen name="tickets/index"       options={{ title: 'Tickets & Receipts' }} />
+            <Tabs.Screen name="tickets/index"       options={{ title: 'Support Tickets' }} />
             <Tabs.Screen name="reports/index"       options={{ title: 'Reports' }} />
             <Tabs.Screen name="settings/index"      options={{ title: 'Settings' }} />
           </Tabs>
@@ -309,15 +346,24 @@ export default function AppLayout() {
 
   return (
     <Tabs screenOptions={{
-      headerStyle: { backgroundColor: '#1A2B1A' },
-      headerTintColor: '#fff',
+      headerStyle: { backgroundColor: colors.header },
+      headerTintColor: colors.headerText,
       headerTitleStyle: { fontWeight: '700' },
-      tabBarActiveTintColor: '#C9A52A',
-      tabBarInactiveTintColor: '#7A9A7A',
-      tabBarStyle: { borderTopColor: '#E2E8F0', elevation: 10, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: -2 } },
+      tabBarActiveTintColor: colors.tabActive,
+      tabBarInactiveTintColor: colors.tabInactive,
+      tabBarStyle: {
+        backgroundColor: colors.tabBar,
+        borderTopColor: colors.tabBarBorder,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: -2 },
+      },
+      sceneStyle: { backgroundColor: colors.background },
     }}>
-      <Tabs.Screen name="dashboard/index" options={{ title: 'Dashboard', tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} />, tabBarLabel: 'Home', headerTitle: () => <RestaurantHeader /> }} />
-      <Tabs.Screen name="pos/index" options={{ headerTitle: () => <RestaurantHeader />, tabBarIcon: ({ color, size }) => <Ionicons name="cart-outline" color={color} size={size} />, tabBarLabel: 'POS', headerRight: () => <View style={{ marginRight: 16 }}><SyncDot /></View> }} />
+      <Tabs.Screen name="dashboard/index" options={{ title: 'Dashboard', tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} />, tabBarLabel: 'Home', headerShown: false }} />
+      <Tabs.Screen name="pos/index" options={{ headerTitle: () => <RestaurantHeader />, tabBarIcon: ({ color, size }) => <Ionicons name="cart-outline" color={color} size={size} />, tabBarLabel: 'POS', headerRight: () => <HeaderActions /> }} />
       <Tabs.Screen name="kitchen/index" options={{ title: 'Kitchen', tabBarIcon: ({ color, size }) => <Ionicons name="flame-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="orders/index" options={{ title: 'Orders', tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="tables/index" options={{ title: 'Tables', tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" color={color} size={size} />, tabBarStyle: { display: 'none' } }} />
@@ -332,44 +378,9 @@ export default function AppLayout() {
       <Tabs.Screen name="coupons/index"        options={{ title: 'Coupons',        tabBarButton: () => null }} />
       <Tabs.Screen name="expenses/index"       options={{ title: 'Expenses',       tabBarButton: () => null }} />
       <Tabs.Screen name="expense-report/index" options={{ title: 'Expense Report', tabBarButton: () => null }} />
-      <Tabs.Screen name="tickets/index"        options={{ title: 'Tickets & Receipts', tabBarButton: () => null }} />
+      <Tabs.Screen name="tickets/index"        options={{ title: 'Support Tickets',    tabBarButton: () => null }} />
       <Tabs.Screen name="reports/index"        options={{ title: 'Reports',        tabBarButton: () => null }} />
       <Tabs.Screen name="settings/index"       options={{ title: 'Settings',       tabBarButton: () => null }} />
     </Tabs>
   );
 }
-
-const sb = StyleSheet.create({
-  container: { width: 220, backgroundColor: '#1A2B1A', height: '100%', overflow: 'hidden' },
-  blobTop: { position: 'absolute', top: -50, right: -50, width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(201,165,42,0.07)' },
-  blobBottom: { position: 'absolute', bottom: -40, left: -40, width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(201,165,42,0.05)' },
-
-  brand: { alignItems: 'center', paddingTop: 10, paddingHorizontal: 16 },
-  logoWrap: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
-  ring1: { position: 'absolute', width: 52, height: 52, borderRadius: 26, borderWidth: 1.5, borderColor: 'rgba(201,165,42,0.45)' },
-  ring2: { position: 'absolute', width: 62, height: 62, borderRadius: 31, borderWidth: 1, borderColor: 'rgba(201,165,42,0.15)' },
-  logo: { width: 42, height: 42, borderRadius: 21, zIndex: 1 },
-  logoFallback: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#2D4A2D', alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  restName: { color: '#C9A52A', fontWeight: '800', fontSize: 10, letterSpacing: 1.5, textAlign: 'center' },
-  restSub: { color: 'rgba(255,255,255,0.4)', fontSize: 9, marginTop: 1, letterSpacing: 1 },
-  divider: { width: 28, height: 2, backgroundColor: 'rgba(201,165,42,0.35)', borderRadius: 1, marginTop: 6, marginBottom: 2 },
-
-  navScroll: { flex: 1, paddingTop: 2 },
-  navSection: { color: 'rgba(255,255,255,0.35)', fontSize: 8.5, fontWeight: '700', letterSpacing: 2, paddingHorizontal: 18, marginBottom: 2, marginTop: 8 },
-  navItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 7, marginHorizontal: 8, borderRadius: 8, marginBottom: 1, position: 'relative', overflow: 'hidden' },
-  navItemActive: { backgroundColor: 'rgba(201,165,42,0.12)' },
-  activeBar: { position: 'absolute', left: 0, top: 8, bottom: 8, width: 3, backgroundColor: '#C9A52A', borderRadius: 2 },
-  iconBox: { width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', marginRight: 8 },
-  iconBoxActive: { backgroundColor: 'rgba(201,165,42,0.18)' },
-  navLabel: { fontSize: 12.5, fontWeight: '500', color: 'rgba(255,255,255,0.65)', flex: 1 },
-  navLabelActive: { color: '#fff', fontWeight: '700' },
-
-  footer:     { paddingHorizontal: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
-  footerTop:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusPill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
-  statusDot:  { width: 7, height: 7, borderRadius: 4 },
-  statusText: { fontSize: 12, fontWeight: '600' },
-  logoutBtn:  { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(239,68,68,0.12)', alignItems: 'center', justifyContent: 'center' },
-  navBadge:   { marginLeft: 'auto', backgroundColor: '#C9A52A', borderRadius: 999, minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
-  navBadgeText: { fontSize: 9.5, fontWeight: '800', color: '#1A2B1A' },
-});

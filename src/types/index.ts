@@ -77,6 +77,8 @@ export interface Customer {
   address?: string;
   balance?: number;
   notes?: string;
+  orders_count?: number;
+  last_order_at?: string;
   updated_at?: string;
 }
 
@@ -125,7 +127,8 @@ export type PaymentMethod = 'cash' | 'card' | 'upi' | 'other';
 export interface OrderItem {
   id?: number;
   item_id?: number;
-  name: string;
+  item_name?: string;   // DB column name from API responses
+  name?: string;        // used locally in cart/POS
   variation?: string;
   addons?: Addon[];
   quantity: number;
@@ -266,43 +269,67 @@ export interface Payment {
   created_at?: string;
 }
 
-export interface InventoryItem {
+export interface Ingredient {
   id: number;
-  item_name: string;
-  name?: string;                   // alias
+  name: string;
+  sku?: string;
   unit?: string;
-  quantity: number;
-  current_stock?: number;          // alias
-  min_quantity?: number;
-  minimum_stock?: number;          // alias
-  cost_per_unit?: number;
-  category_name?: string;
-  category?: string;               // alias
-  updated_at?: string;
+  low_stock_threshold: number;
+  reorder_point: number;
+  on_hand: number;
+}
+
+export interface ExpiringBatch {
+  id: number;
+  ingredient_id: number;
+  ingredient_name: string;
+  unit: string;
+  quantity_remaining: number;
+  expiry_date: string;
 }
 
 export interface StockMovement {
   id: number;
-  inventory_item_id: number;
-  type: 'in' | 'out' | 'adjustment';
-  quantity: number;
+  type: string;
+  quantity_change: number;
   notes?: string;
   created_at?: string;
+  ingredient_id?: number;
+  ingredient_name: string;
+  ingredient_unit: string;
 }
+
+export interface InventoryData {
+  ingredients: Ingredient[];
+  low_stock: Ingredient[];
+  expiring: ExpiringBatch[];
+  recent_movements: StockMovement[];
+}
+
+// Legacy alias kept for any existing references
+export type InventoryItem = Ingredient;
 
 export interface MenuItem {
   id: number;
   category_id?: number;
   category_name?: string;
+  is_master?: boolean;
   name: string;
   description?: string;
-  image_url?: string;
   image?: string;
   price: number;
+  net_price?: number | null;
+  food_type?: 'veg' | 'non_veg' | 'egg';
   is_available: boolean;
-  is_veg?: boolean;
+  is_open_item?: boolean;
   sort_order?: number;
+  tax_rate?: number | null;
+  tax_name?: string | null;
+  variations?: Variation[];
+  addons?: Addon[];
   updated_at?: string;
+  /** @deprecated use food_type instead */
+  is_veg?: boolean;
 }
 
 export interface Coupon {
@@ -335,4 +362,36 @@ export interface SalesReport {
   cash: number;
   card: number;
   upi: number;
+}
+
+// ── Support Tickets ────────────────────────────────────────────────────────────
+export type TicketStatus   = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type TicketCategory = 'general' | 'billing' | 'technical' | 'feature_request';
+
+export interface TicketReply {
+  id: number;
+  ticket_id: number;
+  message: string;
+  user_name?: string;
+  user_id?: number;
+  is_staff?: boolean;         // true = support agent, false = restaurant admin
+  created_at?: string;
+}
+
+export interface Ticket {
+  id: number;
+  ticket_number?: string;
+  subject: string;
+  description: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  category?: TicketCategory | string;
+  assigned_to?: number;
+  assignee_name?: string;
+  reporter_name?: string;
+  replies?: TicketReply[];
+  replies_count?: number;
+  created_at?: string;
+  updated_at?: string;
 }

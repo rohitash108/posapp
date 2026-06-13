@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import client from '@/api/client';
 import type { Reservation } from '@/types';
+import { useThemedScreen } from '@/theme/useThemedScreen';
 
 const STATUS_CFG: Record<string, { color: string; bg: string; label: string }> = {
   pending:   { color: '#d97706', bg: '#fef9ec', label: 'Pending'   },
@@ -17,6 +18,7 @@ const STATUS_CFG: Record<string, { color: string; bg: string; label: string }> =
 };
 
 export default function ReservationsScreen() {
+  const t = useThemedScreen();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -63,7 +65,7 @@ export default function ReservationsScreen() {
   const filtered = activeFilter === 'all' ? reservations : reservations.filter(r => r.status === activeFilter);
 
   return (
-    <View style={st.shell}>
+    <View style={[st.shell, t.shell]}>
       {/* Header */}
       <View style={st.topbar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
@@ -72,7 +74,7 @@ export default function ReservationsScreen() {
             const active = activeFilter === s;
             const count = s === 'all' ? reservations.length : reservations.filter(r => r.status === s).length;
             return (
-              <TouchableOpacity key={s} style={[st.filterChip, active && { backgroundColor: cfg?.color ?? '#1A2B1A', borderColor: cfg?.color ?? '#1A2B1A' }]} onPress={() => setActiveFilter(s)}>
+              <TouchableOpacity key={s} style={[st.filterChip, active && { backgroundColor: cfg?.color ?? t.colors.sidebar, borderColor: cfg?.color ?? t.colors.sidebar }]} onPress={() => setActiveFilter(s)}>
                 <Text style={[st.filterText, active && { color: '#fff' }]}>{s === 'all' ? 'All' : cfg?.label}</Text>
                 <View style={[st.filterCount, active && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
                   <Text style={[st.filterCountText, active && { color: '#fff' }]}>{count}</Text>
@@ -129,7 +131,7 @@ export default function ReservationsScreen() {
                   <TouchableOpacity style={[st.actionBtn, { backgroundColor: '#7c3aed' }]} onPress={() => updateStatus(r.id, 'seated')}>
                     <Text style={st.actionText}>Seat</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[st.actionBtn, { backgroundColor: '#ef4444' }]} onPress={() => updateStatus(r.id, 'cancelled')}>
+                  <TouchableOpacity style={[st.actionBtn, { backgroundColor: t.colors.danger }]} onPress={() => updateStatus(r.id, 'cancelled')}>
                     <Text style={st.actionText}>Cancel</Text>
                   </TouchableOpacity>
                 </View>

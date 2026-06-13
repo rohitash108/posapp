@@ -1,5 +1,7 @@
 name: Build Windows App
 
+# Runs automatically on every push to main / master,
+# and can also be triggered manually via the Actions tab.
 on:
   push:
     branches: [main, master]
@@ -10,39 +12,61 @@ env:
 
 jobs:
   build-windows:
+    name: Build Windows Portable EXE
     runs-on: windows-latest
 
     steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ── 2. Node setup ────────────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
+      # ── 3. Install dependencies ──────────────────────────────────────────────
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      # ── 4. Clean previous dist ───────────────────────────────────────────────
+      - name: Clean previous dist
+        shell: pwsh
+        run: |
+          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+
+      # ── 5. Build Expo web app ────────────────────────────────────────────────
       - name: Build Expo web app
         run: npx expo export -p web
 
-      - name: Copy PWA files
+      # ── 6. Copy PWA / public assets into dist ───────────────────────────────
+      - name: Copy PWA assets
+        shell: pwsh
         run: |
-          copy public\manifest.json dist\
-          copy public\sw.js dist\
-          copy public\icon-192.png dist\
-          copy public\icon-512.png dist\
+          $files = @('manifest.json', 'sw.js', 'icon-192.png', 'icon-512.png', 'global-tea-cafe-logo.png')
+          foreach ($f in $files) {
+            $src = "public\$f"
+            if (Test-Path $src) {
+              Copy-Item $src dist\
+              Write-Host "Copied $f"
+            } else {
+              Write-Warning "Skipping $f — not found in public\"
+            }
+          }
 
-      - name: Build Windows portable exe
+      # ── 7. Build Windows portable EXE ───────────────────────────────────────
+      - name: Build Windows portable EXE
         run: npx electron-builder --win portable
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Windows installer
+      # ── 8. Upload artifact ───────────────────────────────────────────────────
+      - name: Upload Windows EXE
         uses: actions/upload-artifact@v4
         with:
           name: GTC-POS-Windows
           path: electron-dist/*.exe
           retention-days: 30
+          if-no-files-found: error

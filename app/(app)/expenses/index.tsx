@@ -7,10 +7,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import client from '@/api/client';
 import type { Expense, ExpenseCategory } from '@/types';
+import { useThemedScreen } from '@/theme/useThemedScreen';
 
 const CAT_COLORS = ['#1A2B1A', '#0f8f73', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
 export default function ExpensesScreen() {
+  const t = useThemedScreen();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,7 +55,7 @@ export default function ExpensesScreen() {
   const totalAll = expenses.reduce((s, e) => s + (e.amount ?? 0), 0);
 
   return (
-    <View style={st.shell}>
+    <View style={[st.shell, t.shell]}>
       {/* Summary bar */}
       <View style={st.summary}>
         <View style={st.summaryCard}>
@@ -77,7 +79,7 @@ export default function ExpensesScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor="#0f8f73" />}
         renderItem={({ item: e }) => {
           const catIdx = categories.findIndex(c => c.id === e.category_id);
-          const color = CAT_COLORS[catIdx % CAT_COLORS.length] ?? '#6b7280';
+          const color = CAT_COLORS[catIdx % CAT_COLORS.length] === '#1A2B1A' ? t.colors.sidebar : (CAT_COLORS[catIdx % CAT_COLORS.length] ?? '#6b7280');
           return (
             <View style={st.card}>
               <View style={[st.catDot, { backgroundColor: color }]} />

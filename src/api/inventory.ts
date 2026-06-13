@@ -1,12 +1,18 @@
 import client from './client';
 
 export const inventoryApi = {
-  list: (params?: { page?: number; per_page?: number; search?: string }) =>
-    client.get('/inventory', { params }),
-  show: (id: number) => client.get(`/inventory/${id}`),
-  create: (payload: any) => client.post('/inventory', payload),
-  update: (id: number, payload: any) => client.put(`/inventory/${id}`, payload),
-  addMovement: (id: number, payload: { type: 'in' | 'out' | 'adjustment'; quantity: number; notes?: string }) =>
-    client.post(`/inventory/${id}/movements`, payload),
-  movements: (id: number) => client.get(`/inventory/${id}/movements`),
+  /** GET /inventory — full dashboard: ingredients, low_stock, expiring, recent_movements */
+  dashboard: () => client.get('/inventory'),
+
+  /** POST /inventory/stock-in */
+  stockIn: (payload: { ingredient_id: number; quantity: number; notes?: string; expiry_date?: string; unit_cost?: number }) =>
+    client.post('/inventory/stock-in', payload),
+
+  /** POST /inventory/waste */
+  waste: (payload: { ingredient_id: number; quantity: number; notes?: string }) =>
+    client.post('/inventory/waste', payload),
+
+  /** POST /inventory/adjustment */
+  adjustment: (payload: { ingredient_id: number; quantity_change: number; notes?: string }) =>
+    client.post('/inventory/adjustment', payload),
 };
