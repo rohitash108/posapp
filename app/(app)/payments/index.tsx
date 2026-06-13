@@ -131,6 +131,17 @@ function PaymentCard({ pay }: { pay: Payment }) {
 }
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
+// Compute date_from / date_to from a preset key
+function presetRange(key: string): { date_from?: string; date_to?: string } {
+  const fmt = (d: Date) => format(d, 'yyyy-MM-dd');
+  const now  = new Date();
+  if (key === 'today')     return { date_from: fmt(now), date_to: fmt(now) };
+  if (key === 'yesterday') { const y = new Date(now); y.setDate(y.getDate() - 1); return { date_from: fmt(y), date_to: fmt(y) }; }
+  if (key === 'week')      return { date_from: fmt(startOfWeek(now, { weekStartsOn: 1 })), date_to: fmt(now) };
+  if (key === 'month')     return { date_from: fmt(startOfMonth(now)), date_to: fmt(now) };
+  return {};
+}
+
 export default function PaymentsScreen() {
   const [payments,      setPayments]      = useState<Payment[]>([]);
   const [loading,       setLoading]       = useState(true);
@@ -139,59 +150,38 @@ export default function PaymentsScreen() {
   const [methodTab,     setMethodTab]     = useState('all');
   const [statusTab,     setStatusTab]     = useState('all');
   const [dateFilter,    setDateFilter]    = useState('all');
+  // Server-side summary stats (totals by method)
+  const [summary, setSummary] = useState({ total: 0, cash: 0, card: 0, upi: 0, other: 0, count: 0 });
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  const loadSummary = useCallback(async (dateKey: string) => {
     try {
-      const res  = await paymentsApi.list({ per_page: 300 });
+      const range = presetRange(dateKey);
+      const res   = await paymentsApi.summary(range);
+      if (res.data) setSummary(res.data);
+    } catch { /* offline */ }
+  }, []);
+
+  const load = useCallback(async (silent = false, overrides?: { date?: string; method?: string; status?: string; q?: string }) => {
+    if (!silent) setLoading(true);
+    const dateKey = overrides?.date   ?? dateFilter;
+    const method  = overrides?.method ?? methodTab;
+    const status  = overrides?.status ?? statusTab;
+    const q       = overrides?.q      ?? search;
+    try {
+      const params: Record<string, any> = { per_page: 300, ...presetRange(dateKey) };
+      if (method !== 'all') params.payment_method = method;
+      if (status !== 'all') params.payment_status = status;
+      if (q.trim())         params.search = q.trim();
+      const res  = await paymentsApi.list(params);
       const data = res.data?.data ?? res.data ?? [];
       setPayments(Array.isArray(data) ? data : []);
     } catch { /* offline */ }
     finally { setLoading(false); setRefreshing(false); }
-  }, []);
+  }, [dateFilter, methodTab, statusTab, search]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); loadSummary('all'); }, []);
 
-  // ── Filter ────────────────────────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    const now = new Date();
-    return payments.filter(p => {
-      const method = p.payment_method ?? (p as any).method;
-      // Method
-      if (methodTab !== 'all') {
-        if (methodTab === 'other') {
-          if (method !== 'other' && method !== 'online') return false;
-        } else if (method !== methodTab) return false;
-      }
-      // Status
-      if (statusTab !== 'all' && p.status !== statusTab) return false;
-      // Date
-      if (dateFilter !== 'all' && p.created_at) {
-        const d = new Date(p.created_at);
-        if (dateFilter === 'today'     && !isToday(d))     return false;
-        if (dateFilter === 'yesterday' && !isYesterday(d)) return false;
-        if (dateFilter === 'week'      && d < startOfWeek(now)) return false;
-        if (dateFilter === 'month'     && d < startOfMonth(now)) return false;
-      }
-      // Search
-      if (search) {
-        const q = search.toLowerCase();
-        const ref  = (p.reference_number ?? (p as any).reference ?? '').toLowerCase();
-        const name = (p.customer_name ?? '').toLowerCase();
-        const ord  = String((p as any).order_number ?? p.order_id ?? '').toLowerCase();
-        return ref.includes(q) || name.includes(q) || ord.includes(q);
-      }
-      return true;
-    });
-  }, [payments, methodTab, statusTab, dateFilter, search]);
-
-  // ── Stats (always from full list, not filtered) ───────────────────────────
-  const completed = useMemo(() => payments.filter(p => p.status === 'completed'), [payments]);
-  const totalAmt  = useMemo(() => completed.reduce((s, p) => s + Number(p.amount), 0), [completed]);
-  const cashAmt   = useMemo(() => completed.filter(p => (p.payment_method ?? (p as any).method) === 'cash').reduce((s, p) => s + Number(p.amount), 0), [completed]);
-  const cardAmt   = useMemo(() => completed.filter(p => (p.payment_method ?? (p as any).method) === 'card').reduce((s, p) => s + Number(p.amount), 0), [completed]);
-  const upiAmt    = useMemo(() => completed.filter(p => (p.payment_method ?? (p as any).method) === 'upi').reduce((s, p) => s + Number(p.amount), 0), [completed]);
-  const otherAmt  = useMemo(() => completed.filter(p => { const m = p.payment_method ?? (p as any).method; return m === 'other' || m === 'online'; }).reduce((s, p) => s + Number(p.amount), 0), [completed]);
+  const filtered = payments; // server already filters; client-side is just the returned page
 
   const hasFilter = search !== '' || methodTab !== 'all' || statusTab !== 'all' || dateFilter !== 'all';
 
@@ -200,7 +190,7 @@ export default function PaymentsScreen() {
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); load(true); }} tintColor={FOREST} />
+            onRefresh={() => { setRefreshing(true); load(true); loadSummary(dateFilter); }} tintColor={FOREST} />
         }>
 
         {/* ── Page header ── */}
@@ -210,7 +200,7 @@ export default function PaymentsScreen() {
             <Text style={s.pageSub}>Payment transactions and collection summary</Text>
           </View>
           <Pressable style={({ pressed }) => [s.refreshBtn, pressed && { opacity: 0.7 }]}
-            onPress={() => { setRefreshing(true); load(true); }}>
+            onPress={() => { setRefreshing(true); load(true); loadSummary(dateFilter); }}>
             <Ionicons name="refresh-outline" size={16} color="#64748b" />
           </Pressable>
         </View>
@@ -219,15 +209,15 @@ export default function PaymentsScreen() {
         <View style={s.statsBar}>
           <View style={[s.statMain, { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' }]}>
             <Ionicons name="wallet-outline" size={18} color="#16a34a" style={{ marginBottom: 4 }} />
-            <Text style={[s.statMainVal, { color: '#16a34a' }]}>₹{totalAmt.toFixed(2)}</Text>
+            <Text style={[s.statMainVal, { color: '#16a34a' }]}>₹{summary.total.toFixed(2)}</Text>
             <Text style={s.statMainLbl}>Total Collected</Text>
           </View>
           <View style={s.statGrid}>
             {[
-              { label: 'Cash',   val: cashAmt,  color: '#16a34a', bg: '#f0fdf4', icon: 'cash-outline'           as const },
-              { label: 'Card',   val: cardAmt,  color: '#2563eb', bg: '#eff6ff', icon: 'card-outline'           as const },
-              { label: 'UPI',    val: upiAmt,   color: '#7c3aed', bg: '#f5f3ff', icon: 'phone-portrait-outline' as const },
-              { label: 'Online', val: otherAmt, color: '#0891b2', bg: '#ecfeff', icon: 'globe-outline'          as const },
+              { label: 'Cash',   val: summary.cash,  color: '#16a34a', bg: '#f0fdf4', icon: 'cash-outline'           as const },
+              { label: 'Card',   val: summary.card,  color: '#2563eb', bg: '#eff6ff', icon: 'card-outline'           as const },
+              { label: 'UPI',    val: summary.upi,   color: '#7c3aed', bg: '#f5f3ff', icon: 'phone-portrait-outline' as const },
+              { label: 'Online', val: summary.other, color: '#0891b2', bg: '#ecfeff', icon: 'globe-outline'          as const },
             ].map(st => (
               <View key={st.label} style={[s.statSmall, { backgroundColor: st.bg }]}>
                 <Ionicons name={st.icon} size={14} color={st.color} />
@@ -244,11 +234,15 @@ export default function PaymentsScreen() {
             <TextInput
               style={s.searchInput}
               value={search}
-              onChangeText={setSearch}
+              onChangeText={v => {
+                setSearch(v);
+                if ((load as any)._st) clearTimeout((load as any)._st);
+                (load as any)._st = setTimeout(() => load(false, { q: v }), 400);
+              }}
               placeholder="Order #, reference, customer…"
               placeholderTextColor="#9ca3af" />
             {search
-              ? <Pressable onPress={() => setSearch('')}>
+              ? <Pressable onPress={() => { setSearch(''); load(false, { q: '' }); }}>
                   <Ionicons name="close-circle" size={16} color="#9ca3af" />
                 </Pressable>
               : <Ionicons name="search-outline" size={15} color="#9ca3af" />
@@ -269,7 +263,7 @@ export default function PaymentsScreen() {
                   active && { backgroundColor: FOREST, borderColor: FOREST },
                   pressed && { opacity: 0.8 },
                 ]}
-                onPress={() => setDateFilter(dp.key)}>
+                onPress={() => { setDateFilter(dp.key); load(false, { date: dp.key }); loadSummary(dp.key); }}>
                 <Text style={[s.pillTxt, active && { color: GOLD, fontWeight: '700' }]}>{dp.label}</Text>
               </Pressable>
             );
@@ -284,10 +278,10 @@ export default function PaymentsScreen() {
             const active = methodTab === tab.key;
             const mc     = METHOD_CFG[tab.key];
             const cnt    = tab.key === 'all'
-              ? payments.length
+              ? filtered.length
               : tab.key === 'other'
-                ? payments.filter(p => { const m = p.payment_method ?? (p as any).method; return m === 'other' || m === 'online'; }).length
-                : payments.filter(p => (p.payment_method ?? (p as any).method) === tab.key).length;
+                ? filtered.filter(p => { const m = p.payment_method ?? (p as any).method; return m === 'other' || m === 'online'; }).length
+                : filtered.filter(p => (p.payment_method ?? (p as any).method) === tab.key).length;
             return (
               <Pressable key={tab.key}
                 style={({ pressed }) => [
@@ -295,7 +289,7 @@ export default function PaymentsScreen() {
                   active && { backgroundColor: mc?.color ?? FOREST, borderColor: mc?.color ?? FOREST },
                   pressed && { opacity: 0.8 },
                 ]}
-                onPress={() => setMethodTab(tab.key)}>
+                onPress={() => { setMethodTab(tab.key); load(false, { method: tab.key }); }}>
                 {mc && <Ionicons name={mc.icon} size={12} color={active ? '#fff' : mc.color} />}
                 <Text style={[s.tabChipTxt, active && { color: '#fff', fontWeight: '700' }]}>{tab.label}</Text>
                 <View style={[s.tabBadge, active && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
@@ -313,7 +307,7 @@ export default function PaymentsScreen() {
           {STATUS_TABS.map(tab => {
             const active = statusTab === tab.key;
             const sc     = STATUS_CFG[tab.key];
-            const cnt    = tab.key === 'all' ? payments.length : payments.filter(p => p.status === tab.key).length;
+            const cnt    = tab.key === 'all' ? filtered.length : filtered.filter(p => p.status === tab.key).length;
             return (
               <Pressable key={tab.key}
                 style={({ pressed }) => [
@@ -321,7 +315,7 @@ export default function PaymentsScreen() {
                   active && { backgroundColor: sc?.color ?? FOREST, borderColor: sc?.color ?? FOREST },
                   pressed && { opacity: 0.8 },
                 ]}
-                onPress={() => setStatusTab(tab.key)}>
+                onPress={() => { setStatusTab(tab.key); load(false, { status: tab.key }); }}>
                 <Text style={[s.tabChipTxt, active && { color: '#fff', fontWeight: '700' }]}>{tab.label}</Text>
                 <View style={[s.tabBadge, active && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
                   <Text style={[s.tabBadgeTxt, active && { color: '#fff' }]}>{cnt}</Text>
@@ -335,7 +329,7 @@ export default function PaymentsScreen() {
         <View style={s.resultRow}>
           <Text style={s.resultTxt}>{filtered.length} payment{filtered.length !== 1 ? 's' : ''}</Text>
           {hasFilter && (
-            <Pressable onPress={() => { setSearch(''); setMethodTab('all'); setStatusTab('all'); setDateFilter('all'); }}>
+            <Pressable onPress={() => { setSearch(''); setMethodTab('all'); setStatusTab('all'); setDateFilter('all'); load(false, { date: 'all', method: 'all', status: 'all', q: '' }); loadSummary('all'); }}>
               <Text style={s.clearAll}>Clear filters</Text>
             </Pressable>
           )}

@@ -1,12 +1,15 @@
 /**
- * Coupons Screen — Professional redesign
- * Forest-green header · Stats · Cards · Desktop side-panel form · Pressable throughout
+ * Coupons Screen — csPos-parity redesign
+ * Matches CouponsController (web) field names and business rules exactly.
+ *
+ * DB fields:  code, discount_type, discount_amount, valid_from, valid_to,
+ *             is_active, max_uses, times_used
  */
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TextInput, Modal,
-  ActivityIndicator, RefreshControl, Alert, Switch,
-  ScrollView, Pressable, useWindowDimensions, Platform,
+  ActivityIndicator, RefreshControl, Switch,
+  ScrollView, Pressable, useWindowDimensions, Platform, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -18,66 +21,138 @@ const FOREST  = '#1A2B1A';
 const GOLD    = '#C9A52A';
 const PRIMARY = '#2563eb';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function isExpired(c: Coupon) {
-  if (!c.expires_at) return false;
-  return new Date(c.expires_at) < new Date();
+// ── Business logic helpers ────────────────────────────────────────────────────
+
+function isExpired(c: Coupon): boolean {
+  const expiry = c.valid_to ?? c.expires_at;
+  if (!expiry) return false;
+  return new Date(expiry + 'T23:59:59') < new Date();
 }
 
-function usagePercent(c: Coupon) {
-  const used  = c.used_count ?? c.usage_count ?? 0;
+function isNotStarted(c: Coupon): boolean {
+  if (!c.valid_from) return false;
+  return new Date(c.valid_from + 'T00:00:00') > new Date();
+}
+
+function isUsageExhausted(c: Coupon): boolean {
+  const limit = c.max_uses ?? c.usage_limit;
+  if (!limit) return false;
+  const used = c.times_used ?? c.used_count ?? 0;
+  return used >= limit;
+}
+
+function couponStatus(c: Coupon): 'active' | 'inactive' | 'expired' | 'not_started' | 'exhausted' {
+  if (isExpired(c))       return 'expired';
+  if (isUsageExhausted(c)) return 'exhausted';
+  if (!c.is_active)       return 'inactive';
+  if (isNotStarted(c))    return 'not_started';
+  return 'active';
+}
+
+function usagePercent(c: Coupon): number | null {
+  const used  = c.times_used ?? c.used_count ?? 0;
   const limit = c.max_uses   ?? c.usage_limit;
   if (!limit || limit === 0) return null;
   return Math.min(100, Math.round((used / limit) * 100));
 }
 
-// ── Coupon Form ───────────────────────────────────────────────────────────────
-interface FormProps {
+function formatDateDisplay(d?: string): string {
+  if (!d) return '—';
+  try { return format(new Date(d + 'T00:00:00'), 'dd MMM yyyy'); }
+  catch { return d; }
+}
+
+// ── Form ─────────────────────────────────────────────────────────────────────
+
+interface FormState {
+  code: string;
+  discount_type: 'percentage' | 'fixed';
+  discount_amount: string;
+  valid_from: string;
+  valid_to: string;
+  max_uses: string;
+  is_active: boolean;
+}
+
+const BLANK: FormState = {
+  code: '', discount_type: 'percentage', discount_amount: '',
+  valid_from: '', valid_to: '', max_uses: '', is_active: true,
+};
+
+function CouponForm({
+  coupon,
+  onSave,
+  onClose,
+}: {
   coupon?: Coupon | null;
   onSave: () => void;
   onClose: () => void;
-  inPanel?: boolean;  // true = inside desktop side panel, no modal chrome
-}
+}) {
+  const isEdit = !!coupon?.id;
 
-function CouponForm({ coupon, onSave, onClose, inPanel }: FormProps) {
-  const [code,     setCode]     = useState(coupon?.code ?? '');
-  const [type,     setType]     = useState<'percentage' | 'fixed'>(coupon?.discount_type ?? 'percentage');
-  const [value,    setValue]    = useState(coupon ? String(coupon.discount_value) : '');
-  const [minOrder, setMinOrder] = useState(coupon?.min_order_amount ? String(coupon.min_order_amount) : '');
-  const [maxUses,  setMaxUses]  = useState(coupon?.max_uses ? String(coupon.max_uses) : '');
-  const [expires,  setExpires]  = useState(coupon?.expires_at ? coupon.expires_at.substring(0, 10) : '');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
+  const [form, setForm] = useState<FormState>(
+    coupon
+      ? {
+          code:            coupon.code,
+          discount_type:   coupon.discount_type,
+          discount_amount: String(coupon.discount_amount ?? coupon.discount_value ?? ''),
+          valid_from:      coupon.valid_from ?? '',
+          valid_to:        coupon.valid_to ?? coupon.expires_at ?? '',
+          max_uses:        coupon.max_uses ? String(coupon.max_uses) : '',
+          is_active:       coupon.is_active,
+        }
+      : { ...BLANK }
+  );
+  const [saving, setSaving]  = useState(false);
+  const [errors, setErrors]  = useState<Record<string, string>>({});
 
-  async function save() {
-    if (!code.trim())              { setError('Coupon code is required'); return; }
-    if (!value || isNaN(Number(value))) { setError('Enter a valid discount value'); return; }
-    if (type === 'percentage' && (Number(value) <= 0 || Number(value) > 100)) {
-      setError('Percentage must be between 1 and 100'); return;
-    }
-    setLoading(true); setError('');
-    try {
-      const payload = {
-        code:              code.toUpperCase().trim(),
-        discount_type:     type,
-        discount_value:    Number(value),
-        min_order_amount:  minOrder ? Number(minOrder) : undefined,
-        max_uses:          maxUses  ? Number(maxUses)  : undefined,
-        expires_at:        expires  || undefined,
-      };
-      if (coupon?.id) await couponsApi.update(coupon.id, payload);
-      else            await couponsApi.create(payload);
-      onSave();
-    } catch (e: any) {
-      setError(e?.response?.data?.message ?? 'Failed to save coupon');
-    } finally { setLoading(false); }
+  function field(key: keyof FormState) {
+    return (val: string) => {
+      setForm(p => ({ ...p, [key]: val }));
+      if (errors[key]) setErrors(p => ({ ...p, [key]: '' }));
+    };
   }
 
-  const isEdit = !!coupon?.id;
+  function validate(): boolean {
+    const e: Record<string, string> = {};
+    if (!form.code.trim()) e.code = 'Coupon code is required';
+    if (!form.discount_amount || isNaN(Number(form.discount_amount))) e.discount_amount = 'Enter a valid amount';
+    else if (Number(form.discount_amount) < 0) e.discount_amount = 'Amount cannot be negative';
+    else if (form.discount_type === 'percentage' && Number(form.discount_amount) > 100) e.discount_amount = 'Percentage must be 1–100';
+    if (form.valid_from && form.valid_to && form.valid_from > form.valid_to) e.valid_to = 'Expiry must be after start date';
+    if (form.max_uses && (isNaN(Number(form.max_uses)) || Number(form.max_uses) < 1)) e.max_uses = 'Must be a positive number';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  async function save() {
+    if (!validate()) return;
+    setSaving(true);
+    try {
+      const payload = {
+        code:            form.code.toUpperCase().trim(),
+        discount_type:   form.discount_type,
+        discount_amount: Number(form.discount_amount),
+        valid_from:      form.valid_from  || undefined,
+        valid_to:        form.valid_to    || undefined,
+        max_uses:        form.max_uses    ? Number(form.max_uses) : undefined,
+        is_active:       form.is_active,
+      };
+      if (isEdit) await couponsApi.update(coupon!.id, payload);
+      else        await couponsApi.create(payload);
+      onSave();
+    } catch (e: any) {
+      setErrors({ _: e?.response?.data?.message ?? 'Failed to save coupon' });
+    } finally { setSaving(false); }
+  }
+
+  const discountPreview = form.discount_amount && !isNaN(Number(form.discount_amount))
+    ? (form.discount_type === 'percentage' ? `${form.discount_amount}% OFF` : `₹${form.discount_amount} OFF`)
+    : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
-      {/* Form header */}
+      {/* Header */}
       <View style={fm.header}>
         <View style={fm.headerLeft}>
           <View style={fm.headerIcon}>
@@ -85,163 +160,179 @@ function CouponForm({ coupon, onSave, onClose, inPanel }: FormProps) {
           </View>
           <View>
             <Text style={fm.headerTitle}>{isEdit ? 'Edit Coupon' : 'New Coupon'}</Text>
-            <Text style={fm.headerSub}>{isEdit ? `Editing ${coupon.code}` : 'Create a discount code'}</Text>
+            <Text style={fm.headerSub}>{isEdit ? `Editing ${coupon!.code}` : 'Create a discount code'}</Text>
           </View>
         </View>
         <Pressable style={({ pressed }) => [fm.closeBtn, pressed && { opacity: 0.7 }]} onPress={onClose}>
-          <Ionicons name="close" size={20} color="#6b7280" />
+          <Ionicons name="close" size={20} color="rgba(255,255,255,0.7)" />
         </Pressable>
       </View>
 
-      <ScrollView
-        style={{ flex: 1 }}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ padding: 18, gap: 16 }}>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 18, gap: 16 }}>
 
-        {/* Coupon Code */}
-        <View style={fm.field}>
-          <Text style={fm.label}>Coupon Code <Text style={{ color: '#ef4444' }}>*</Text></Text>
-          <View style={fm.codeInputWrap}>
-            <Ionicons name="pricetag-outline" size={16} color="#9ca3af" style={{ marginLeft: 12 }} />
-            <TextInput
-              style={fm.codeInput}
-              value={code}
-              onChangeText={v => setCode(v.toUpperCase())}
-              placeholder="e.g. SAVE20"
-              placeholderTextColor="#9ca3af"
-              autoCapitalize="characters"
+        {errors._ ? (
+          <View style={fm.errorBox}>
+            <Ionicons name="alert-circle-outline" size={15} color="#dc2626" />
+            <Text style={fm.errorTxt}>{errors._}</Text>
+          </View>
+        ) : null}
+
+        {/* Coupon Code + Active toggle */}
+        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+          <View style={[fm.field, { flex: 1 }]}>
+            <Text style={fm.label}>Coupon Code <Text style={fm.req}>*</Text></Text>
+            <View style={[fm.inputWrap, !!errors.code && fm.inputError]}>
+              <View style={fm.inputPrefix}>
+                <Ionicons name="pricetag-outline" size={15} color="#9ca3af" />
+              </View>
+              <TextInput
+                style={[fm.input, { fontFamily: 'monospace', letterSpacing: 2, fontWeight: '800', fontSize: 15 }]}
+                value={form.code}
+                onChangeText={v => { field('code')(v.toUpperCase()); }}
+                placeholder="e.g. SAVE20"
+                placeholderTextColor="#9ca3af"
+                autoCapitalize="characters"
+              />
+            </View>
+            {errors.code ? <Text style={fm.fieldError}>{errors.code}</Text> : <Text style={fm.hint}>Customers enter this code at checkout</Text>}
+          </View>
+          <View style={[fm.field, { alignItems: 'center', marginTop: 30 }]}>
+            <Text style={[fm.label, { textAlign: 'center', marginBottom: 8 }]}>Active</Text>
+            <Switch
+              value={form.is_active}
+              onValueChange={v => setForm(p => ({ ...p, is_active: v }))}
+              trackColor={{ true: '#16a34a', false: '#e5e7eb' }}
+              thumbColor="#fff"
             />
           </View>
-          <Text style={fm.hint}>Customers will enter this code at checkout</Text>
         </View>
 
         {/* Discount Type */}
         <View style={fm.field}>
-          <Text style={fm.label}>Discount Type</Text>
+          <Text style={fm.label}>Discount Type <Text style={fm.req}>*</Text></Text>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
-            <Pressable
-              style={[fm.typeBtn, type === 'percentage' && fm.typeBtnActive]}
-              onPress={() => setType('percentage')}>
-              <Ionicons
-                name="pricetag-outline"
-                size={15}
-                color={type === 'percentage' ? GOLD : '#6b7280'}
-              />
-              <Text style={[fm.typeBtnTxt, type === 'percentage' && fm.typeBtnTxtActive]}>
-                Percentage
-              </Text>
-              {type === 'percentage' && (
-                <View style={fm.typeBtnCheck}>
-                  <Ionicons name="checkmark" size={11} color={GOLD} />
-                </View>
-              )}
-            </Pressable>
-            <Pressable
-              style={[fm.typeBtn, type === 'fixed' && fm.typeBtnActive]}
-              onPress={() => setType('fixed')}>
-              <Text style={[fm.typeBtnIcon, type === 'fixed' && { color: GOLD }]}>₹</Text>
-              <Text style={[fm.typeBtnTxt, type === 'fixed' && fm.typeBtnTxtActive]}>
-                Fixed Amount
-              </Text>
-              {type === 'fixed' && (
-                <View style={fm.typeBtnCheck}>
-                  <Ionicons name="checkmark" size={11} color={GOLD} />
-                </View>
-              )}
-            </Pressable>
+            {(['percentage', 'fixed'] as const).map(t => (
+              <Pressable
+                key={t}
+                style={[fm.typeBtn, form.discount_type === t && fm.typeBtnActive]}
+                onPress={() => setForm(p => ({ ...p, discount_type: t }))}>
+                <Text style={[fm.typeBtnIcon, form.discount_type === t && { color: GOLD }]}>
+                  {t === 'percentage' ? '%' : '₹'}
+                </Text>
+                <Text style={[fm.typeBtnTxt, form.discount_type === t && fm.typeBtnTxtActive]}>
+                  {t === 'percentage' ? 'Percentage' : 'Fixed Amount'}
+                </Text>
+                {form.discount_type === t && (
+                  <View style={fm.typeBtnCheck}>
+                    <Ionicons name="checkmark" size={11} color={GOLD} />
+                  </View>
+                )}
+              </Pressable>
+            ))}
           </View>
         </View>
 
-        {/* Discount Value */}
+        {/* Discount Amount */}
         <View style={fm.field}>
-          <Text style={fm.label}>Discount Value <Text style={{ color: '#ef4444' }}>*</Text></Text>
-          <View style={fm.inputWrap}>
+          <Text style={fm.label}>
+            Discount Value <Text style={fm.req}>*</Text>
+            {form.discount_type === 'percentage' && <Text style={fm.labelHint}> (1–100)</Text>}
+          </Text>
+          <View style={[fm.inputWrap, !!errors.discount_amount && fm.inputError]}>
             <View style={fm.inputPrefix}>
-              <Text style={fm.inputPrefixTxt}>{type === 'percentage' ? '%' : '₹'}</Text>
+              <Text style={fm.inputPrefixTxt}>{form.discount_type === 'percentage' ? '%' : '₹'}</Text>
             </View>
             <TextInput
               style={fm.input}
-              value={value}
-              onChangeText={setValue}
-              placeholder={type === 'percentage' ? '0 – 100' : '0.00'}
+              value={form.discount_amount}
+              onChangeText={field('discount_amount')}
+              placeholder={form.discount_type === 'percentage' ? '0–100' : '0.00'}
               placeholderTextColor="#9ca3af"
               keyboardType="decimal-pad"
             />
           </View>
+          {errors.discount_amount ? <Text style={fm.fieldError}>{errors.discount_amount}</Text> : null}
         </View>
 
-        {/* Min Order & Max Uses row */}
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <View style={[fm.field, { flex: 1 }]}>
-            <Text style={fm.label}>Min Order (₹)</Text>
-            <View style={fm.inputWrap}>
-              <View style={fm.inputPrefix}>
-                <Text style={fm.inputPrefixTxt}>₹</Text>
-              </View>
-              <TextInput
-                style={fm.input}
-                value={minOrder}
-                onChangeText={setMinOrder}
-                placeholder="Any"
-                placeholderTextColor="#9ca3af"
-                keyboardType="decimal-pad"
-              />
-            </View>
-          </View>
-          <View style={[fm.field, { flex: 1 }]}>
-            <Text style={fm.label}>Max Uses</Text>
-            <View style={fm.inputWrap}>
-              <View style={fm.inputPrefix}>
-                <Ionicons name="people-outline" size={13} color="#9ca3af" />
-              </View>
-              <TextInput
-                style={fm.input}
-                value={maxUses}
-                onChangeText={setMaxUses}
-                placeholder="∞"
-                placeholderTextColor="#9ca3af"
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Expiry Date */}
+        {/* Max Uses */}
         <View style={fm.field}>
-          <Text style={fm.label}>Expiry Date</Text>
-          <View style={fm.inputWrap}>
+          <Text style={fm.label}>Max Uses <Text style={fm.opt}>(leave empty for unlimited)</Text></Text>
+          <View style={[fm.inputWrap, !!errors.max_uses && fm.inputError]}>
             <View style={fm.inputPrefix}>
-              <Ionicons name="calendar-outline" size={14} color="#9ca3af" />
+              <Ionicons name="people-outline" size={14} color="#9ca3af" />
             </View>
             <TextInput
               style={fm.input}
-              value={expires}
-              onChangeText={setExpires}
-              placeholder="YYYY-MM-DD (optional)"
+              value={form.max_uses}
+              onChangeText={field('max_uses')}
+              placeholder="Unlimited"
               placeholderTextColor="#9ca3af"
+              keyboardType="numeric"
             />
+          </View>
+          {errors.max_uses ? <Text style={fm.fieldError}>{errors.max_uses}</Text> : null}
+        </View>
+
+        {/* Valid From / Valid To */}
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <View style={[fm.field, { flex: 1 }]}>
+            <Text style={fm.label}>Valid From</Text>
+            {Platform.OS === 'web' ? (
+              <View style={fm.inputWrap}>
+                <View style={fm.inputPrefix}><Ionicons name="calendar-outline" size={14} color="#9ca3af" /></View>
+                <input
+                  type="date"
+                  value={form.valid_from}
+                  onChange={e => field('valid_from')((e.target as HTMLInputElement).value)}
+                  style={{ flex: 1, padding: '12px', fontSize: 14, color: '#111827', border: 'none', outline: 'none', background: 'transparent' } as any}
+                />
+              </View>
+            ) : (
+              <View style={fm.inputWrap}>
+                <View style={fm.inputPrefix}><Ionicons name="calendar-outline" size={14} color="#9ca3af" /></View>
+                <TextInput style={fm.input} value={form.valid_from} onChangeText={field('valid_from')} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" />
+              </View>
+            )}
+            <Text style={fm.hint}>Leave empty to activate immediately</Text>
+          </View>
+          <View style={[fm.field, { flex: 1 }]}>
+            <Text style={fm.label}>Expiry Date</Text>
+            {Platform.OS === 'web' ? (
+              <View style={[fm.inputWrap, !!errors.valid_to && fm.inputError]}>
+                <View style={fm.inputPrefix}><Ionicons name="time-outline" size={14} color="#9ca3af" /></View>
+                <input
+                  type="date"
+                  value={form.valid_to}
+                  onChange={e => field('valid_to')((e.target as HTMLInputElement).value)}
+                  style={{ flex: 1, padding: '12px', fontSize: 14, color: '#111827', border: 'none', outline: 'none', background: 'transparent' } as any}
+                />
+              </View>
+            ) : (
+              <View style={[fm.inputWrap, !!errors.valid_to && fm.inputError]}>
+                <View style={fm.inputPrefix}><Ionicons name="time-outline" size={14} color="#9ca3af" /></View>
+                <TextInput style={fm.input} value={form.valid_to} onChangeText={field('valid_to')} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" />
+              </View>
+            )}
+            {errors.valid_to ? <Text style={fm.fieldError}>{errors.valid_to}</Text> : <Text style={fm.hint}>Leave empty for no expiry</Text>}
           </View>
         </View>
 
-        {/* Error */}
-        {!!error && (
-          <View style={fm.errorBox}>
-            <Ionicons name="alert-circle-outline" size={15} color="#dc2626" />
-            <Text style={fm.errorTxt}>{error}</Text>
-          </View>
-        )}
-
-        {/* Preview pill */}
-        {code.trim() && value ? (
+        {/* Preview */}
+        {form.code.trim() && discountPreview ? (
           <View style={fm.previewBox}>
             <Text style={fm.previewLabel}>Preview</Text>
             <View style={fm.previewPill}>
               <Ionicons name="pricetag" size={13} color={GOLD} />
-              <Text style={fm.previewCode}>{code.toUpperCase()}</Text>
-              <Text style={fm.previewVal}>
-                {type === 'percentage' ? `${value}% OFF` : `₹${value} OFF`}
-              </Text>
+              <Text style={fm.previewCode}>{form.code.toUpperCase()}</Text>
+              <Text style={fm.previewVal}>{discountPreview}</Text>
             </View>
+            {(form.valid_from || form.valid_to) && (
+              <Text style={fm.previewMeta}>
+                {form.valid_from ? `From ${form.valid_from}` : 'Starts immediately'}
+                {' · '}
+                {form.valid_to ? `Expires ${form.valid_to}` : 'No expiry'}
+              </Text>
+            )}
           </View>
         ) : null}
       </ScrollView>
@@ -253,9 +344,9 @@ function CouponForm({ coupon, onSave, onClose, inPanel }: FormProps) {
         </Pressable>
         <Pressable
           style={({ pressed }) => [fm.saveBtn, pressed && { opacity: 0.85 }]}
-          disabled={loading}
+          disabled={saving}
           onPress={save}>
-          {loading
+          {saving
             ? <ActivityIndicator color={GOLD} size="small" />
             : <>
                 <Ionicons name={isEdit ? 'checkmark-circle' : 'add-circle'} size={17} color={GOLD} />
@@ -269,6 +360,15 @@ function CouponForm({ coupon, onSave, onClose, inPanel }: FormProps) {
 }
 
 // ── Coupon Card ───────────────────────────────────────────────────────────────
+
+const STATUS_CONFIG = {
+  active:      { label: 'ACTIVE',       bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d', dot: '#16a34a' },
+  inactive:    { label: 'INACTIVE',     bg: '#f3f4f6', border: '#e5e7eb', text: '#6b7280', dot: '#9ca3af' },
+  expired:     { label: 'EXPIRED',      bg: '#fef2f2', border: '#fecaca', text: '#dc2626', dot: '#ef4444' },
+  not_started: { label: 'NOT STARTED',  bg: '#fff7ed', border: '#fed7aa', text: '#c2410c', dot: '#f97316' },
+  exhausted:   { label: 'LIMIT REACHED',bg: '#fdf4ff', border: '#e9d5ff', text: '#7e22ce', dot: '#8b5cf6' },
+};
+
 function CouponCard({
   coupon: c, toggling, onEdit, onDelete, onToggle,
 }: {
@@ -278,64 +378,58 @@ function CouponCard({
   onDelete: () => void;
   onToggle: () => void;
 }) {
-  const expired = isExpired(c);
+  const status  = couponStatus(c);
+  const cfg     = STATUS_CONFIG[status];
   const pct     = usagePercent(c);
-  const used    = c.used_count ?? c.usage_count ?? 0;
+  const used    = c.times_used ?? c.used_count ?? 0;
   const limit   = c.max_uses   ?? c.usage_limit;
-  const inactive = !c.is_active;
+  const expiry  = c.valid_to   ?? c.expires_at;
+  const amount  = c.discount_amount ?? c.discount_value ?? 0;
 
   return (
-    <View style={[
-      cc.card,
-      expired  && cc.cardExpired,
-      inactive && cc.cardInactive,
-    ]}>
-      {/* Top row: code + toggle */}
+    <View style={[cc.card, status === 'expired' && cc.cardFaded, status === 'inactive' && cc.cardFaded]}>
+
+      {/* Top: code + status badge + toggle */}
       <View style={cc.top}>
-        <View style={cc.codeRow}>
-          <View style={[cc.codeTag, expired && { backgroundColor: '#f3f4f6' }]}>
-            <Ionicons name="pricetag" size={11} color={expired ? '#9ca3af' : GOLD} />
-            <Text style={[cc.codeText, expired && { color: '#9ca3af' }]}>{c.code}</Text>
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <View style={[cc.codeTag, status === 'expired' && { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb' }]}>
+            <Ionicons name="pricetag" size={11} color={status === 'expired' ? '#9ca3af' : GOLD} />
+            <Text style={[cc.codeText, status === 'expired' && { color: '#9ca3af' }]}>{c.code}</Text>
           </View>
-          {expired && (
-            <View style={cc.expiredBadge}>
-              <Text style={cc.expiredTxt}>EXPIRED</Text>
-            </View>
-          )}
-          {!c.is_active && !expired && (
-            <View style={cc.inactiveBadge}>
-              <Text style={cc.inactiveTxt}>INACTIVE</Text>
-            </View>
-          )}
+          <View style={[cc.statusBadge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+            <View style={[cc.statusDot, { backgroundColor: cfg.dot }]} />
+            <Text style={[cc.statusTxt, { color: cfg.text }]}>{cfg.label}</Text>
+          </View>
         </View>
         {toggling
-          ? <ActivityIndicator size="small" color={FOREST} />
+          ? <ActivityIndicator size="small" color={FOREST} style={{ marginLeft: 8 }} />
           : <Switch
-              value={!!c.is_active}
+              value={!!c.is_active && !isExpired(c)}
               onValueChange={onToggle}
+              disabled={isExpired(c) || isUsageExhausted(c)}
               trackColor={{ true: '#16a34a', false: '#e5e7eb' }}
               thumbColor="#fff"
             />
         }
       </View>
 
-      {/* Discount value + meta chips */}
+      {/* Discount value chip + meta */}
       <View style={cc.midRow}>
-        <View style={[cc.valuePill, c.discount_type === 'percentage' ? cc.pillGreen : cc.pillBlue]}>
-          <Text style={[cc.valueTxt, c.discount_type === 'percentage' ? cc.valueTxtGreen : cc.valueTxtBlue]}>
-            {c.discount_type === 'percentage' ? `${c.discount_value}% OFF` : `₹${c.discount_value} OFF`}
+        <View style={[cc.valuePill, c.discount_type === 'percentage' ? cc.pillGold : cc.pillBlue]}>
+          <Text style={[cc.valueTxt, c.discount_type === 'percentage' ? { color: '#92400e' } : { color: PRIMARY }]}>
+            {c.discount_type === 'percentage' ? `${amount}% OFF` : `₹${amount} OFF`}
           </Text>
         </View>
-        {c.min_order_amount ? (
+        {c.valid_from && (
           <View style={cc.metaChip}>
-            <Ionicons name="bag-handle-outline" size={10} color="#6b7280" />
-            <Text style={cc.metaTxt}>Min ₹{c.min_order_amount}</Text>
+            <Ionicons name="calendar-outline" size={10} color="#6b7280" />
+            <Text style={cc.metaTxt}>From {formatDateDisplay(c.valid_from)}</Text>
           </View>
-        ) : null}
+        )}
         {limit ? (
           <View style={cc.metaChip}>
             <Ionicons name="people-outline" size={10} color="#6b7280" />
-            <Text style={cc.metaTxt}>{used}/{limit} uses</Text>
+            <Text style={cc.metaTxt}>{used}/{limit}</Text>
           </View>
         ) : null}
       </View>
@@ -347,39 +441,40 @@ function CouponCard({
             <View style={[
               cc.progressFill,
               { width: `${pct}%` as any },
-              pct >= 90 && { backgroundColor: '#ef4444' },
-              pct >= 60 && pct < 90 && { backgroundColor: '#d97706' },
+              pct >= 100 && { backgroundColor: '#7c3aed' },
+              pct >= 90  && pct < 100 && { backgroundColor: '#ef4444' },
+              pct >= 60  && pct < 90  && { backgroundColor: '#d97706' },
             ]} />
           </View>
-          <Text style={cc.progressTxt}>{pct}% used</Text>
+          <Text style={cc.progressTxt}>{pct}%</Text>
         </View>
       )}
 
-      {/* Bottom row: expiry + actions */}
+      {/* Bottom: expiry info + actions */}
       <View style={cc.botRow}>
-        <View style={{ gap: 2 }}>
+        <View style={{ gap: 3 }}>
           {!limit && (
-            <Text style={cc.usageTxt}>
+            <Text style={cc.metaLine}>
               <Ionicons name="repeat-outline" size={11} color="#9ca3af" /> {used} total uses
             </Text>
           )}
-          {c.expires_at ? (
-            <Text style={[cc.expiryTxt, expired && cc.expiryExpired]}>
-              <Ionicons name="time-outline" size={11} color={expired ? '#dc2626' : '#9ca3af'} />
-              {' '}{expired ? 'Expired' : 'Expires'} {format(new Date(c.expires_at), 'dd MMM yyyy')}
+          {expiry ? (
+            <Text style={[cc.metaLine, status === 'expired' && { color: '#dc2626', fontWeight: '700' }]}>
+              <Ionicons name="time-outline" size={11} color={status === 'expired' ? '#dc2626' : '#9ca3af'} />
+              {' '}{status === 'expired' ? 'Expired' : 'Expires'} {formatDateDisplay(expiry)}
             </Text>
           ) : (
-            <Text style={cc.usageTxt}>No expiry</Text>
+            <Text style={cc.metaLine}>No expiry date</Text>
           )}
         </View>
         <View style={cc.actionsRow}>
           <Pressable
-            style={({ pressed }) => [cc.actionBtn, cc.actionEdit, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [cc.actionBtn, { backgroundColor: '#eff6ff' }, pressed && { opacity: 0.7 }]}
             onPress={onEdit}>
             <Ionicons name="pencil-outline" size={14} color={PRIMARY} />
           </Pressable>
           <Pressable
-            style={({ pressed }) => [cc.actionBtn, cc.actionDelete, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [cc.actionBtn, { backgroundColor: '#fef2f2' }, pressed && { opacity: 0.7 }]}
             onPress={onDelete}>
             <Ionicons name="trash-outline" size={14} color="#dc2626" />
           </Pressable>
@@ -390,8 +485,10 @@ function CouponCard({
 }
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
+
 export default function CouponsScreen() {
   const [coupons,    setCoupons]    = useState<Coupon[]>([]);
+  const [meta,       setMeta]       = useState({ total: 0, active: 0, inactive: 0, expired: 0 });
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search,     setSearch]     = useState('');
@@ -402,12 +499,12 @@ export default function CouponsScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 900;
 
-  // ── Load ─────────────────────────────────────────────────────────────────────
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res  = await couponsApi.list();
+      const res = await couponsApi.list();
       const data = res.data?.data ?? res.data ?? [];
+      if (res.data?.meta) setMeta(res.data.meta);
       setCoupons(Array.isArray(data) ? data : []);
     } catch { }
     finally { setLoading(false); setRefreshing(false); }
@@ -415,74 +512,74 @@ export default function CouponsScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Filter ───────────────────────────────────────────────────────────────────
+  // Client-side filter + search on the loaded set
   const filtered = useMemo(() => {
     return coupons.filter(c => {
-      if (filter === 'active'   && (!c.is_active || isExpired(c))) return false;
-      if (filter === 'inactive' && c.is_active)  return false;
-      if (filter === 'expired'  && !isExpired(c)) return false;
+      const st = couponStatus(c);
+      if (filter === 'active'   && st !== 'active')   return false;
+      if (filter === 'inactive' && st !== 'inactive') return false;
+      if (filter === 'expired'  && st !== 'expired')  return false;
       if (search) return c.code.toLowerCase().includes(search.toLowerCase());
       return true;
     });
   }, [coupons, filter, search]);
 
-  // ── Stats ─────────────────────────────────────────────────────────────────────
-  const activeCount   = useMemo(() => coupons.filter(c => c.is_active && !isExpired(c)).length, [coupons]);
-  const expiredCount  = useMemo(() => coupons.filter(c => isExpired(c)).length,                  [coupons]);
-  const inactiveCount = coupons.length - activeCount - expiredCount;
+  // Derived stats (use server meta if available, fall back to local count)
+  const statsTotal    = meta.total    || coupons.length;
+  const statsActive   = meta.active   || coupons.filter(c => couponStatus(c) === 'active').length;
+  const statsInactive = meta.inactive || coupons.filter(c => couponStatus(c) === 'inactive').length;
+  const statsExpired  = meta.expired  || coupons.filter(c => couponStatus(c) === 'expired').length;
 
-  // ── Actions ───────────────────────────────────────────────────────────────────
   async function handleDelete(c: Coupon) {
-    if (Platform.OS === 'web') {
-      if (!window.confirm(`Delete coupon "${c.code}"? This cannot be undone.`)) return;
+    const doDelete = async () => {
       try { await couponsApi.delete(c.id); load(true); }
-      catch (e: any) { window.alert(e?.response?.data?.message ?? 'Delete failed'); }
+      catch (e: any) {
+        const msg = e?.response?.data?.message ?? 'Delete failed';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Error', msg);
+      }
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Delete coupon "${c.code}"? This cannot be undone.`)) doDelete();
     } else {
       Alert.alert('Delete Coupon', `Delete coupon "${c.code}"?`, [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: async () => {
-          try { await couponsApi.delete(c.id); load(true); }
-          catch (e: any) { Alert.alert('Error', e?.response?.data?.message ?? 'Delete failed'); }
-        }},
+        { text: 'Delete', style: 'destructive', onPress: doDelete },
       ]);
     }
   }
 
   async function handleToggle(c: Coupon) {
+    if (isExpired(c) || isUsageExhausted(c)) return;
     setToggling(prev => new Set(prev).add(c.id));
     const newVal = !c.is_active;
     setCoupons(prev => prev.map(x => x.id === c.id ? { ...x, is_active: newVal } : x));
     try { await couponsApi.toggle(c.id); }
     catch { setCoupons(prev => prev.map(x => x.id === c.id ? { ...x, is_active: !newVal } : x)); }
-    finally {
-      setToggling(prev => { const n = new Set(prev); n.delete(c.id); return n; });
-    }
+    finally { setToggling(prev => { const n = new Set(prev); n.delete(c.id); return n; }); }
   }
 
   function openCreate() { setEditing(null); setFormOpen(true); }
   function openEdit(c: Coupon) { setEditing(c); setFormOpen(true); }
   function afterSave() { setFormOpen(false); setEditing(null); load(true); }
 
-  // ── Filter tabs ───────────────────────────────────────────────────────────────
   const FILTER_TABS = [
-    { key: 'all',      label: 'All',      count: coupons.length,  color: '#fff',    activeColor: FOREST },
-    { key: 'active',   label: 'Active',   count: activeCount,     color: '#16a34a', activeColor: '#16a34a' },
-    { key: 'inactive', label: 'Inactive', count: inactiveCount,   color: '#9ca3af', activeColor: '#6b7280' },
-    { key: 'expired',  label: 'Expired',  count: expiredCount,    color: '#ef4444', activeColor: '#ef4444' },
-  ] as const;
+    { key: 'all'     as const, label: 'All',      count: statsTotal,    color: FOREST },
+    { key: 'active'  as const, label: 'Active',   count: statsActive,   color: '#16a34a' },
+    { key: 'inactive'as const, label: 'Inactive', count: statsInactive, color: '#6b7280' },
+    { key: 'expired' as const, label: 'Expired',  count: statsExpired,  color: '#ef4444' },
+  ];
 
-  // ── List content ──────────────────────────────────────────────────────────────
-  const ListContent = (
-    <View style={{ flex: 1 }}>
+  return (
+    <View style={{ flex: 1, backgroundColor: '#f0f2f7' }}>
+
       {/* Header */}
       <View style={s.pageHeader}>
         <View style={{ flex: 1 }}>
           <Text style={s.pageTitle}>Coupons</Text>
-          <Text style={s.pageSub}>{coupons.length} discount code{coupons.length !== 1 ? 's' : ''}</Text>
+          <Text style={s.pageSub}>{statsTotal} discount code{statsTotal !== 1 ? 's' : ''}</Text>
         </View>
-        <Pressable
-          style={({ pressed }) => [s.addBtn, pressed && { opacity: 0.85 }]}
-          onPress={openCreate}>
+        <Pressable style={({ pressed }) => [s.addBtn, pressed && { opacity: 0.85 }]} onPress={openCreate}>
           <Ionicons name="add" size={17} color="#fff" />
           <Text style={s.addBtnTxt}>New Coupon</Text>
         </Pressable>
@@ -490,40 +587,26 @@ export default function CouponsScreen() {
 
       {/* Stats bar */}
       <View style={s.statsBar}>
-        <View style={s.statItem}>
-          <View style={[s.statIcon, { backgroundColor: '#2563eb18' }]}>
-            <Ionicons name="pricetags-outline" size={14} color={PRIMARY} />
-          </View>
-          <Text style={[s.statVal, { color: PRIMARY }]}>{coupons.length}</Text>
-          <Text style={s.statLbl}>Total</Text>
-        </View>
-        <View style={s.statDivider} />
-        <View style={s.statItem}>
-          <View style={[s.statIcon, { backgroundColor: '#16a34a18' }]}>
-            <Ionicons name="checkmark-circle-outline" size={14} color="#16a34a" />
-          </View>
-          <Text style={[s.statVal, { color: '#16a34a' }]}>{activeCount}</Text>
-          <Text style={s.statLbl}>Active</Text>
-        </View>
-        <View style={s.statDivider} />
-        <View style={s.statItem}>
-          <View style={[s.statIcon, { backgroundColor: '#6b728018' }]}>
-            <Ionicons name="pause-circle-outline" size={14} color="#6b7280" />
-          </View>
-          <Text style={[s.statVal, { color: '#6b7280' }]}>{inactiveCount}</Text>
-          <Text style={s.statLbl}>Inactive</Text>
-        </View>
-        <View style={s.statDivider} />
-        <View style={s.statItem}>
-          <View style={[s.statIcon, { backgroundColor: '#ef444418' }]}>
-            <Ionicons name="time-outline" size={14} color="#ef4444" />
-          </View>
-          <Text style={[s.statVal, { color: '#ef4444' }]}>{expiredCount}</Text>
-          <Text style={s.statLbl}>Expired</Text>
-        </View>
+        {[
+          { icon: 'pricetags-outline', val: statsTotal,    lbl: 'Total',    color: PRIMARY },
+          { icon: 'checkmark-circle-outline', val: statsActive,  lbl: 'Active',   color: '#16a34a' },
+          { icon: 'pause-circle-outline', val: statsInactive, lbl: 'Inactive', color: '#6b7280' },
+          { icon: 'time-outline', val: statsExpired,  lbl: 'Expired',  color: '#ef4444' },
+        ].map((st, i) => (
+          <React.Fragment key={st.lbl}>
+            {i > 0 && <View style={s.statDivider} />}
+            <View style={s.statItem}>
+              <View style={[s.statIcon, { backgroundColor: st.color + '18' }]}>
+                <Ionicons name={st.icon as any} size={14} color={st.color} />
+              </View>
+              <Text style={[s.statVal, { color: st.color }]}>{st.val}</Text>
+              <Text style={s.statLbl}>{st.lbl}</Text>
+            </View>
+          </React.Fragment>
+        ))}
       </View>
 
-      {/* Search + filter tabs */}
+      {/* Search */}
       <View style={s.searchRow}>
         <View style={s.searchBox}>
           <Ionicons name="search-outline" size={15} color="#9ca3af" />
@@ -543,6 +626,7 @@ export default function CouponsScreen() {
         </View>
       </View>
 
+      {/* Filter tabs */}
       <View style={s.tabsRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 8, alignItems: 'center' }}>
@@ -551,15 +635,9 @@ export default function CouponsScreen() {
             return (
               <Pressable
                 key={tab.key}
-                style={({ pressed }) => [
-                  s.filterTab,
-                  active && { backgroundColor: tab.activeColor, borderColor: tab.activeColor },
-                  pressed && { opacity: 0.8 },
-                ]}
+                style={[s.filterTab, active && { backgroundColor: tab.color, borderColor: tab.color }]}
                 onPress={() => setFilter(tab.key)}>
-                <Text style={[s.filterTabTxt, active && { color: '#fff', fontWeight: '700' }]}>
-                  {tab.label}
-                </Text>
+                <Text style={[s.filterTabTxt, active && { color: '#fff', fontWeight: '700' }]}>{tab.label}</Text>
                 <View style={[s.tabCount, active && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
                   <Text style={[s.tabCountTxt, active && { color: '#fff' }]}>{tab.count}</Text>
                 </View>
@@ -589,13 +667,11 @@ export default function CouponsScreen() {
         <FlatList
           data={filtered}
           keyExtractor={i => String(i.id)}
-          contentContainerStyle={{ padding: 10, paddingBottom: 40, flexGrow: 1 }}
+          contentContainerStyle={{ padding: 10, paddingBottom: 40, gap: 8, flexGrow: 1 }}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
+            <RefreshControl refreshing={refreshing}
               onRefresh={() => { setRefreshing(true); load(true); }}
-              tintColor={GOLD}
-            />
+              tintColor={GOLD} />
           }
           renderItem={({ item: c }) => (
             <CouponCard
@@ -616,9 +692,7 @@ export default function CouponsScreen() {
                 {search ? `No results for "${search}"` : 'Create discount codes for your customers.'}
               </Text>
               {!search && filter === 'all' && (
-                <Pressable
-                  style={({ pressed }) => [s.emptyAddBtn, pressed && { opacity: 0.85 }]}
-                  onPress={openCreate}>
+                <Pressable style={({ pressed }) => [s.emptyAddBtn, pressed && { opacity: 0.85 }]} onPress={openCreate}>
                   <Ionicons name="add" size={16} color={GOLD} />
                   <Text style={s.emptyAddTxt}>Create First Coupon</Text>
                 </Pressable>
@@ -627,25 +701,15 @@ export default function CouponsScreen() {
           }
         />
       )}
-    </View>
-  );
 
-  // ── Both desktop & mobile: full-page list + centered modal ───────────────────
-  return (
-    <View style={{ flex: 1, backgroundColor: '#f0f2f7' }}>
-      {ListContent}
-
+      {/* Add/Edit Modal */}
       <Modal
         visible={formOpen}
         transparent
         animationType="fade"
         onRequestClose={() => { setFormOpen(false); setEditing(null); }}>
-        <Pressable
-          style={s.modalBackdrop}
-          onPress={() => { setFormOpen(false); setEditing(null); }}>
-          <Pressable
-            style={[s.modalPanel, isDesktop && s.modalPanelDesktop]}
-            onPress={() => {}}>
+        <Pressable style={s.modalBackdrop} onPress={() => { setFormOpen(false); setEditing(null); }}>
+          <Pressable style={[s.modalPanel, isDesktop && s.modalPanelDesktop]} onPress={() => {}}>
             <CouponForm
               coupon={editing}
               onSave={afterSave}
@@ -659,35 +723,31 @@ export default function CouponsScreen() {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  // Header
-  pageHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  pageTitle:  { fontSize: 18, fontWeight: '800', color: '#111827' },
-  pageSub:    { fontSize: 11, color: '#6b7280', marginTop: 1 },
-  addBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
-  addBtnTxt:  { color: '#fff', fontWeight: '800', fontSize: 13 },
 
-  // Stats
-  statsBar:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+const s = StyleSheet.create({
+  pageHeader:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  pageTitle:   { fontSize: 18, fontWeight: '800', color: '#111827' },
+  pageSub:     { fontSize: 11, color: '#6b7280', marginTop: 1 },
+  addBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  addBtnTxt:   { color: '#fff', fontWeight: '800', fontSize: 13 },
+
+  statsBar:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
   statItem:    { flex: 1, alignItems: 'center', gap: 1 },
   statIcon:    { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginBottom: 1 },
   statVal:     { fontSize: 14, fontWeight: '800' },
   statLbl:     { fontSize: 9, color: '#6b7280' },
   statDivider: { width: 1, height: 28, backgroundColor: '#e5e7eb' },
 
-  // Search
   searchRow:   { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
   searchBox:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f8fafc', borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   searchInput: { flex: 1, fontSize: 13, color: '#111827' },
 
-  // Filter tabs
   tabsRow:      { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', height: 48 },
   filterTab:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
   filterTabTxt: { fontSize: 12, fontWeight: '600', color: '#374151' },
   tabCount:     { backgroundColor: '#e5e7eb', borderRadius: 99, paddingHorizontal: 6, paddingVertical: 1 },
   tabCountTxt:  { fontSize: 10, fontWeight: '700', color: '#6b7280' },
 
-  // Result / load / empty
   resultRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 7, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   resultTxt:  { fontSize: 11.5, color: '#9ca3af', fontWeight: '600' },
   clearAll:   { fontSize: 12, color: PRIMARY, textDecorationLine: 'underline' },
@@ -697,54 +757,42 @@ const s = StyleSheet.create({
   emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#374151' },
   emptySub:   { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 40 },
-  emptyAddBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 10 },
-  emptyAddTxt: { color: '#fff', fontWeight: '800', fontSize: 13.5 },
+  emptyAddBtn:{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 10 },
+  emptyAddTxt:{ color: '#fff', fontWeight: '800', fontSize: 13.5 },
 
-  // Centered modal
   modalBackdrop:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 16 },
   modalPanel:        { width: '100%', maxHeight: '95%', borderRadius: 16, overflow: 'hidden', backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
-  modalPanelDesktop: { width: 560, maxWidth: 560 },
+  modalPanelDesktop: { width: 580, maxWidth: 580 },
 });
 
-// Coupon card styles
 const cc = StyleSheet.create({
-  card:         { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#f1f5f9', borderLeftWidth: 4, borderLeftColor: GOLD, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  cardExpired:  { borderLeftColor: '#9ca3af', backgroundColor: '#fafafa' },
-  cardInactive: { opacity: 0.7 },
-  top:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  codeRow:      { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  codeTag:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fefce8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#fef08a' },
-  codeText:     { fontSize: 16, fontWeight: '900', color: '#111827', letterSpacing: 1.5, fontFamily: 'monospace' },
-  expiredBadge: { backgroundColor: '#fef2f2', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: '#fecaca' },
-  expiredTxt:   { fontSize: 9, fontWeight: '800', color: '#dc2626', letterSpacing: 0.5 },
-  inactiveBadge:{ backgroundColor: '#f3f4f6', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
-  inactiveTxt:  { fontSize: 9, fontWeight: '800', color: '#9ca3af', letterSpacing: 0.5 },
-  midRow:       { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 7, marginBottom: 10 },
-  valuePill:    { paddingHorizontal: 11, paddingVertical: 5, borderRadius: 8 },
-  pillGreen:    { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
-  pillBlue:     { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe' },
-  valueTxt:     { fontSize: 13, fontWeight: '800' },
-  valueTxtGreen:{ color: '#16a34a' },
-  valueTxtBlue: { color: PRIMARY },
-  metaChip:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f3f4f6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7 },
-  metaTxt:      { fontSize: 11, fontWeight: '600', color: '#6b7280' },
-  progressWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  card:        { backgroundColor: '#fff', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#f1f5f9', borderLeftWidth: 4, borderLeftColor: GOLD, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  cardFaded:   { opacity: 0.75 },
+  top:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  codeTag:     { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fefce8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#fef08a' },
+  codeText:    { fontSize: 15, fontWeight: '900', color: '#111827', letterSpacing: 1.5 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1 },
+  statusDot:   { width: 5, height: 5, borderRadius: 2.5 },
+  statusTxt:   { fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
+  midRow:      { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 7, marginBottom: 10 },
+  valuePill:   { paddingHorizontal: 11, paddingVertical: 5, borderRadius: 8 },
+  pillGold:    { backgroundColor: '#fefce8', borderWidth: 1, borderColor: '#fde68a' },
+  pillBlue:    { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe' },
+  valueTxt:    { fontSize: 13, fontWeight: '800' },
+  metaChip:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f3f4f6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7 },
+  metaTxt:     { fontSize: 11, fontWeight: '600', color: '#6b7280' },
+  progressWrap:{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   progressTrack:{ flex: 1, height: 5, backgroundColor: '#f3f4f6', borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: 5, borderRadius: 3, backgroundColor: '#16a34a' },
-  progressTxt:  { fontSize: 10, fontWeight: '700', color: '#9ca3af', width: 54, textAlign: 'right' },
-  botRow:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  usageTxt:     { fontSize: 11.5, color: '#9ca3af' },
-  expiryTxt:    { fontSize: 11.5, color: '#9ca3af' },
-  expiryExpired:{ color: '#dc2626', fontWeight: '700' },
-  actionsRow:   { flexDirection: 'row', gap: 8 },
-  actionBtn:    { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  actionEdit:   { backgroundColor: '#eff6ff' },
-  actionDelete: { backgroundColor: '#fef2f2' },
+  progressTxt:  { fontSize: 10, fontWeight: '700', color: '#9ca3af', width: 32, textAlign: 'right' },
+  botRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 4 },
+  metaLine:    { fontSize: 11.5, color: '#9ca3af' },
+  actionsRow:  { flexDirection: 'row', gap: 8 },
+  actionBtn:   { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
 });
 
-// Form styles
 const fm = StyleSheet.create({
-  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: FOREST },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, backgroundColor: FOREST },
   headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerIcon:  { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(201,165,42,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(201,165,42,0.25)' },
   headerTitle: { fontSize: 16, fontWeight: '800', color: '#fff' },
@@ -752,15 +800,18 @@ const fm = StyleSheet.create({
   closeBtn:    { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
   field:       { gap: 0 },
   label:       { fontSize: 11.5, fontWeight: '800', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 7 },
+  labelHint:   { fontSize: 10, fontWeight: '400', color: '#9ca3af', textTransform: 'none', letterSpacing: 0 },
+  req:         { color: '#ef4444' },
+  opt:         { color: '#9ca3af', fontWeight: '400', textTransform: 'none', letterSpacing: 0, fontSize: 10 },
   hint:        { fontSize: 11, color: '#9ca3af', marginTop: 5 },
-  codeInputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 11, backgroundColor: '#fafafa', overflow: 'hidden' },
-  codeInput:   { flex: 1, paddingHorizontal: 10, paddingVertical: 12, fontSize: 16, fontWeight: '800', color: '#111827', letterSpacing: 2, fontFamily: 'monospace' },
+  fieldError:  { fontSize: 11.5, color: '#dc2626', fontWeight: '600', marginTop: 4 },
   inputWrap:   { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 11, backgroundColor: '#fafafa', overflow: 'hidden' },
-  inputPrefix: { width: 38, height: 46, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6', borderRightWidth: 1, borderRightColor: '#e5e7eb' },
+  inputError:  { borderColor: '#fca5a5', backgroundColor: '#fff5f5' },
+  inputPrefix: { width: 40, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6', borderRightWidth: 1, borderRightColor: '#e5e7eb' },
   inputPrefixTxt: { fontSize: 14, fontWeight: '800', color: '#6b7280' },
   input:       { flex: 1, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: '#111827' },
   typeBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: 11, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#f3f4f6', position: 'relative' },
-  typeBtnActive: { backgroundColor: FOREST, borderColor: FOREST },
+  typeBtnActive:{ backgroundColor: FOREST, borderColor: FOREST },
   typeBtnTxt:  { fontSize: 13, fontWeight: '600', color: '#374151' },
   typeBtnTxtActive: { color: '#fff', fontWeight: '700' },
   typeBtnIcon: { fontSize: 15, fontWeight: '800', color: '#6b7280' },
@@ -769,10 +820,11 @@ const fm = StyleSheet.create({
   errorTxt:    { color: '#dc2626', fontSize: 12.5, fontWeight: '600', flex: 1 },
   previewBox:  { gap: 8 },
   previewLabel:{ fontSize: 11.5, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 },
-  previewPill: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: '#1A2B1A', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
-  previewCode: { fontSize: 14, fontWeight: '900', color: '#fff', letterSpacing: 2, fontFamily: 'monospace' },
+  previewPill: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
+  previewCode: { fontSize: 14, fontWeight: '900', color: '#fff', letterSpacing: 2 },
   previewVal:  { fontSize: 13, fontWeight: '700', color: GOLD },
-  footer:      { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
+  previewMeta: { fontSize: 11, color: '#9ca3af' },
+  footer:      { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6', backgroundColor: '#fff' },
   cancelBtn:   { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 11, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#fff' },
   cancelTxt:   { fontWeight: '700', color: '#374151', fontSize: 14 },
   saveBtn:     { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 13, borderRadius: 11, backgroundColor: FOREST },

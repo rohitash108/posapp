@@ -20,6 +20,32 @@ const FOREST  = '#1A2B1A';
 const GOLD    = '#C9A52A';
 const PRIMARY = '#2563eb';
 
+// Play a short two-tone beep via Web Audio API (no package needed).
+function playNewOrderBeep() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  try {
+    const Ctx = (window as any).AudioContext ?? (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx  = new Ctx();
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+
+    const play = (freq: number, start: number, dur: number) => {
+      const osc = ctx.createOscillator();
+      osc.connect(gain);
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.4, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur);
+    };
+
+    play(880, 0,    0.18);   // high note
+    play(660, 0.22, 0.25);   // lower note
+  } catch { /* ignore — audio permission denied or unsupported */ }
+}
+
 // ── Status / source config ────────────────────────────────────────────────────
 const STATUS_CFG = {
   pending:   { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe', dot: '#3b82f6', label: 'Pending',   next: 'confirmed', nextLabel: 'Confirm'       },
@@ -717,12 +743,23 @@ export default function OrdersScreen() {
   const [viewMode,   setViewMode]   = useState<'grid' | 'list'>('grid');
   const [isUpdating, setIsUpdating] = useState(false);
   const [toastMsg,   setToastMsg]   = useState('');
+  const [aggAlert,   setAggAlert]   = useState<{ source: string; orders: Order[] } | null>(null);
+  const aggAlertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const knownOrderIds = useRef<Set<number>>(new Set());
+  const isFirstLoad   = useRef(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { restaurant } = useAppStore();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const contentW  = isDesktop ? width - 220 : width;
   const numCols   = contentW >= 2200 ? 5 : contentW >= 1700 ? 4 : contentW >= 1200 ? 3 : contentW >= 700 ? 2 : 1;
+
+  const showAggAlert = useCallback((source: string, newOrders: Order[]) => {
+    if (aggAlertTimer.current) clearTimeout(aggAlertTimer.current);
+    setAggAlert({ source, orders: newOrders });
+    playNewOrderBeep();
+    aggAlertTimer.current = setTimeout(() => setAggAlert(null), 8000);
+  }, []);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -731,11 +768,26 @@ export default function OrdersScreen() {
       const params: any = { per_page: 300 };
       if (range) { params.from = range.from; params.to = range.to; }
       const res  = await ordersApi.list(params);
-      const data = res.data?.data ?? res.data ?? [];
-      setOrders(Array.isArray(data) ? data : []);
+      const data: Order[] = Array.isArray(res.data?.data ?? res.data) ? (res.data?.data ?? res.data) : [];
+      setOrders(data);
+
+      // Detect new Zomato/Swiggy orders on background polls (skip first load)
+      if (isFirstLoad.current) {
+        data.forEach(o => knownOrderIds.current.add(o.id));
+        isFirstLoad.current = false;
+      } else {
+        const newAgg = data.filter(o => isAgg(o) && !knownOrderIds.current.has(o.id));
+        if (newAgg.length > 0) {
+          // If mixed sources, prefer whichever has more; otherwise use the first
+          const src = newAgg.filter(o => o.source === 'zomato').length >= newAgg.filter(o => o.source === 'swiggy').length
+            ? 'zomato' : 'swiggy';
+          showAggAlert(src, newAgg);
+        }
+        data.forEach(o => knownOrderIds.current.add(o.id));
+      }
     } catch (e) { console.warn('Orders load:', e); }
     finally { setLoading(false); setRefreshing(false); }
-  }, [dateRange]);
+  }, [dateRange, showAggAlert]);
 
   useEffect(() => {
     load();
@@ -823,6 +875,29 @@ export default function OrdersScreen() {
 
   return (
     <View style={s.shell}>
+      {/* ── New Zomato / Swiggy order alert banner ── */}
+      {!!aggAlert && (
+        <Pressable
+          style={[s.aggBanner, aggAlert.source === 'zomato' ? s.aggBannerZomato : s.aggBannerSwiggy]}
+          onPress={() => setAggAlert(null)}
+        >
+          <View style={s.aggBannerIcon}>
+            <Ionicons name="bicycle" size={20} color="#fff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.aggBannerTitle}>
+              {aggAlert.orders.length === 1
+                ? `New ${aggAlert.source === 'zomato' ? 'Zomato' : 'Swiggy'} Order!`
+                : `${aggAlert.orders.length} New ${aggAlert.source === 'zomato' ? 'Zomato' : 'Swiggy'} Orders!`}
+            </Text>
+            <Text style={s.aggBannerSub} numberOfLines={1}>
+              {aggAlert.orders.map(o => o.order_number ?? `#${o.id}`).join(' · ')}
+            </Text>
+          </View>
+          <Ionicons name="close" size={18} color="rgba(255,255,255,0.8)" />
+        </Pressable>
+      )}
+
       {!!toastMsg && (
         <View style={s.toast}>
           <Ionicons name="alert-circle" size={14} color="#fff" />
@@ -1004,6 +1079,12 @@ const s = StyleSheet.create({
   shell:          { flex: 1, backgroundColor: '#f0f2f7' },
   toast:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#dc2626', paddingHorizontal: 14, paddingVertical: 10, zIndex: 99 },
   toastTxt:       { flex: 1, fontSize: 13, color: '#fff', fontWeight: '600' },
+  aggBanner:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, zIndex: 100 },
+  aggBannerZomato:{ backgroundColor: '#dc2626' },
+  aggBannerSwiggy:{ backgroundColor: '#ea580c' },
+  aggBannerIcon:  { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  aggBannerTitle: { fontSize: 15, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
+  aggBannerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
   statsScroll:    { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
   statsRow:       { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
   statCard:       { minWidth: 148, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 1 },

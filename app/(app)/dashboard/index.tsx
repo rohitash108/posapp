@@ -1,11 +1,21 @@
 /**
  * Dashboard — matches csPos Restaurant Admin Dashboard exactly
  *
+ * Data sources (server-side, matching csPos API calls):
+ *   /reports/summary          → BigCards + Key Metrics + Sales Breakdown
+ *   /reports/sales?group_by=day → 7-day Sale Analysis bar chart
+ *   /reports/top-items        → Top Selling Items
+ *   /reports/payment-methods  → Payment Types panel + Payment Methods grid
+ *   /reports/expenses         → Expense Summary widget
+ *   /orders (active+recent)   → Active Orders list + Recent Orders list
+ *   /reservations             → Upcoming Reservations
+ *
  * Sections (same order as csPos):
  *  Header with date-range filter (Today / Yesterday / Week / Month / All Time)
  *  Row 1  — 3 BigCards: Today Sales · Month Sales · Total Sales (filtered)
  *  Row 1b — 6 SmallCards: Offline/Online counts + Offline/Online/Net/Total sale
  *  Row 2  — 5 MetricCards: Total Orders · Avg Value · Total Tax · Reservations · Unpaid
+ *  Expense Summary — Total Expenses · Net Profit (revenue − expenses)
  *  Chart  — Sale Analysis bar (7-day) + Payment-type breakdown
  *  Bill Type Breakdown grid
  *  Bill Status (Cancelled / Free / Deleted)
@@ -16,7 +26,7 @@
  *  Upcoming Reservations list
  *  Quick Access grid
  */
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl, useWindowDimensions, ActivityIndicator,
@@ -25,6 +35,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { format, subDays, startOfMonth, startOfWeek, subMonths } from 'date-fns';
 import { ordersApi } from '@/api/orders';
+import { reportsApi } from '@/api/reports';
 import client from '@/api/client';
 import { useAppStore } from '@/store/appStore';
 import { AppBrandLogo, APP_BRAND_NAME, APP_BRAND_TAGLINE } from '@/components/AppBrandLogo';
@@ -34,42 +45,38 @@ import type { Order, Reservation } from '@/types';
 
 const C = themes.light.dashboard;
 
-const POLL_MS = 60_000;
-const SIDEBAR = 220;
-const CUR     = '₹';
+const POLL_MS  = 60_000;
+const SIDEBAR  = 220;
+const CUR      = '₹';
 
 // ── Date-range presets ────────────────────────────────────────────────────────
 type Preset = 'today' | 'yesterday' | 'week' | 'month' | 'all';
 const PRESETS: { key: Preset; label: string }[] = [
-  { key: 'today',     label: 'Today'     },
-  { key: 'yesterday', label: 'Yesterday' },
-  { key: 'week',      label: 'This Week' },
-  { key: 'month',     label: 'This Month'},
-  { key: 'all',       label: 'All Time'  },
+  { key: 'today',     label: 'Today'      },
+  { key: 'yesterday', label: 'Yesterday'  },
+  { key: 'week',      label: 'This Week'  },
+  { key: 'month',     label: 'This Month' },
+  { key: 'all',       label: 'All Time'   },
 ];
 
 function presetDates(p: Preset): { from: string | null; to: string | null } {
-  const d = (date: Date) => format(date, 'yyyy-MM-dd');
+  const d     = (date: Date) => format(date, 'yyyy-MM-dd');
   const today = new Date();
-  if (p === 'today')     return { from: d(today),                          to: d(today) };
-  if (p === 'yesterday') return { from: d(subDays(today, 1)),              to: d(subDays(today, 1)) };
-  if (p === 'week')      return { from: d(startOfWeek(today, { weekStartsOn: 1 })), to: d(today) };
-  if (p === 'month')     return { from: d(startOfMonth(today)),            to: d(today) };
+  if (p === 'today')     return { from: d(today),                                           to: d(today) };
+  if (p === 'yesterday') return { from: d(subDays(today, 1)),                               to: d(subDays(today, 1)) };
+  if (p === 'week')      return { from: d(startOfWeek(today, { weekStartsOn: 1 })),         to: d(today) };
+  if (p === 'month')     return { from: d(startOfMonth(today)),                              to: d(today) };
   return { from: null, to: null };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const fmtMoney = (n: number) =>
-  `${CUR}${Math.round(n).toLocaleString('en-IN')}`;
-const fmtFull = (n: number) =>
-  `${CUR}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const pct = (part: number, total: number) =>
-  total > 0 ? Math.round((part / total) * 100) : 0;
+const fmtMoney  = (n: number) => `${CUR}${Math.round(n).toLocaleString('en-IN')}`;
+const fmtFull   = (n: number) => `${CUR}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const pct       = (part: number, total: number) => total > 0 ? Math.round((part / total) * 100) : 0;
+const todayStr  = () => format(new Date(), 'yyyy-MM-dd');
+const mStartStr = () => format(startOfMonth(new Date()), 'yyyy-MM-dd');
 
-function todayStr()      { return format(new Date(), 'yyyy-MM-dd'); }
-function monthStartStr() { return format(startOfMonth(new Date()), 'yyyy-MM-dd'); }
-
-function last7Days() {
+function last7Labels() {
   return Array.from({ length: 7 }, (_, i) => {
     const d = subDays(new Date(), 6 - i);
     return { date: format(d, 'yyyy-MM-dd'), label: format(d, 'EEE') };
@@ -79,24 +86,24 @@ function last7Days() {
 const ONLINE_SOURCES = ['zomato', 'swiggy'];
 
 const PM_CFG: Record<string, { label: string; icon: any; color: string }> = {
-  cash:    { label: 'Cash',       icon: 'cash-outline',       color: C.success },
-  card:    { label: 'Card',       icon: 'card-outline',       color: C.info    },
-  upi:     { label: 'UPI',        icon: 'qr-code-outline',    color: C.purple  },
-  razorpay:{ label: 'Razorpay',   icon: 'card-outline',       color: C.primary },
-  gpay:    { label: 'Google Pay', icon: 'wallet-outline',     color: C.primary },
-  phonepe: { label: 'PhonePe',    icon: 'wallet-outline',     color: C.indigo  },
-  paytm:   { label: 'Paytm',      icon: 'wallet-outline',     color: C.indigo  },
-  zomato:  { label: 'Zomato',     icon: 'bicycle-outline',    color: C.danger  },
-  swiggy:  { label: 'Swiggy',     icon: 'bicycle-outline',    color: C.orange  },
-  other:   { label: 'Other',      icon: 'help-circle-outline',color: C.muted   },
+  cash:    { label: 'Cash',       icon: 'cash-outline',        color: C.success },
+  card:    { label: 'Card',       icon: 'card-outline',        color: C.info    },
+  upi:     { label: 'UPI',        icon: 'qr-code-outline',     color: C.purple  },
+  razorpay:{ label: 'Razorpay',  icon: 'card-outline',        color: C.primary },
+  gpay:    { label: 'Google Pay', icon: 'wallet-outline',      color: C.primary },
+  phonepe: { label: 'PhonePe',   icon: 'wallet-outline',      color: C.indigo  },
+  paytm:   { label: 'Paytm',     icon: 'wallet-outline',      color: C.indigo  },
+  zomato:  { label: 'Zomato',    icon: 'bicycle-outline',     color: C.danger  },
+  swiggy:  { label: 'Swiggy',    icon: 'bicycle-outline',     color: C.orange  },
+  other:   { label: 'Other',     icon: 'help-circle-outline', color: C.muted   },
 };
 
 const BILL_TYPE_CFG: Record<string, { label: string; icon: any; color: string }> = {
-  dine_in:  { label: 'Dine In',    icon: 'restaurant-outline',  color: C.primary },
-  takeaway: { label: 'Quick Bill', icon: 'bag-outline',          color: C.muted   },
-  pickup:   { label: 'Pickup',     icon: 'cube-outline',         color: C.warning },
-  delivery: { label: 'Delivery',   icon: 'bicycle-outline',      color: C.success },
-  qr_order: { label: 'QR Order',   icon: 'qr-code-outline',      color: C.purple  },
+  dine_in:  { label: 'Dine In',    icon: 'restaurant-outline', color: C.primary },
+  takeaway: { label: 'Quick Bill', icon: 'bag-outline',         color: C.muted   },
+  pickup:   { label: 'Pickup',     icon: 'cube-outline',        color: C.warning },
+  delivery: { label: 'Delivery',   icon: 'bicycle-outline',     color: C.success },
+  qr_order: { label: 'QR Order',   icon: 'qr-code-outline',     color: C.purple  },
 };
 
 const STATUS_CFG: Record<string, { color: string; bg: string }> = {
@@ -109,121 +116,119 @@ const STATUS_CFG: Record<string, { color: string; bg: string }> = {
   cancelled: { color: C.danger,  bg: '#fff1f2' },
 };
 
-// ── Computed stats ─────────────────────────────────────────────────────────────
-function computeStats(
+// ── Data shapes ───────────────────────────────────────────────────────────────
+interface Summary {
+  // Fixed (always today / this-month)
+  today_sales:       number;
+  today_orders:      number;
+  month_sales:       number;
+  month_orders:      number;
+  sales_growth_pct:  number;
+  // Date-filtered
+  total_sales:       number;
+  total_orders:      number;
+  total_tax:         number;
+  total_discount:    number;
+  net_sales:         number;
+  avg_order_value:   number;
+  offline_orders:    number;
+  online_orders:     number;
+  offline_sales:     number;
+  online_sales:      number;
+  unpaid_count:      number;
+  unpaid_total:      number;
+  cancelled_count:   number;
+  free_bills:        number;
+  reservations_count:number;
+  bill_types:        Record<string, { count: number; total: number }>;
+}
+
+interface SalesDay {
+  date:         string;
+  total_sales:  number;
+  total_orders: number;
+}
+
+interface TopItem {
+  item_name: string;
+  name?:     string;
+  quantity:  number;
+  qty?:      number;
+  total?:    number;
+}
+
+interface PmRow {
+  payment_method?: string;
+  method?:         string;
+  count:           number;
+  total:           number;
+}
+
+interface ExpenseSummary {
+  total:     number;
+  tax_total: number;
+  count:     number;
+}
+
+// ── Client-side fallback: compute summary from raw orders ─────────────────────
+function summaryFromOrders(
   todayOrders: Order[],
   monthOrders: Order[],
   filteredOrders: Order[],
   prevMonthOrders: Order[],
-  reservationsCount: number,
-) {
+  reservCount: number,
+): Summary {
   const paid    = (arr: Order[]) => arr.filter(o => o.payment_status === 'paid');
-  const sum     = (arr: Order[], key: keyof Order) => arr.reduce((s, o) => s + (Number(o[key]) || 0), 0);
+  const sum     = (arr: Order[], key: keyof Order) =>
+    arr.reduce((s, o) => s + (Number(o[key]) || 0), 0);
   const paidSum = (arr: Order[]) => sum(paid(arr), 'total');
 
-  // Always-fixed tiles (Today + Month) — match csPos baseQuery behavior
-  const todaySales      = paidSum(todayOrders);
-  const todayOrderCount = todayOrders.length;
-  const monthSales      = paidSum(monthOrders);
-  const monthOrderCount = monthOrders.length;
-
-  // Sales growth: this month vs prev month
-  const prevMonthSales    = paidSum(prevMonthOrders);
-  const salesGrowthPct    = prevMonthSales > 0
+  const todaySales     = paidSum(todayOrders);
+  const monthSales     = paidSum(monthOrders);
+  const prevMonthSales = paidSum(prevMonthOrders);
+  const salesGrowthPct = prevMonthSales > 0
     ? Math.round(((monthSales - prevMonthSales) / prevMonthSales) * 100)
     : monthSales > 0 ? 100 : 0;
 
-  // Date-filtered stats (all other metrics)
-  const allPaid       = paid(filteredOrders);
-  const totalSales    = paidSum(filteredOrders);
-  const totalTax      = sum(allPaid, 'tax_amount');
-  const totalDiscount = sum(allPaid, 'discount_amount');
-  const netSales      = Math.max(0, totalSales - totalTax);
-  const avgOrderValue = allPaid.length > 0 ? totalSales / allPaid.length : 0;
-  const totalOrders   = filteredOrders.length;
+  const allPaid        = paid(filteredOrders);
+  const totalSales     = paidSum(filteredOrders);
+  const totalTax       = sum(allPaid, 'tax_amount');
+  const totalDiscount  = sum(allPaid, 'discount_amount');
+  const netSales       = Math.max(0, totalSales - totalTax);
+  const avgOrderValue  = allPaid.length > 0 ? totalSales / allPaid.length : 0;
 
-  const offlineOrders = filteredOrders.filter(o => !ONLINE_SOURCES.includes(o.source ?? ''));
-  const onlineOrders  = filteredOrders.filter(o =>  ONLINE_SOURCES.includes(o.source ?? ''));
-  const offlineSales  = paidSum(offlineOrders);
-  const onlineSales   = paidSum(onlineOrders);
+  const offlineOrders  = filteredOrders.filter(o => !ONLINE_SOURCES.includes(o.source ?? ''));
+  const onlineOrders   = filteredOrders.filter(o =>  ONLINE_SOURCES.includes(o.source ?? ''));
+  const unpaidOrders   = filteredOrders.filter(o => o.payment_status !== 'paid' && o.status !== 'cancelled');
 
-  const unpaidOrders = filteredOrders.filter(o => o.payment_status !== 'paid' && o.status !== 'cancelled');
-  const unpaidTotal  = sum(unpaidOrders, 'total');
-  const cancelledBills = filteredOrders.filter(o => o.status === 'cancelled').length;
-  const freeBills      = filteredOrders.filter(o => o.status !== 'cancelled' && Number(o.total) === 0).length;
-
-  // Bill type breakdown
-  const billTypes = Object.keys(BILL_TYPE_CFG).reduce((acc, k) => {
-    const typeOrders = filteredOrders.filter(o => o.order_type === k);
-    acc[k] = { count: typeOrders.length, total: paidSum(typeOrders) };
+  const bill_types = Object.keys(BILL_TYPE_CFG).reduce((acc, k) => {
+    const t = filteredOrders.filter(o => o.order_type === k);
+    acc[k]  = { count: t.length, total: paidSum(t) };
     return acc;
   }, {} as Record<string, { count: number; total: number }>);
 
-  // Payment method breakdown — Zomato/Swiggy grouped by source, others by payment_method
-  const pmMap: Record<string, { count: number; total: number }> = {};
-  for (const o of allPaid) {
-    const key = ONLINE_SOURCES.includes(o.source ?? '') ? (o.source ?? 'other') : (o.payment_method ?? 'other');
-    if (!pmMap[key]) pmMap[key] = { count: 0, total: 0 };
-    pmMap[key].count++;
-    pmMap[key].total += Number(o.total) || 0;
-  }
-  const pmTotal = Math.max(1, Object.values(pmMap).reduce((s, v) => s + v.total, 0));
-  const paymentMethods = Object.entries(pmMap)
-    .map(([key, v]) => ({
-      key, count: v.count, total: v.total,
-      percent: pct(v.total, pmTotal),
-      ...(PM_CFG[key] ?? { label: key, icon: 'wallet-outline', color: C.muted }),
-    }))
-    .sort((a, b) => b.total - a.total);
-
-  // 7-day revenue chart
-  const days = last7Days();
-  const dailyRevenue = days.map(d => {
-    const dayOrders = paid(filteredOrders.filter(o => (o.created_at ?? '').startsWith(d.date)));
-    return sum(dayOrders, 'total');
-  });
-  const dailyOrderCounts = days.map(d =>
-    filteredOrders.filter(o => (o.created_at ?? '').startsWith(d.date)).length
-  );
-
-  // Order type breakdown (for Category Statistics)
-  const ordersByType = Object.keys(BILL_TYPE_CFG).reduce((acc, k) => {
-    acc[k] = filteredOrders.filter(o => o.order_type === k).length;
-    return acc;
-  }, {} as Record<string, number>);
-
-  // Active orders (live, from filtered set)
-  const activeOrders = filteredOrders
-    .filter(o => ['pending', 'confirmed', 'preparing', 'ready', 'served'].includes(o.status))
-    .slice(0, 10);
-
-  // Top selling items
-  const itemMap: Record<string, number> = {};
-  for (const o of filteredOrders) {
-    for (const item of o.items ?? []) {
-      const name = item.item_name ?? item.name ?? 'Unknown';
-      itemMap[name] = (itemMap[name] ?? 0) + (item.quantity || 1);
-    }
-  }
-  const topItems = Object.entries(itemMap)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([name, qty]) => ({ name, qty }));
-
   return {
-    // Fixed tiles
-    todaySales, todayOrderCount, monthSales, monthOrderCount, salesGrowthPct,
-    // Date-filtered
-    totalSales, totalTax, totalDiscount, netSales, avgOrderValue, totalOrders,
-    offlineOrders: offlineOrders.length, onlineOrders: onlineOrders.length,
-    offlineSales, onlineSales,
-    unpaidCount: unpaidOrders.length, unpaidTotal,
-    cancelledBills, freeBills,
-    reservationsCount,
-    billTypes, paymentMethods,
-    days: days.map(d => d.label), dailyRevenue, dailyOrderCounts,
-    activeOrders, topItems, ordersByType,
-    recentOrders: filteredOrders.slice(0, 5),
+    today_sales:        todaySales,
+    today_orders:       todayOrders.length,
+    month_sales:        monthSales,
+    month_orders:       monthOrders.length,
+    sales_growth_pct:   salesGrowthPct,
+    total_sales:        totalSales,
+    total_orders:       filteredOrders.length,
+    total_tax:          totalTax,
+    total_discount:     totalDiscount,
+    net_sales:          netSales,
+    avg_order_value:    avgOrderValue,
+    offline_orders:     offlineOrders.length,
+    online_orders:      onlineOrders.length,
+    offline_sales:      paidSum(offlineOrders),
+    online_sales:       paidSum(onlineOrders),
+    unpaid_count:       unpaidOrders.length,
+    unpaid_total:       sum(unpaidOrders, 'total'),
+    cancelled_count:    filteredOrders.filter(o => o.status === 'cancelled').length,
+    free_bills:         filteredOrders.filter(o => o.status !== 'cancelled' && Number(o.total) === 0).length,
+    reservations_count: reservCount,
+    bill_types,
   };
 }
 
@@ -246,7 +251,6 @@ function SectionHeader({ title, action, onAction }: { title: string; action?: st
   );
 }
 
-// Big 3 stat cards (Row 1)
 function BigCard({ label, value, sub, icon, color, bg, growthPct, onPress }: {
   label: string; value: string; sub: string; icon: any;
   color: string; bg: string; growthPct?: number; onPress?: () => void;
@@ -259,11 +263,8 @@ function BigCard({ label, value, sub, icon, color, bg, growthPct, onPress }: {
         </View>
         {growthPct !== undefined && growthPct !== 0 && (
           <View style={[bc.growthBadge, { backgroundColor: growthPct > 0 ? '#f0fdf4' : '#fff1f2' }]}>
-            <Ionicons
-              name={growthPct > 0 ? 'trending-up' : 'trending-down'}
-              size={10}
-              color={growthPct > 0 ? C.success : C.danger}
-            />
+            <Ionicons name={growthPct > 0 ? 'trending-up' : 'trending-down'} size={10}
+              color={growthPct > 0 ? C.success : C.danger} />
             <Text style={[bc.growthText, { color: growthPct > 0 ? C.success : C.danger }]}>
               {growthPct > 0 ? '+' : ''}{growthPct}%
             </Text>
@@ -277,28 +278,22 @@ function BigCard({ label, value, sub, icon, color, bg, growthPct, onPress }: {
   );
 }
 
-// Small metric cards (Row 1b / Row 2)
 function SmallCard({ label, value, sub, icon, color, bg, danger, onPress }: {
   label: string; value: string | number; sub?: string; icon: any;
   color: string; bg: string; danger?: boolean; onPress?: () => void;
 }) {
   return (
-    <TouchableOpacity
-      style={[sc.wrap, danger && sc.dangerBorder]}
-      onPress={onPress}
-      activeOpacity={0.85}
-    >
-      <View style={[sc.iconWrap, { backgroundColor: bg }]}>
+    <TouchableOpacity style={[smc.wrap, danger && smc.dangerBorder]} onPress={onPress} activeOpacity={0.85}>
+      <View style={[smc.iconWrap, { backgroundColor: bg }]}>
         <Ionicons name={icon} size={16} color={color} />
       </View>
-      <Text style={[sc.value, danger && { color: C.danger }]}>{String(value)}</Text>
-      <Text style={sc.label} numberOfLines={1}>{label}</Text>
-      {sub ? <Text style={sc.sub} numberOfLines={1}>{sub}</Text> : null}
+      <Text style={[smc.value, danger && { color: C.danger }]}>{String(value)}</Text>
+      <Text style={smc.label} numberOfLines={1}>{label}</Text>
+      {sub ? <Text style={smc.sub} numberOfLines={1}>{sub}</Text> : null}
     </TouchableOpacity>
   );
 }
 
-// Bar chart (Sale Analysis — 7 days)
 function BarChart({ labels, data, orderCounts }: { labels: string[]; data: number[]; orderCounts: number[] }) {
   const max = Math.max(...data, 1);
   return (
@@ -338,7 +333,6 @@ function BarChart({ labels, data, orderCounts }: { labels: string[]; data: numbe
   );
 }
 
-// Progress item (Payment breakdown right panel)
 function ProgressItem({ label, sub, value, percent, color, icon }: {
   label: string; sub?: string; value: string; percent: number; color: string; icon?: any;
 }) {
@@ -370,7 +364,6 @@ function ProgressItem({ label, sub, value, percent, color, icon }: {
   );
 }
 
-// Payment method as grid card with progress bar
 function PaymentCard({ label, icon, color, count, total, percent }: {
   label: string; icon: any; color: string;
   count: number; total: number; percent: number;
@@ -395,7 +388,6 @@ function PaymentCard({ label, icon, color, count, total, percent }: {
   );
 }
 
-// Bill type card
 function BillTypeCard({ label, icon, color, count, total }: {
   label: string; icon: any; color: string; count: number; total: number;
 }) {
@@ -415,7 +407,6 @@ function BillTypeCard({ label, icon, color, count, total }: {
   );
 }
 
-// Top selling item row with rank + progress bar
 function TopItemRow({ name, qty, maxQty, rank }: { name: string; qty: number; maxQty: number; rank: number }) {
   const colors = [C.primary, C.success, C.warning, C.purple, C.orange, C.info];
   const color  = colors[(rank - 1) % colors.length];
@@ -438,13 +429,12 @@ function TopItemRow({ name, qty, maxQty, rank }: { name: string; qty: number; ma
   );
 }
 
-// Active order row
 function ActiveOrderRow({ order }: { order: Order }) {
-  const sc = STATUS_CFG[order.status] ?? { color: C.muted, bg: '#f3f4f6' };
+  const st = STATUS_CFG[order.status] ?? { color: C.muted, bg: '#f3f4f6' };
   return (
     <TouchableOpacity style={ar.row} onPress={() => router.push('/(app)/orders' as any)} activeOpacity={0.8}>
-      <View style={[ar.avatar, { backgroundColor: sc.bg }]}>
-        <Ionicons name="restaurant-outline" size={13} color={sc.color} />
+      <View style={[ar.avatar, { backgroundColor: st.bg }]}>
+        <Ionicons name="restaurant-outline" size={13} color={st.color} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={ar.num} numberOfLines={1}>
@@ -457,20 +447,19 @@ function ActiveOrderRow({ order }: { order: Order }) {
       </View>
       <View style={{ alignItems: 'flex-end', gap: 3 }}>
         <Text style={ar.amount}>{fmtFull(Number(order.total ?? 0))}</Text>
-        <View style={[ar.badge, { backgroundColor: sc.bg }]}>
-          <Text style={[ar.badgeText, { color: sc.color }]}>{order.status}</Text>
+        <View style={[ar.badge, { backgroundColor: st.bg }]}>
+          <Text style={[ar.badgeText, { color: st.color }]}>{order.status}</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 }
 
-// Recent order row
 function RecentOrderRow({ order }: { order: Order }) {
-  const sc    = STATUS_CFG[order.status] ?? { color: C.muted, bg: '#f3f4f6' };
-  const src   = order.source ?? 'pos';
-  const srcColor: Record<string, string> = { pos: C.dark, zomato: C.danger, swiggy: C.orange, qr: C.purple };
-  const color = srcColor[src] ?? C.dark;
+  const st     = STATUS_CFG[order.status] ?? { color: C.muted, bg: '#f3f4f6' };
+  const src    = order.source ?? 'pos';
+  const srcClr: Record<string, string> = { pos: C.dark, zomato: C.danger, swiggy: C.orange, qr: C.purple };
+  const color  = srcClr[src] ?? C.dark;
   const isPaid = order.payment_status === 'paid';
   return (
     <TouchableOpacity style={rr.row} onPress={() => router.push('/(app)/orders' as any)} activeOpacity={0.8}>
@@ -496,8 +485,8 @@ function RecentOrderRow({ order }: { order: Order }) {
       </View>
       <View style={{ alignItems: 'flex-end', gap: 4 }}>
         <Text style={rr.amount}>{fmtFull(Number(order.total ?? 0))}</Text>
-        <View style={[rr.badge, { backgroundColor: sc.bg }]}>
-          <Text style={[rr.badgeText, { color: sc.color }]}>{order.status}</Text>
+        <View style={[rr.badge, { backgroundColor: st.bg }]}>
+          <Text style={[rr.badgeText, { color: st.color }]}>{order.status}</Text>
         </View>
         <View style={[rr.badge, { backgroundColor: isPaid ? '#f0fdf4' : '#fef9ec' }]}>
           <Text style={[rr.badgeText, { color: isPaid ? '#16a34a' : '#d97706' }]}>
@@ -509,14 +498,10 @@ function RecentOrderRow({ order }: { order: Order }) {
   );
 }
 
-// Upcoming reservation row
 function ReservationRow({ res }: { res: Reservation }) {
   const statusColors: Record<string, string> = {
-    pending:   '#d97706',
-    confirmed: C.primary,
-    seated:    C.success,
-    cancelled: C.danger,
-    no_show:   C.muted,
+    pending: '#d97706', confirmed: C.primary, seated: C.success,
+    cancelled: C.danger, no_show: C.muted,
   };
   const color = statusColors[res.status] ?? C.muted;
   return (
@@ -527,8 +512,7 @@ function ReservationRow({ res }: { res: Reservation }) {
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={resR.name} numberOfLines={1}>{res.customer_name}</Text>
         <Text style={resR.meta}>
-          {res.guest_count} guests
-          {res.table_name ? ` · ${res.table_name}` : ''}
+          {res.guest_count} guests{res.table_name ? ` · ${res.table_name}` : ''}
         </Text>
         <Text style={resR.time}>
           {res.reserved_at ? format(new Date(res.reserved_at), 'dd MMM, hh:mm a') : '—'}
@@ -543,30 +527,35 @@ function ReservationRow({ res }: { res: Reservation }) {
 
 const QUICK_LINKS = [
   { label: 'POS',          icon: 'cart-outline',      route: '/(app)/pos',          color: C.dark    },
-  { label: 'Kitchen',      icon: 'flame-outline',      route: '/(app)/kitchen',      color: '#f59e0b' },
-  { label: 'Orders',       icon: 'receipt-outline',    route: '/(app)/orders',       color: C.primary },
-  { label: 'Tables',       icon: 'grid-outline',       route: '/(app)/tables',       color: C.purple  },
-  { label: 'Customers',    icon: 'people-outline',     route: '/(app)/customers',    color: C.success },
-  { label: 'Reservations', icon: 'calendar-outline',   route: '/(app)/reservations', color: C.danger  },
-  { label: 'Expenses',     icon: 'wallet-outline',     route: '/(app)/expenses',     color: C.warning },
-  { label: 'Menu',         icon: 'restaurant-outline', route: '/(app)/menu',         color: C.info    },
+  { label: 'Kitchen',      icon: 'flame-outline',     route: '/(app)/kitchen',      color: '#f59e0b' },
+  { label: 'Orders',       icon: 'receipt-outline',   route: '/(app)/orders',       color: C.primary },
+  { label: 'Tables',       icon: 'grid-outline',      route: '/(app)/tables',       color: C.purple  },
+  { label: 'Customers',    icon: 'people-outline',    route: '/(app)/customers',    color: C.success },
+  { label: 'Reservations', icon: 'calendar-outline',  route: '/(app)/reservations', color: C.danger  },
+  { label: 'Expenses',     icon: 'wallet-outline',    route: '/(app)/expenses',     color: C.warning },
+  { label: 'Menu',         icon: 'restaurant-outline',route: '/(app)/menu',         color: C.info    },
 ];
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function DashboardScreen() {
-  const [preset,          setPreset]          = useState<Preset>('today');
-  const [todayOrders,     setTodayOrders]     = useState<Order[]>([]);
-  const [monthOrders,     setMonthOrders]     = useState<Order[]>([]);
-  const [prevMonthOrders, setPrevMonthOrders] = useState<Order[]>([]);
-  const [filteredOrders,  setFilteredOrders]  = useState<Order[]>([]);
-  const [reservations,    setReservations]    = useState<Reservation[]>([]);
-  const [reservCount,     setReservCount]     = useState(0);
-  const [loading,         setLoading]         = useState(true);
-  const [refreshing,      setRefreshing]      = useState(false);
+  const [preset,       setPreset]       = useState<Preset>('today');
+  const [summary,      setSummary]      = useState<Summary | null>(null);
+  const [chartDays,    setChartDays]    = useState<string[]>([]);
+  const [chartRev,     setChartRev]     = useState<number[]>([]);
+  const [chartOrders,  setChartOrders]  = useState<number[]>([]);
+  const [topItems,     setTopItems]     = useState<{ name: string; qty: number }[]>([]);
+  const [payMethods,   setPayMethods]   = useState<{ key: string; label: string; icon: any; color: string; count: number; total: number; percent: number }[]>([]);
+  const [expenses,     setExpenses]     = useState<ExpenseSummary>({ total: 0, tax_total: 0, count: 0 });
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [reservCount,  setReservCount]  = useState(0);
+  const [loading,      setLoading]      = useState(true);
+  const [refreshing,   setRefreshing]   = useState(false);
 
   const { restaurant, isOnline } = useAppStore();
-  const { colors } = useTheme();
-  const { width } = useWindowDimensions();
+  const { colors }               = useTheme();
+  const { width }                = useWindowDimensions();
   const contentW = width >= 640 ? width - SIDEBAR : width;
   const isWide   = contentW >= 900;
   const cols4    = contentW >= 1200 ? 4 : contentW >= 800 ? 3 : contentW >= 500 ? 2 : 2;
@@ -574,38 +563,197 @@ export default function DashboardScreen() {
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const load = useCallback(async (silent = false, activePreset: Preset = preset) => {
+  const load = useCallback(async (silent = false, p: Preset = preset) => {
     if (!silent) setLoading(true);
     try {
-      const today     = todayStr();
-      const mStart    = monthStartStr();
-      const prevMEnd  = format(subMonths(new Date(), 1), 'yyyy-MM-dd');
-      const prevMStart = format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
-      const { from, to } = presetDates(activePreset);
+      const today  = todayStr();
+      const mStart = mStartStr();
+      const { from, to } = presetDates(p);
 
-      const toArr = (r: any): Order[] => {
-        const d = r.data?.data ?? r.data ?? [];
-        return Array.isArray(d) ? d : [];
-      };
+      // ── 1. Reports API (server-side aggregation) ──────────────────────────
+      const reportParams: { date_from?: string; date_to?: string } = {};
+      if (from) reportParams.date_from = from;
+      if (to)   reportParams.date_to   = to;
 
-      // Always-fixed tiles + prev month for growth %
-      const [tRes, mRes, pmRes] = await Promise.all([
-        ordersApi.list({ from: today,    to: today,    per_page: 500 }),
-        ordersApi.list({ from: mStart,   to: today,    per_page: 500 }),
-        ordersApi.list({ from: prevMStart, to: prevMEnd, per_page: 500 }),
+      const chart7From = format(subDays(new Date(), 6), 'yyyy-MM-dd');
+
+      const [summaryRes, salesRes, topItemsRes, payRes, expRes] = await Promise.allSettled([
+        reportsApi.summary(reportParams),
+        reportsApi.sales({ date_from: chart7From, date_to: today, group_by: 'day' }),
+        reportsApi.topItems({ ...reportParams, limit: 6 }),
+        reportsApi.paymentMethods(reportParams),
+        reportsApi.expenses(reportParams),
       ]);
-      setTodayOrders(toArr(tRes));
-      setMonthOrders(toArr(mRes));
-      setPrevMonthOrders(toArr(pmRes));
 
-      // Date-filtered main query
-      const fParams: any = { per_page: 500 };
-      if (from) fParams.from = from;
-      if (to)   fParams.to   = to;
-      const fRes = await ordersApi.list(fParams);
-      setFilteredOrders(toArr(fRes));
+      // ── 2. Summary ────────────────────────────────────────────────────────
+      if (summaryRes.status === 'fulfilled') {
+        const d = summaryRes.value.data ?? {};
+        // The API may nest under `data` key
+        const raw = d.data ?? d;
 
-      // Reservations — upcoming only
+        // Bill types: server may return bill_types or we compute from sub-keys
+        const bill_types: Record<string, { count: number; total: number }> = {};
+        if (raw.bill_types) {
+          Object.assign(bill_types, raw.bill_types);
+        } else {
+          // fallback: look for individual keys like dine_in_count / dine_in_total
+          for (const k of Object.keys(BILL_TYPE_CFG)) {
+            bill_types[k] = {
+              count: Number(raw[`${k}_count`] ?? raw[`${k}_orders`] ?? 0),
+              total: Number(raw[`${k}_total`] ?? raw[`${k}_sales`]  ?? 0),
+            };
+          }
+        }
+
+        setSummary({
+          today_sales:        Number(raw.today_sales        ?? raw.todaySales        ?? 0),
+          today_orders:       Number(raw.today_orders       ?? raw.todayOrders       ?? 0),
+          month_sales:        Number(raw.month_sales        ?? raw.monthSales        ?? 0),
+          month_orders:       Number(raw.month_orders       ?? raw.monthOrders       ?? 0),
+          sales_growth_pct:   Number(raw.sales_growth_pct   ?? raw.salesGrowthPct   ?? 0),
+          total_sales:        Number(raw.total_sales        ?? raw.totalSales        ?? 0),
+          total_orders:       Number(raw.total_orders       ?? raw.totalOrders       ?? 0),
+          total_tax:          Number(raw.total_tax          ?? raw.totalTax          ?? 0),
+          total_discount:     Number(raw.total_discount     ?? raw.totalDiscount     ?? 0),
+          net_sales:          Number(raw.net_sales          ?? raw.netSales          ?? 0),
+          avg_order_value:    Number(raw.avg_order_value    ?? raw.avgOrderValue     ?? 0),
+          offline_orders:     Number(raw.offline_orders                              ?? 0),
+          online_orders:      Number(raw.online_orders                               ?? 0),
+          offline_sales:      Number(raw.offline_sales                               ?? 0),
+          online_sales:       Number(raw.online_sales                                ?? 0),
+          unpaid_count:       Number(raw.unpaid_count       ?? raw.unpaidOrders      ?? 0),
+          unpaid_total:       Number(raw.unpaid_total       ?? raw.unpaidTotal       ?? 0),
+          cancelled_count:    Number(raw.cancelled_count    ?? raw.cancelledBills    ?? 0),
+          free_bills:         Number(raw.free_bills         ?? raw.freeBills         ?? 0),
+          reservations_count: Number(raw.reservations_count ?? raw.reservationsCount ?? 0),
+          bill_types,
+        });
+      } else {
+        // Fallback: load raw orders and compute client-side
+        try {
+          const toArr = (r: any): Order[] => {
+            const d = r.data?.data ?? r.data ?? [];
+            return Array.isArray(d) ? d : [];
+          };
+          const prevMEnd   = format(subMonths(new Date(), 1), 'yyyy-MM-dd');
+          const prevMStart = format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
+
+          const [tRes, mRes, pmRes, fRes] = await Promise.all([
+            ordersApi.list({ from: today,     to: today,     per_page: 500 }),
+            ordersApi.list({ from: mStart,    to: today,     per_page: 500 }),
+            ordersApi.list({ from: prevMStart,to: prevMEnd,  per_page: 500 }),
+            ordersApi.list({ ...(from ? { from } : {}), ...(to ? { to } : {}), per_page: 500 }),
+          ]);
+
+          const [td, mo, pm, fi] = [toArr(tRes), toArr(mRes), toArr(pmRes), toArr(fRes)];
+          setSummary(summaryFromOrders(td, mo, fi, pm, reservCount));
+
+          // Build chart from filtered orders (fallback)
+          const days = last7Labels();
+          const paid = (arr: Order[]) => arr.filter(o => o.payment_status === 'paid');
+          const sm   = (arr: Order[]) => arr.reduce((s, o) => s + (Number(o.total) || 0), 0);
+          setChartDays(days.map(d => d.label));
+          setChartRev(days.map(d => sm(paid(fi.filter(o => (o.created_at ?? '').startsWith(d.date))))));
+          setChartOrders(days.map(d => fi.filter(o => (o.created_at ?? '').startsWith(d.date)).length));
+
+          // Payment methods fallback
+          const pmMap: Record<string, { count: number; total: number }> = {};
+          for (const o of paid(fi)) {
+            const k = ONLINE_SOURCES.includes(o.source ?? '') ? (o.source ?? 'other') : (o.payment_method ?? 'other');
+            if (!pmMap[k]) pmMap[k] = { count: 0, total: 0 };
+            pmMap[k].count++;
+            pmMap[k].total += Number(o.total) || 0;
+          }
+          const pmTotal = Math.max(1, Object.values(pmMap).reduce((s, v) => s + v.total, 0));
+          setPayMethods(Object.entries(pmMap)
+            .map(([key, v]) => ({
+              key, count: v.count, total: v.total,
+              percent: pct(v.total, pmTotal),
+              ...(PM_CFG[key] ?? { label: key, icon: 'wallet-outline', color: C.muted }),
+            }))
+            .sort((a, b) => b.total - a.total));
+
+          // Top items fallback
+          const itemMap: Record<string, number> = {};
+          for (const o of fi) {
+            for (const item of o.items ?? []) {
+              const n = item.item_name ?? item.name ?? 'Unknown';
+              itemMap[n] = (itemMap[n] ?? 0) + (item.quantity || 1);
+            }
+          }
+          setTopItems(Object.entries(itemMap).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, qty]) => ({ name, qty })));
+        } catch (fallbackErr) {
+          console.warn('Dashboard fallback load failed:', fallbackErr);
+        }
+      }
+
+      // ── 3. Sales chart (7-day) ────────────────────────────────────────────
+      if (salesRes.status === 'fulfilled') {
+        const raw  = salesRes.value.data ?? {};
+        const rows: SalesDay[] = Array.isArray(raw.data) ? raw.data : (Array.isArray(raw) ? raw : []);
+        const days = last7Labels();
+        setChartDays(days.map(d => d.label));
+        setChartRev(days.map(d => {
+          const row = rows.find(r => r.date === d.date) as any;
+          return Number(row?.total_sales ?? row?.sales ?? 0);
+        }));
+        setChartOrders(days.map(d => {
+          const row = rows.find(r => r.date === d.date) as any;
+          return Number(row?.total_orders ?? row?.orders ?? 0);
+        }));
+      }
+
+      // ── 4. Top items ──────────────────────────────────────────────────────
+      if (topItemsRes.status === 'fulfilled') {
+        const raw  = topItemsRes.value.data ?? {};
+        const rows: TopItem[] = Array.isArray(raw.data) ? raw.data : (Array.isArray(raw) ? raw : []);
+        setTopItems(rows.slice(0, 6).map(r => ({
+          name: r.item_name ?? r.name ?? 'Unknown',
+          qty:  Number(r.quantity ?? r.qty ?? 0),
+        })));
+      }
+
+      // ── 5. Payment methods ────────────────────────────────────────────────
+      if (payRes.status === 'fulfilled') {
+        const raw  = payRes.value.data ?? {};
+        const rows: PmRow[] = Array.isArray(raw.data) ? raw.data : (Array.isArray(raw) ? raw : []);
+        const pmTotal = Math.max(1, rows.reduce((s, r) => s + Number(r.total ?? 0), 0));
+        setPayMethods(rows
+          .map(r => {
+            const key  = (r.payment_method ?? r.method ?? 'other').toLowerCase();
+            const cfg  = PM_CFG[key] ?? { label: key, icon: 'wallet-outline', color: C.muted };
+            return { key, ...cfg, count: Number(r.count ?? 0), total: Number(r.total ?? 0), percent: pct(Number(r.total ?? 0), pmTotal) };
+          })
+          .sort((a, b) => b.total - a.total));
+      }
+
+      // ── 6. Expenses ───────────────────────────────────────────────────────
+      if (expRes.status === 'fulfilled') {
+        const raw = expRes.value.data?.data ?? expRes.value.data ?? {};
+        setExpenses({
+          total:     Number(raw.total     ?? raw.total_amount ?? 0),
+          tax_total: Number(raw.tax_total ?? raw.total_tax   ?? 0),
+          count:     Number(raw.count     ?? raw.total_count  ?? 0),
+        });
+      }
+
+      // ── 7. Active + Recent orders (always fresh) ──────────────────────────
+      try {
+        const aoRes = await ordersApi.list({
+          status: 'pending,confirmed,preparing,ready,served',
+          per_page: 10,
+        });
+        const aoArr: Order[] = Array.isArray(aoRes.data?.data) ? aoRes.data.data
+          : (Array.isArray(aoRes.data) ? aoRes.data : []);
+        setActiveOrders(aoArr.slice(0, 10));
+
+        const rrRes = await ordersApi.list({ per_page: 8 });
+        const rrArr: Order[] = Array.isArray(rrRes.data?.data) ? rrRes.data.data
+          : (Array.isArray(rrRes.data) ? rrRes.data : []);
+        setRecentOrders(rrArr.slice(0, 5));
+      } catch { /* orders optional */ }
+
+      // ── 8. Reservations ───────────────────────────────────────────────────
       try {
         const rRes = await client.get('/reservations', {
           params: { from: today, status: 'confirmed,pending,seated', per_page: 20 },
@@ -629,11 +777,6 @@ export default function DashboardScreen() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [preset]);
 
-  const stats = useMemo(() =>
-    computeStats(todayOrders, monthOrders, filteredOrders, prevMonthOrders, reservCount),
-    [todayOrders, monthOrders, filteredOrders, prevMonthOrders, reservCount]
-  );
-
   async function handleRefresh() {
     setRefreshing(true);
     await load(true, preset);
@@ -642,7 +785,6 @@ export default function DashboardScreen() {
 
   function changePreset(p: Preset) {
     setPreset(p);
-    setLoading(true);
     load(false, p);
   }
 
@@ -657,7 +799,9 @@ export default function DashboardScreen() {
     );
   }
 
-  const cardStyle = { backgroundColor: colors.dashboard.white, borderColor: colors.dashboard.border };
+  const st    = summary;
+  const cardS = { backgroundColor: colors.dashboard.white, borderColor: colors.dashboard.border };
+  const netProfit = (st?.total_sales ?? 0) - expenses.total;
 
   return (
     <ScrollView
@@ -692,7 +836,7 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      {/* ── Date-range filter chips (matches csPos date filter) ── */}
+      {/* ── Date-range filter chips ── */}
       <View style={[s.filterBar, { backgroundColor: colors.dashboard.white, borderColor: colors.dashboard.border }]}>
         <Ionicons name="calendar-outline" size={14} color={C.muted} style={{ marginRight: 4 }} />
         {PRESETS.map(p => (
@@ -717,37 +861,37 @@ export default function DashboardScreen() {
         {/* ── ROW 1: 3 BigCards ── */}
         <View style={s.row}>
           <BigCard
-            label="Today's Sales"      value={fmtFull(stats.todaySales)}
-            sub={`${stats.todayOrderCount} orders today`}
-            icon="calendar-outline"   color={C.primary} bg={C.primary + '18'}
+            label="Today's Sales"      value={fmtFull(st?.today_sales ?? 0)}
+            sub={`${st?.today_orders ?? 0} orders today`}
+            icon="calendar-outline"        color={C.primary} bg={C.primary + '18'}
             onPress={() => go('/(app)/orders')}
           />
           <BigCard
-            label="This Month's Sales" value={fmtFull(stats.monthSales)}
-            sub={`${stats.monthOrderCount} orders this month`}
+            label="This Month's Sales" value={fmtFull(st?.month_sales ?? 0)}
+            sub={`${st?.month_orders ?? 0} orders this month`}
             icon="calendar-number-outline" color={C.success} bg={C.success + '18'}
-            growthPct={stats.salesGrowthPct}
+            growthPct={st?.sales_growth_pct}
             onPress={() => go('/(app)/orders')}
           />
           <BigCard
-            label="Total Sales"        value={fmtFull(stats.totalSales)}
-            sub={`${stats.totalOrders} total orders`}
-            icon="trending-up-outline" color={C.purple} bg={C.purple + '18'}
+            label="Total Sales"        value={fmtFull(st?.total_sales ?? 0)}
+            sub={`${st?.total_orders ?? 0} total orders`}
+            icon="trending-up-outline"     color={C.purple} bg={C.purple + '18'}
             onPress={() => go('/(app)/orders')}
           />
         </View>
 
-        {/* ── ROW 1b: Offline / Online / Net / Total ── */}
+        {/* ── ROW 1b: 6 Sales Breakdown SmallCards ── */}
         <View style={s.section}>
           <SectionHeader title="Sales Breakdown" />
           <View style={[s.grid, { gap: 8 }]}>
             {[
-              { label: 'Offline Orders', value: stats.offlineOrders,         icon: 'desktop-outline',   color: C.success, bg: C.success + '18', sub: 'non-aggregator' },
-              { label: 'Online Orders',  value: stats.onlineOrders,          icon: 'bicycle-outline',   color: C.danger,  bg: C.danger  + '18', sub: 'Zomato & Swiggy' },
-              { label: 'Offline Sale',   value: fmtMoney(stats.offlineSales),icon: 'cash-outline',      color: C.warning, bg: C.warning + '18', sub: 'excl. GST' },
-              { label: 'Online Sale',    value: fmtMoney(stats.onlineSales), icon: 'globe-outline',     color: C.primary, bg: C.primary + '18', sub: 'aggregator paid' },
-              { label: 'Net Sale',       value: fmtMoney(stats.netSales),    icon: 'analytics-outline', color: C.orange,  bg: C.orange  + '18', sub: 'Excl. GST' },
-              { label: 'Total Sale',     value: fmtMoney(stats.totalSales),  icon: 'wallet-outline',    color: C.purple,  bg: C.purple  + '18', sub: 'Incl. GST' },
+              { label: 'Offline Orders', value: st?.offline_orders ?? 0,         icon: 'desktop-outline',   color: C.success, bg: C.success + '18', sub: 'non-aggregator' },
+              { label: 'Online Orders',  value: st?.online_orders  ?? 0,         icon: 'bicycle-outline',   color: C.danger,  bg: C.danger  + '18', sub: 'Zomato & Swiggy' },
+              { label: 'Offline Sale',   value: fmtMoney(st?.offline_sales ?? 0),icon: 'cash-outline',      color: C.warning, bg: C.warning + '18', sub: 'excl. GST' },
+              { label: 'Online Sale',    value: fmtMoney(st?.online_sales  ?? 0),icon: 'globe-outline',     color: C.primary, bg: C.primary + '18', sub: 'aggregator paid' },
+              { label: 'Net Sale',       value: fmtMoney(st?.net_sales     ?? 0),icon: 'analytics-outline', color: C.orange,  bg: C.orange  + '18', sub: 'excl. GST' },
+              { label: 'Total Sale',     value: fmtMoney(st?.total_sales   ?? 0),icon: 'wallet-outline',    color: C.purple,  bg: C.purple  + '18', sub: 'incl. GST' },
             ].map((c, i) => (
               <View key={i} style={{ width: `${100 / cols6}%` as any, padding: 4 }}>
                 <SmallCard label={c.label} value={c.value} sub={c.sub}
@@ -758,19 +902,21 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ── ROW 2: 5 Metric cards (matches csPos exactly) ── */}
+        {/* ── ROW 2: 5 Key Metric SmallCards ── */}
         <View style={s.section}>
           <SectionHeader title="Key Metrics" />
           <View style={[s.grid, { gap: 8 }]}>
             {[
-              { label: 'Total Orders',  value: stats.totalOrders,              icon: 'cube-outline',         color: C.orange,  bg: C.orange  + '18', danger: false },
-              { label: 'Average Value', value: fmtMoney(stats.avgOrderValue),  icon: 'diamond-outline',      color: C.info,    bg: C.info    + '18', danger: false, sub: 'per paid order' },
-              { label: 'Total Tax',     value: fmtMoney(stats.totalTax),       icon: 'receipt-outline',      color: C.warning, bg: C.warning + '18', danger: false },
-              { label: 'Reservations',  value: stats.reservationsCount,        icon: 'calendar-outline',     color: C.success, bg: C.success + '18', danger: false },
-              { label: 'Unpaid Orders', value: stats.unpaidCount,              icon: 'alert-circle-outline', color: C.danger,  bg: C.danger  + '18', danger: stats.unpaidCount > 0, sub: stats.unpaidCount > 0 ? fmtMoney(stats.unpaidTotal) + ' pending' : undefined },
+              { label: 'Total Orders',  value: st?.total_orders      ?? 0,              icon: 'cube-outline',         color: C.orange,  bg: C.orange  + '18', danger: false },
+              { label: 'Avg Value',     value: fmtMoney(st?.avg_order_value ?? 0),      icon: 'diamond-outline',      color: C.info,    bg: C.info    + '18', danger: false, sub: 'per paid order' },
+              { label: 'Total Tax',     value: fmtMoney(st?.total_tax       ?? 0),      icon: 'receipt-outline',      color: C.warning, bg: C.warning + '18', danger: false },
+              { label: 'Reservations',  value: st?.reservations_count ?? reservCount,   icon: 'calendar-outline',     color: C.success, bg: C.success + '18', danger: false },
+              { label: 'Unpaid Orders', value: st?.unpaid_count       ?? 0,             icon: 'alert-circle-outline', color: C.danger,  bg: C.danger  + '18',
+                danger: (st?.unpaid_count ?? 0) > 0,
+                sub: (st?.unpaid_count ?? 0) > 0 ? fmtMoney(st?.unpaid_total ?? 0) + ' pending' : undefined },
             ].map((c, i) => (
               <View key={i} style={{ width: `${100 / 5}%` as any, padding: 4 }}>
-                <SmallCard label={c.label} value={c.value} sub={c.sub}
+                <SmallCard label={c.label} value={c.value} sub={(c as any).sub}
                   icon={c.icon} color={c.color} bg={c.bg} danger={c.danger}
                   onPress={() => go(i === 3 ? '/(app)/reservations' : '/(app)/orders')} />
               </View>
@@ -778,34 +924,66 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ── Sale Analysis + Payment Type ── */}
+        {/* ── Expense Summary (csPos: shows total expenses + net profit on dashboard) ── */}
+        <View style={s.section}>
+          <SectionHeader title="Expense Summary" action="View Expenses" onAction={() => go('/(app)/expenses')} />
+          <View style={[s.grid, { gap: 8 }]}>
+            {[
+              {
+                label: 'Total Expenses', value: fmtMoney(expenses.total),
+                sub: `${expenses.count} expense${expenses.count !== 1 ? 's' : ''}`,
+                icon: 'wallet-outline', color: C.danger, bg: C.danger + '18',
+              },
+              {
+                label: 'Tax on Expenses', value: fmtMoney(expenses.tax_total),
+                sub: 'included in total',
+                icon: 'receipt-outline', color: C.warning, bg: C.warning + '18',
+              },
+              {
+                label: 'Net Profit', value: fmtMoney(netProfit),
+                sub: 'sales − expenses',
+                icon: netProfit >= 0 ? 'trending-up-outline' : 'trending-down-outline',
+                color: netProfit >= 0 ? C.success : C.danger,
+                bg: (netProfit >= 0 ? C.success : C.danger) + '18',
+              },
+            ].map((c, i) => (
+              <View key={i} style={{ width: `${100 / 3}%` as any, padding: 4 }}>
+                <SmallCard label={c.label} value={c.value} sub={c.sub}
+                  icon={c.icon} color={c.color} bg={c.bg}
+                  onPress={() => go('/(app)/expenses')} />
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* ── Sale Analysis + Payment Types ── */}
         <View style={s.section}>
           <View style={[s.row, { gap: 12, alignItems: 'flex-start' }]}>
-            {/* Bar chart — Sale Analysis (Last 7 days) */}
-            <View style={[s.card, cardStyle, { flex: isWide ? 2 : 1 }]}>
+            {/* Bar chart — Last 7 days */}
+            <View style={[s.card, cardS, { flex: isWide ? 2 : 1 }]}>
               <View style={s.cardHeader}>
                 <View>
                   <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Sale Analysis</Text>
                   <Text style={[s.cardSub, { color: C.muted }]}>Last 7 days · Revenue & Orders</Text>
                 </View>
               </View>
-              <BarChart labels={stats.days} data={stats.dailyRevenue} orderCounts={stats.dailyOrderCounts} />
+              <BarChart labels={chartDays} data={chartRev} orderCounts={chartOrders} />
             </View>
 
-            {/* Payment type (right panel) */}
+            {/* Payment types — right panel (desktop) */}
             {isWide && (
-              <View style={[s.card, cardStyle, { flex: 1 }]}>
+              <View style={[s.card, cardS, { flex: 1 }]}>
                 <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Payment Types</Text>
                 <Text style={[s.cardSub, { color: C.muted }]}>By payment method</Text>
                 <View style={{ marginTop: 12, gap: 8 }}>
-                  {stats.paymentMethods.slice(0, 6).map((pm, i) => (
+                  {payMethods.slice(0, 6).map((pm, i) => (
                     <ProgressItem key={i}
                       label={pm.label} sub={`${pm.count} orders`}
                       value={fmtMoney(pm.total)} percent={pm.percent}
                       color={pm.color} icon={pm.icon}
                     />
                   ))}
-                  {stats.paymentMethods.length === 0 && (
+                  {payMethods.length === 0 && (
                     <Text style={{ color: C.muted, fontSize: 12, textAlign: 'center', paddingVertical: 16 }}>
                       No paid orders yet
                     </Text>
@@ -814,12 +992,14 @@ export default function DashboardScreen() {
               </View>
             )}
           </View>
-          {!isWide && stats.paymentMethods.length > 0 && (
-            <View style={[s.card, cardStyle, { marginTop: 12 }]}>
+
+          {/* Payment types — below chart (mobile) */}
+          {!isWide && payMethods.length > 0 && (
+            <View style={[s.card, cardS, { marginTop: 12 }]}>
               <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Payment Types</Text>
               <Text style={[s.cardSub, { color: C.muted }]}>By payment method</Text>
               <View style={{ marginTop: 12, gap: 8 }}>
-                {stats.paymentMethods.slice(0, 6).map((pm, i) => (
+                {payMethods.slice(0, 6).map((pm, i) => (
                   <ProgressItem key={i}
                     label={pm.label} sub={`${pm.count} orders`}
                     value={fmtMoney(pm.total)} percent={pm.percent}
@@ -835,7 +1015,7 @@ export default function DashboardScreen() {
         <View style={s.section}>
           <View style={[s.row, { gap: 12, alignItems: 'flex-start' }]}>
             {/* Bill Type grid */}
-            <View style={[s.card, cardStyle, { flex: isWide ? 2 : 1 }]}>
+            <View style={[s.card, cardS, { flex: isWide ? 2 : 1 }]}>
               <View style={s.cardHeader}>
                 <View>
                   <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Bill Type Breakdown</Text>
@@ -847,7 +1027,7 @@ export default function DashboardScreen() {
               </View>
               <View style={[s.grid, { gap: 8, marginTop: 8 }]}>
                 {Object.entries(BILL_TYPE_CFG).map(([key, cfg]) => {
-                  const bt = stats.billTypes[key] ?? { count: 0, total: 0 };
+                  const bt = st?.bill_types?.[key] ?? { count: 0, total: 0 };
                   return (
                     <View key={key} style={{ width: `${100 / Math.min(3, cols6)}%` as any, padding: 4 }}>
                       <BillTypeCard label={cfg.label} icon={cfg.icon} color={cfg.color}
@@ -859,14 +1039,14 @@ export default function DashboardScreen() {
             </View>
 
             {/* Bill Status */}
-            <View style={[s.card, cardStyle, { flex: 1 }]}>
+            <View style={[s.card, cardS, { flex: 1 }]}>
               <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Bill Status</Text>
               <Text style={[s.cardSub, { color: C.muted }]}>Special bill types</Text>
-              <View style={{ marginTop: 10, gap: 0 }}>
+              <View style={{ marginTop: 10 }}>
                 {[
-                  { label: 'Cancelled Bills', value: stats.cancelledBills, icon: 'close-circle-outline', color: C.danger  },
-                  { label: 'Free Bills',       value: stats.freeBills,      icon: 'gift-outline',          color: C.success },
-                  { label: 'Deleted Bills',    value: 0,                    icon: 'trash-outline',          color: C.muted   },
+                  { label: 'Cancelled Bills', value: st?.cancelled_count ?? 0, icon: 'close-circle-outline', color: C.danger  },
+                  { label: 'Free Bills',       value: st?.free_bills     ?? 0, icon: 'gift-outline',          color: C.success },
+                  { label: 'Deleted Bills',    value: 0,                        icon: 'trash-outline',          color: C.muted   },
                 ].map((item, i, arr) => (
                   <View key={i} style={[bsR.row, i < arr.length - 1 && bsR.rowBorder]}>
                     <View style={[bsR.avatar, { backgroundColor: item.color + '18' }]}>
@@ -883,17 +1063,15 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ── Payment Methods grid cards (matches csPos full-row payment breakdown) ── */}
-        {stats.paymentMethods.length > 0 && (
+        {/* ── Payment Methods grid cards ── */}
+        {payMethods.length > 0 && (
           <View style={s.section}>
             <SectionHeader title="Payment Methods" action="View Payments" onAction={() => go('/(app)/payments')} />
             <View style={[s.grid, { gap: 8 }]}>
-              {stats.paymentMethods.map((pm, i) => (
+              {payMethods.map((pm, i) => (
                 <View key={i} style={{ width: `${100 / Math.min(4, cols6)}%` as any, padding: 4 }}>
-                  <PaymentCard
-                    label={pm.label} icon={pm.icon} color={pm.color}
-                    count={pm.count} total={pm.total} percent={pm.percent}
-                  />
+                  <PaymentCard label={pm.label} icon={pm.icon} color={pm.color}
+                    count={pm.count} total={pm.total} percent={pm.percent} />
                 </View>
               ))}
             </View>
@@ -903,23 +1081,22 @@ export default function DashboardScreen() {
         {/* ── Top Selling Items + Active Orders ── */}
         <View style={s.section}>
           <View style={[s.row, { gap: 12, alignItems: 'flex-start' }]}>
-            {/* Top Selling Items with "Most Ordered" banner */}
-            <View style={[s.card, cardStyle, { flex: isWide ? 2 : 1 }]}>
+            {/* Top Items */}
+            <View style={[s.card, cardS, { flex: isWide ? 2 : 1 }]}>
               <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Top Selling Items</Text>
               <Text style={[s.cardSub, { color: C.muted }]}>By quantity ordered</Text>
-              {stats.topItems.length > 0 ? (
+              {topItems.length > 0 ? (
                 <>
-                  {/* Most Ordered banner — matches csPos */}
                   <View style={moB.banner}>
                     <Ionicons name="star" size={13} color="#16a34a" />
                     <Text style={moB.text}>
-                      Most Ordered: <Text style={moB.name}>{stats.topItems[0]?.name}</Text>
+                      Most Ordered: <Text style={moB.name}>{topItems[0]?.name}</Text>
                     </Text>
                   </View>
                   <View style={{ marginTop: 8, gap: 10 }}>
-                    {stats.topItems.map((item, i) => (
+                    {topItems.map((item, i) => (
                       <TopItemRow key={i} name={item.name} qty={item.qty}
-                        maxQty={stats.topItems[0]?.qty ?? 1} rank={i + 1} />
+                        maxQty={topItems[0]?.qty ?? 1} rank={i + 1} />
                     ))}
                   </View>
                 </>
@@ -931,19 +1108,19 @@ export default function DashboardScreen() {
             </View>
 
             {/* Active Orders */}
-            <View style={[s.card, cardStyle, { flex: 1 }]}>
+            <View style={[s.card, cardS, { flex: 1 }]}>
               <View style={s.cardHeader}>
                 <View>
                   <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Active Orders</Text>
-                  <Text style={[s.cardSub, { color: C.muted }]}>{stats.activeOrders.length} in-flight</Text>
+                  <Text style={[s.cardSub, { color: C.muted }]}>{activeOrders.length} in-flight</Text>
                 </View>
                 <TouchableOpacity onPress={() => go('/(app)/orders')}>
                   <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700' }}>View All</Text>
                 </TouchableOpacity>
               </View>
-              {stats.activeOrders.length > 0 ? (
+              {activeOrders.length > 0 ? (
                 <View style={{ gap: 1, marginTop: 8 }}>
-                  {stats.activeOrders.map(o => <ActiveOrderRow key={o.id} order={o} />)}
+                  {activeOrders.map(o => <ActiveOrderRow key={o.id} order={o} />)}
                 </View>
               ) : (
                 <View style={s.emptyBox}>
@@ -951,7 +1128,7 @@ export default function DashboardScreen() {
                   <Text style={s.emptyText}>No active orders</Text>
                 </View>
               )}
-              {stats.activeOrders.length > 0 && (
+              {activeOrders.length > 0 && (
                 <TouchableOpacity
                   style={[s.viewAllBtn, { marginTop: 10, borderColor: colors.dashboard.border }]}
                   onPress={() => go('/(app)/orders')}
@@ -965,19 +1142,19 @@ export default function DashboardScreen() {
 
         {/* ── Recent Orders ── */}
         <View style={s.section}>
-          <View style={[s.card, cardStyle]}>
+          <View style={[s.card, cardS]}>
             <View style={s.cardHeader}>
               <View>
                 <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Recent Orders</Text>
-                <Text style={[s.cardSub, { color: C.muted }]}>Last 5 orders</Text>
+                <Text style={[s.cardSub, { color: C.muted }]}>Latest orders</Text>
               </View>
               <TouchableOpacity onPress={() => go('/(app)/orders')}>
                 <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700' }}>See All</Text>
               </TouchableOpacity>
             </View>
-            {stats.recentOrders.length > 0 ? (
+            {recentOrders.length > 0 ? (
               <View style={{ gap: 1, marginTop: 8 }}>
-                {stats.recentOrders.map(o => <RecentOrderRow key={o.id} order={o} />)}
+                {recentOrders.map(o => <RecentOrderRow key={o.id} order={o} />)}
               </View>
             ) : (
               <View style={s.emptyBox}>
@@ -988,9 +1165,9 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ── Upcoming Reservations (matches csPos reservations widget) ── */}
+        {/* ── Upcoming Reservations ── */}
         <View style={s.section}>
-          <View style={[s.card, cardStyle]}>
+          <View style={[s.card, cardS]}>
             <View style={s.cardHeader}>
               <View>
                 <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Upcoming Reservations</Text>
@@ -1019,11 +1196,11 @@ export default function DashboardScreen() {
           <View style={[s.grid, { gap: 8 }]}>
             {QUICK_LINKS.map(ql => (
               <View key={ql.route} style={{ width: `${100 / cols4}%` as any, padding: 4 }}>
-                <TouchableOpacity style={[ql_s.card, cardStyle]} onPress={() => go(ql.route)} activeOpacity={0.85}>
-                  <View style={[ql_s.icon, { backgroundColor: ql.color + '15' }]}>
+                <TouchableOpacity style={[qlS.card, cardS]} onPress={() => go(ql.route)} activeOpacity={0.85}>
+                  <View style={[qlS.icon, { backgroundColor: ql.color + '15' }]}>
                     <Ionicons name={ql.icon as any} size={22} color={ql.color} />
                   </View>
-                  <Text style={ql_s.label}>{ql.label}</Text>
+                  <Text style={qlS.label}>{ql.label}</Text>
                 </TouchableOpacity>
               </View>
             ))}
@@ -1038,16 +1215,16 @@ export default function DashboardScreen() {
 
 // ── StyleSheets ───────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  shell:  { flex: 1 },
-  body:   { padding: 12 },
-  row:    { flexDirection: 'row', flexWrap: 'wrap' },
-  grid:   { flexDirection: 'row', flexWrap: 'wrap', width: '100%' },
-  section:{ marginBottom: 6 },
-  card:   {
+  shell:    { flex: 1 },
+  body:     { padding: 12 },
+  row:      { flexDirection: 'row', flexWrap: 'wrap' },
+  grid:     { flexDirection: 'row', flexWrap: 'wrap', width: '100%' },
+  section:  { marginBottom: 6 },
+  card:     {
     backgroundColor: C.white, borderRadius: 12, padding: 16,
     borderWidth: 1, borderColor: C.border,
     shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
-    elevation: 2, marginBottom: 0,
+    elevation: 2,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
   cardTitle:  { fontSize: 14, fontWeight: '800', color: C.text },
@@ -1057,7 +1234,7 @@ const s = StyleSheet.create({
   viewAllBtn: { borderWidth: 1, borderRadius: 8, paddingVertical: 9, alignItems: 'center' },
   viewAllText:{ fontSize: 12.5, fontWeight: '700' },
 
-  // Hero header
+  // Hero
   hero:       { paddingHorizontal: 20, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 },
   heroBrand:  { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
   heroName:   { fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
@@ -1070,21 +1247,21 @@ const s = StyleSheet.create({
   refreshBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
 
   // Date-range filter bar
-  filterBar:         { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, marginBottom: 12 },
-  filterChip:        { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  filterChipActive:  { backgroundColor: C.dark, borderColor: C.dark },
-  filterChipText:    { fontSize: 12.5, fontWeight: '600', color: '#374151' },
+  filterBar:            { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, marginBottom: 12 },
+  filterChip:           { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
+  filterChipActive:     { backgroundColor: C.dark, borderColor: C.dark },
+  filterChipText:       { fontSize: 12.5, fontWeight: '600', color: '#374151' },
   filterChipTextActive: { color: '#C9A52A' },
-  filterRefresh:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#e5e7eb', marginLeft: 4 },
-  filterRefreshText: { fontSize: 12, color: C.muted, fontWeight: '600' },
+  filterRefresh:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#e5e7eb', marginLeft: 4 },
+  filterRefreshText:    { fontSize: 12, color: C.muted, fontWeight: '600' },
 });
 
 const sh = StyleSheet.create({
-  row:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  titleWrap:{ flexDirection: 'row', alignItems: 'center', gap: 8 },
-  accent:   { width: 3, height: 16, borderRadius: 2, backgroundColor: C.gold },
-  title:    { fontSize: 13, fontWeight: '800', color: '#374151', letterSpacing: 0.5, textTransform: 'uppercase' },
-  actionBtn:{ flexDirection: 'row', alignItems: 'center', gap: 4 },
+  row:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  titleWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  accent:    { width: 3, height: 16, borderRadius: 2, backgroundColor: C.gold },
+  title:     { fontSize: 13, fontWeight: '800', color: '#374151', letterSpacing: 0.5, textTransform: 'uppercase' },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   actionText:{ fontSize: 12, fontWeight: '700', color: C.primary },
 });
 
@@ -1099,7 +1276,7 @@ const bc = StyleSheet.create({
   sub:         { fontSize: 11.5, color: C.muted },
 });
 
-const sc = StyleSheet.create({
+const smc = StyleSheet.create({
   wrap:        { backgroundColor: C.white, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1, height: '100%' },
   dangerBorder:{ borderColor: C.danger, borderWidth: 1.5 },
   iconWrap:    { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
@@ -1140,15 +1317,15 @@ const pi = StyleSheet.create({
 });
 
 const pmc = StyleSheet.create({
-  wrap:   { backgroundColor: C.white, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1, height: '100%' },
-  top:    { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  wrap:    { backgroundColor: C.white, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1, height: '100%' },
+  top:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   iconWrap:{ width: 36, height: 36, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  label:  { fontSize: 13, fontWeight: '700', color: C.text },
-  sub:    { fontSize: 11, color: C.muted, marginTop: 1 },
-  amount: { fontSize: 16, fontWeight: '800', color: C.text, marginBottom: 8 },
-  track:  { height: 6, backgroundColor: '#f1f5f9', borderRadius: 3, overflow: 'hidden', marginBottom: 4 },
-  fill:   { height: '100%', borderRadius: 3 },
-  pct:    { fontSize: 10.5, color: C.muted },
+  label:   { fontSize: 13, fontWeight: '700', color: C.text },
+  sub:     { fontSize: 11, color: C.muted, marginTop: 1 },
+  amount:  { fontSize: 16, fontWeight: '800', color: C.text, marginBottom: 8 },
+  track:   { height: 6, backgroundColor: '#f1f5f9', borderRadius: 3, overflow: 'hidden', marginBottom: 4 },
+  fill:    { height: '100%', borderRadius: 3 },
+  pct:     { fontSize: 10.5, color: C.muted },
 });
 
 const btc = StyleSheet.create({
@@ -1220,7 +1397,7 @@ const resR = StyleSheet.create({
   badgeText:{ fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
 });
 
-const ql_s = StyleSheet.create({
+const qlS = StyleSheet.create({
   card:  { backgroundColor: C.white, borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: C.border, gap: 8, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1, height: '100%' },
   icon:  { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 12, fontWeight: '700', color: '#374151', textAlign: 'center' },

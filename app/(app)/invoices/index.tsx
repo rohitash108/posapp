@@ -586,22 +586,29 @@ export default function InvoicesScreen() {
   const isDesktop = width >= 900;
 
   // ── Load (server-side page + filter) ─────────────────────────────────────────
-  const load = useCallback(async (opts?: { pg?: number; pp?: number; silent?: boolean }) => {
-    const pg2 = opts?.pg ?? page;
-    const pp2 = opts?.pp ?? perPage;
+  const load = useCallback(async (opts?: {
+    pg?: number; pp?: number; silent?: boolean;
+    status?: string; q?: string;
+  }) => {
+    const pg2  = opts?.pg     ?? page;
+    const pp2  = opts?.pp     ?? perPage;
+    const sts  = opts?.status !== undefined ? opts.status : statusFilter;
+    const srch = opts?.q      !== undefined ? opts.q      : search;
     if (!opts?.silent) setLoading(true);
     try {
-      const res = await invoicesApi.list({ page: pg2, per_page: pp2 });
+      const params: Record<string, any> = { page: pg2, per_page: pp2 };
+      if (sts)        params.payment_status = sts;
+      if (srch.trim()) params.search        = srch.trim();
+      const res  = await invoicesApi.list(params);
       const raw  = res.data;
       const data = raw?.data ?? raw ?? [];
       setInvoices(Array.isArray(data) ? data : []);
-      // Handle paginated response envelope
       if (raw?.meta?.total != null)       setTotal(raw.meta.total);
       else if (raw?.total != null)        setTotal(raw.total);
       else                                setTotal(Array.isArray(data) ? data.length : 0);
     } catch { /* offline */ }
     finally { setLoading(false); setRefreshing(false); }
-  }, [page, perPage]);
+  }, [page, perPage, statusFilter, search]);
 
   useEffect(() => { load(); }, []);
 
@@ -674,8 +681,14 @@ export default function InvoicesScreen() {
           <TextInput
             style={s.searchInput}
             value={search}
-            onChangeText={setSearch}
-            placeholder="Search"
+            onChangeText={v => {
+              setSearch(v);
+              setPage(1);
+              // Debounce: wait 400ms after user stops typing before fetching
+              if ((load as any)._searchTimer) clearTimeout((load as any)._searchTimer);
+              (load as any)._searchTimer = setTimeout(() => load({ pg: 1, q: v }), 400);
+            }}
+            placeholder="Search invoices…"
             placeholderTextColor="#9ca3af"
           />
           <Ionicons name="search-outline" size={15} color="#9ca3af" />
@@ -695,7 +708,7 @@ export default function InvoicesScreen() {
             <View style={s.dropMenu}>
               {STATUS_OPTIONS.map(o => (
                 <Pressable key={o.key} style={[s.dropItem, statusFilter === o.key && s.dropItemActive]}
-                  onPress={() => { setStatusFilter(o.key); setFilterOpen(false); }}>
+                  onPress={() => { setStatusFilter(o.key); setFilterOpen(false); setPage(1); load({ pg: 1, status: o.key }); }}>
                   {o.key ? (
                     <Text style={[s.dropItemTxt, { color: PAY_CFG[o.key]?.color ?? '#374151' }, statusFilter === o.key && { fontWeight: '700' }]}>{o.label}</Text>
                   ) : (

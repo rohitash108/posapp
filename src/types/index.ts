@@ -101,7 +101,8 @@ export interface Expense {
   title: string;
   amount: number;
   tax_amount?: number;
-  payment_method?: 'cash' | 'card' | 'upi' | 'bank_transfer' | 'other';
+  total?: number;
+  payment_method?: 'cash' | 'card' | 'upi' | 'bank_transfer' | 'cheque' | 'other';
   category_id?: number;
   category_name?: string;
   vendor_name?: string;
@@ -116,6 +117,8 @@ export interface Expense {
 export interface ExpenseCategory {
   id: number;
   name: string;
+  color?: string;
+  icon?: string;
 }
 
 export interface Tax {
@@ -346,17 +349,31 @@ export interface MenuItem {
 export interface Coupon {
   id: number;
   code: string;
-  name?: string;
   discount_type: 'percentage' | 'fixed';
+  /** canonical DB column */
+  discount_amount: number;
+  /** alias — same value as discount_amount, returned by API for compatibility */
   discount_value: number;
-  min_order_amount?: number;
-  minimum_order?: number;   // alias
-  max_uses?: number;
-  usage_limit?: number;     // alias
-  used_count?: number;
-  usage_count?: number;     // alias
-  is_active: boolean;
+  /** coupon becomes active from this date (nullable) */
+  valid_from?: string;
+  /** coupon expires after this date (nullable) */
+  valid_to?: string;
+  /** alias for valid_to */
   expires_at?: string;
+  is_active: boolean;
+  /** null = unlimited */
+  max_uses?: number;
+  /** alias for max_uses */
+  usage_limit?: number;
+  /** canonical DB column */
+  times_used: number;
+  /** alias for times_used */
+  used_count?: number;
+  /** alias for times_used */
+  usage_count?: number;
+  /** computed by API: is_active && not expired && within valid_from && under max_uses */
+  is_valid?: boolean;
+  is_expired?: boolean;
   created_at?: string;
 }
 

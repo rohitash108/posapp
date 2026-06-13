@@ -3,7 +3,7 @@
  * Forest-green header · Stats · Search · Date filters · Cards with edit/delete
  * Desktop side-panel form · Inline validation · Pressable throughout
  */
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TextInput, Modal,
   RefreshControl, ActivityIndicator, ScrollView, Pressable,
@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import {
-  format, isToday, isYesterday, startOfWeek, startOfMonth, parseISO, subDays,
+  format, isToday, isYesterday, parseISO, subDays,
 } from 'date-fns';
 import client from '@/api/client';
 import type { Expense, ExpenseCategory } from '@/types';
@@ -635,34 +635,51 @@ export default function ExpensesScreen() {
   const [catOpen, setCatOpen] = useState(false);
   const [pmOpen2, setPmOpen2] = useState(false);
 
+  // ── Stats from server ─────────────────────────────────────────────────────────
+  const [meta, setMeta] = useState({ period_total: 0, period_tax: 0, today_total: 0, month_total: 0, count: 0 });
+
   // ── Load ─────────────────────────────────────────────────────────────────────
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  const load = useCallback(async (opts?: { silent?: boolean; from?: string; to?: string; cat?: string; pm?: string }) => {
+    const from = opts?.from ?? appliedFrom;
+    const to   = opts?.to   ?? appliedTo;
+    const cat  = opts?.cat  !== undefined ? opts.cat  : appliedCat;
+    const pm   = opts?.pm   !== undefined ? opts.pm   : appliedPm;
+
+    if (!opts?.silent) setLoading(true);
     try {
+      const params: Record<string, string> = { date_from: from, date_to: to };
+      if (cat) params.category_id    = cat;
+      if (pm)  params.payment_method = pm;
+
       const [expRes, catRes] = await Promise.all([
-        client.get('/expenses'),
+        client.get('/expenses', { params }),
         client.get('/expense-categories'),
       ]);
-      const exp  = expRes.data?.data ?? expRes.data ?? [];
-      const cats = catRes.data?.data ?? catRes.data ?? [];
+      const exp  = expRes.data?.data  ?? expRes.data  ?? [];
+      const cats = catRes.data?.data  ?? catRes.data  ?? [];
+      if (expRes.data?.meta) setMeta(expRes.data.meta);
       setExpenses(Array.isArray(exp)  ? exp  : []);
       setCategories(Array.isArray(cats) ? cats : []);
-    } catch { /* offline */ }
+    } catch { /* offline — keep stale data */ }
     finally { setLoading(false); setRefreshing(false); }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedFrom, appliedTo, appliedCat, appliedPm]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, []); // initial load with defaults
 
   function applyFilter() {
+    setCatOpen(false);
+    setPmOpen2(false);
     setAppliedFrom(dateFrom);
     setAppliedTo(dateTo);
     setAppliedCat(catFilter);
     setAppliedPm(pmFilter);
-    setCatOpen(false);
-    setPmOpen2(false);
+    load({ from: dateFrom, to: dateTo, cat: catFilter, pm: pmFilter });
   }
 
   function resetFilter() {
+    setCatOpen(false);
+    setPmOpen2(false);
     setDateFrom(monthStr);
     setDateTo(todayStr);
     setCatFilter('');
@@ -671,42 +688,21 @@ export default function ExpensesScreen() {
     setAppliedTo(todayStr);
     setAppliedCat('');
     setAppliedPm('');
-    setCatOpen(false);
-    setPmOpen2(false);
+    load({ from: monthStr, to: todayStr, cat: '', pm: '' });
   }
 
-  // ── Derived data ──────────────────────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    return expenses.filter(e => {
-      if (e.expense_date) {
-        try {
-          const d = parseISO(e.expense_date);
-          if (appliedFrom && d < parseISO(appliedFrom)) return false;
-          if (appliedTo   && d > parseISO(appliedTo))   return false;
-        } catch {}
-      }
-      if (appliedCat && String(e.category_id) !== appliedCat) return false;
-      if (appliedPm  && e.payment_method !== appliedPm)        return false;
-      return true;
-    });
-  }, [expenses, appliedFrom, appliedTo, appliedCat, appliedPm]);
-
-  const todayTotal = useMemo(() =>
-    expenses.filter(e => { try { return isToday(parseISO(e.expense_date)); } catch { return false; } })
-            .reduce((s, e) => s + (e.amount ?? 0), 0), [expenses]);
-  const monthTotal = useMemo(() => {
-    const now = new Date();
-    return expenses.filter(e => { try { return parseISO(e.expense_date) >= startOfMonth(now); } catch { return false; } })
-                   .reduce((s, e) => s + (e.amount ?? 0), 0);
-  }, [expenses]);
-  const periodTotal = useMemo(() => filtered.reduce((s, e) => s + (e.amount ?? 0), 0), [filtered]);
-  const taxPaid     = useMemo(() => filtered.reduce((s, e) => s + (e.tax_amount ?? 0), 0), [filtered]);
+  // ── Derived data (server already filtered; expenses = result set) ─────────────
+  const filtered    = expenses; // server returns filtered results
+  const periodTotal = meta.period_total;
+  const taxPaid     = meta.period_tax;
+  const todayTotal  = meta.today_total;
+  const monthTotal  = meta.month_total;
 
   function getCatIdx(e: Expense) { return categories.findIndex(c => c.id === e.category_id); }
   function openCreate() { setEditing(null); setFormOpen(true); }
   function openEdit(e: Expense) { setEditing(e); setFormOpen(true); }
-  function afterSave() { setFormOpen(false); setEditing(null); load(true); }
-  function afterDelete() { setDelTarget(null); load(true); }
+  function afterSave() { setFormOpen(false); setEditing(null); load({ silent: true }); }
+  function afterDelete() { setDelTarget(null); load({ silent: true }); }
 
   const selectedCatName = catFilter ? (categories.find(c => String(c.id) === catFilter)?.name ?? 'Category') : 'All Categories';
   const selectedPmName  = pmFilter  ? (PAYMENT_METHODS.find(m => m.value === pmFilter)?.label ?? 'Method') : 'All Methods';
@@ -871,7 +867,7 @@ export default function ExpensesScreen() {
           contentContainerStyle={{ padding: 10, gap: 8, paddingBottom: 40, flexGrow: 1 }}
           refreshControl={
             <RefreshControl refreshing={refreshing}
-              onRefresh={() => { setRefreshing(true); load(true); }}
+              onRefresh={() => { setRefreshing(true); load({ silent: true }); }}
               tintColor={FOREST} />
           }
           renderItem={({ item: e }) => (
