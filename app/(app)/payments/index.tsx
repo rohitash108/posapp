@@ -1,422 +1,338 @@
 /**
- * Payments Screen — CSPos admin restaurant design
- * Page header · Stats · Search · Date filter · Method tabs · Status tabs · Cards
+ * Payments Screen — matches restaurant.softwar.in/payments exactly
+ * Table: Transaction ID · Order ID · Token No · Customer · Type · Menus · Grand Total
+ * Pagination · Search · Sort · Export
  */
-import React, {
-  useEffect, useState, useCallback, useMemo,
-} from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, RefreshControl, ScrollView,
-  TextInput, ActivityIndicator, Platform, Pressable,
-  useWindowDimensions, FlatList,
+  TextInput, ActivityIndicator, Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  format, isToday, isYesterday, startOfWeek, startOfMonth,
-} from 'date-fns';
 import { paymentsApi } from '@/api/payments';
+import { buildCsv, downloadCsv } from '@/utils/export';
 import type { Payment } from '@/types';
 
-// ── Tokens ────────────────────────────────────────────────────────────────────
 const FOREST  = '#1A2B1A';
-const GOLD    = '#C9A52A';
 const PRIMARY = '#2563eb';
-
-// ── Config ────────────────────────────────────────────────────────────────────
-const METHOD_CFG: Record<string, { color: string; bg: string; border: string; icon: any; label: string }> = {
-  cash:   { color: '#16a34a', bg: '#f0fdf4', border: '#86efac', icon: 'cash-outline',           label: 'Cash'   },
-  card:   { color: '#2563eb', bg: '#eff6ff', border: '#93c5fd', icon: 'card-outline',           label: 'Card'   },
-  upi:    { color: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd', icon: 'phone-portrait-outline', label: 'UPI'    },
-  other:  { color: '#0891b2', bg: '#ecfeff', border: '#a5f3fc', icon: 'globe-outline',          label: 'Online' },
-  online: { color: '#0891b2', bg: '#ecfeff', border: '#a5f3fc', icon: 'globe-outline',          label: 'Online' },
-};
-function mCfg(m?: string) { return METHOD_CFG[m ?? 'cash'] ?? METHOD_CFG.cash; }
-
-const STATUS_CFG: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  completed: { color: '#16a34a', bg: '#f0fdf4', border: '#86efac', label: 'Completed' },
-  pending:   { color: '#d97706', bg: '#fef9ec', border: '#fcd34d', label: 'Pending'   },
-  failed:    { color: '#dc2626', bg: '#fff1f2', border: '#fecaca', label: 'Failed'    },
-  refunded:  { color: '#6b7280', bg: '#f3f4f6', border: '#d1d5db', label: 'Refunded'  },
-};
-function sCfg(s?: string) { return STATUS_CFG[s ?? 'completed'] ?? STATUS_CFG.completed; }
-
-const DATE_PRESETS = [
-  { key: 'all',       label: 'All Time'   },
-  { key: 'today',     label: 'Today'      },
-  { key: 'yesterday', label: 'Yesterday'  },
-  { key: 'week',      label: 'This Week'  },
-  { key: 'month',     label: 'This Month' },
-];
-
-const METHOD_TABS = [
-  { key: 'all',   label: 'All'    },
-  { key: 'cash',  label: 'Cash'   },
-  { key: 'card',  label: 'Card'   },
-  { key: 'upi',   label: 'UPI'    },
-  { key: 'other', label: 'Online' },
-];
-
-const STATUS_TABS = [
-  { key: 'all',       label: 'All'       },
-  { key: 'completed', label: 'Completed' },
-  { key: 'pending',   label: 'Pending'   },
-  { key: 'failed',    label: 'Failed'    },
-  { key: 'refunded',  label: 'Refunded'  },
-];
-
-function fmtDate(dt?: string) {
-  if (!dt) return '—';
-  try {
-    const d = new Date(dt);
-    if (isToday(d))     return format(d, 'h:mm a');
-    if (isYesterday(d)) return `Yesterday ${format(d, 'h:mm a')}`;
-    return format(d, 'dd MMM yyyy');
-  } catch { return dt; }
-}
-
-// ── Payment Card ──────────────────────────────────────────────────────────────
-function PaymentCard({ pay }: { pay: Payment }) {
-  const method = pay.payment_method ?? (pay as any).method ?? 'cash';
-  const mc = mCfg(method);
-  const sc = sCfg(pay.status);
-  const ref = pay.reference_number ?? (pay as any).reference;
-  const orderNo = (pay as any).order_number ?? pay.order_id;
-
-  return (
-    <View style={[cd.card, { borderLeftColor: mc.color }]}>
-      {/* Top row: icon + ref/order + amount */}
-      <View style={cd.top}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={[cd.iconBox, { backgroundColor: mc.bg }]}>
-            <Ionicons name={mc.icon} size={18} color={mc.color} />
-          </View>
-          <View>
-            <Text style={cd.ref}>{ref || `Payment #${pay.id}`}</Text>
-            <Text style={cd.order}>Order #{orderNo ?? '—'}</Text>
-          </View>
-        </View>
-        <Text style={[cd.amount, { color: pay.status === 'failed' ? '#dc2626' : '#111827' }]}>
-          {pay.status === 'failed' ? '—' : `₹${Number(pay.amount).toFixed(2)}`}
-        </Text>
-      </View>
-
-      {/* Mid: customer */}
-      {(pay.customer_name) ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 }}>
-          <Ionicons name="person-outline" size={11} color="#94a3b8" />
-          <Text style={cd.customer}>{pay.customer_name}</Text>
-        </View>
-      ) : null}
-
-      {/* Bottom: method + status + date */}
-      <View style={cd.bot}>
-        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-          <View style={[cd.chip, { backgroundColor: mc.bg, borderColor: mc.border }]}>
-            <Ionicons name={mc.icon} size={10} color={mc.color} />
-            <Text style={[cd.chipTxt, { color: mc.color }]}>{mc.label}</Text>
-          </View>
-          <View style={[cd.chip, { backgroundColor: sc.bg, borderColor: sc.border }]}>
-            <Text style={[cd.chipTxt, { color: sc.color }]}>{sc.label}</Text>
-          </View>
-        </View>
-        <Text style={cd.date}>{fmtDate(pay.created_at)}</Text>
-      </View>
-
-      {/* Notes */}
-      {pay.notes ? (
-        <Text style={cd.notes} numberOfLines={1}>{pay.notes}</Text>
-      ) : null}
-    </View>
-  );
-}
+const PAGE_SIZES = [15, 25, 50] as const;
+const TYPE_FILTERS = ['all', 'Dine in', 'Takeaway', 'Delivery'] as const;
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
-// Compute date_from / date_to from a preset key
-function presetRange(key: string): { date_from?: string; date_to?: string } {
-  const fmt = (d: Date) => format(d, 'yyyy-MM-dd');
-  const now  = new Date();
-  if (key === 'today')     return { date_from: fmt(now), date_to: fmt(now) };
-  if (key === 'yesterday') { const y = new Date(now); y.setDate(y.getDate() - 1); return { date_from: fmt(y), date_to: fmt(y) }; }
-  if (key === 'week')      return { date_from: fmt(startOfWeek(now, { weekStartsOn: 1 })), date_to: fmt(now) };
-  if (key === 'month')     return { date_from: fmt(startOfMonth(now)), date_to: fmt(now) };
-  return {};
-}
-
 export default function PaymentsScreen() {
-  const [payments,      setPayments]      = useState<Payment[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [refreshing,    setRefreshing]    = useState(false);
-  const [search,        setSearch]        = useState('');
-  const [methodTab,     setMethodTab]     = useState('all');
-  const [statusTab,     setStatusTab]     = useState('all');
-  const [dateFilter,    setDateFilter]    = useState('all');
-  // Server-side summary stats (totals by method)
-  const [summary, setSummary] = useState({ total: 0, cash: 0, card: 0, upi: 0, other: 0, count: 0 });
+  const [allPayments, setAllPayments] = useState<Payment[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [refreshing,  setRefreshing]  = useState(false);
+  const [search,      setSearch]      = useState('');
+  const [page,        setPage]        = useState(1);
+  const [pageSize,    setPageSize]    = useState<number>(15);
+  const [sortNewest,  setSortNewest]  = useState(true);
+  const [typeFilter,  setTypeFilter]  = useState<string>('all');
+  const [filterOpen,  setFilterOpen]  = useState(false);
+  const [compactView, setCompactView] = useState(false);
+  const [exportOpen,  setExportOpen]  = useState(false);
 
-  const loadSummary = useCallback(async (dateKey: string) => {
-    try {
-      const range = presetRange(dateKey);
-      const res   = await paymentsApi.summary(range);
-      if (res.data) setSummary(res.data);
-    } catch { /* offline */ }
-  }, []);
-
-  const load = useCallback(async (silent = false, overrides?: { date?: string; method?: string; status?: string; q?: string }) => {
+  const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
-    const dateKey = overrides?.date   ?? dateFilter;
-    const method  = overrides?.method ?? methodTab;
-    const status  = overrides?.status ?? statusTab;
-    const q       = overrides?.q      ?? search;
     try {
-      const params: Record<string, any> = { per_page: 300, ...presetRange(dateKey) };
-      if (method !== 'all') params.payment_method = method;
-      if (status !== 'all') params.payment_status = status;
-      if (q.trim())         params.search = q.trim();
-      const res  = await paymentsApi.list(params);
+      const res  = await paymentsApi.list({ per_page: 1000 });
       const data = res.data?.data ?? res.data ?? [];
-      setPayments(Array.isArray(data) ? data : []);
+      setAllPayments(Array.isArray(data) ? data : []);
     } catch { /* offline */ }
     finally { setLoading(false); setRefreshing(false); }
-  }, [dateFilter, methodTab, statusTab, search]);
+  }, []);
 
-  useEffect(() => { load(); loadSummary('all'); }, []);
+  useEffect(() => { load(); }, []);
 
-  const filtered = payments; // server already filters; client-side is just the returned page
+  const filtered = useMemo(() => {
+    let list = [...allPayments];
+    if (sortNewest) list = list.sort((a, b) => b.id - a.id);
+    else            list = list.sort((a, b) => a.id - b.id);
+    if (typeFilter !== 'all') {
+      list = list.filter(p => {
+        const t = (p as any).order_type ?? (p as any).type ?? 'Dine in';
+        return t === typeFilter;
+      });
+    }
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter(p =>
+      String(p.id).includes(q) ||
+      String(p.order_id ?? '').includes(q) ||
+      String(p.order_number ?? '').includes(q) ||
+      p.customer_name?.toLowerCase().includes(q) ||
+      p.reference_number?.toLowerCase().includes(q)
+    );
+  }, [allPayments, search, sortNewest, typeFilter]);
 
-  const hasFilter = search !== '' || methodTab !== 'all' || statusTab !== 'all' || dateFilter !== 'all';
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage   = Math.min(page, totalPages);
+  const pageData   = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const fromRow    = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const toRow      = Math.min(safePage * pageSize, filtered.length);
+
+  function goPage(p: number) { setPage(Math.max(1, Math.min(totalPages, p))); }
+
+  function handleExport() {
+    const headers = ['Transaction ID', 'Order ID', 'Token No', 'Customer', 'Type', 'Menus', 'Amount'];
+    const rows = filtered.map(p => [
+      p.reference_number ?? p.id,
+      p.order_id ?? '',
+      (p as any).token_no ?? '',
+      p.customer_name ?? 'Walk-in',
+      (p as any).order_type ?? (p as any).type ?? 'Dine in',
+      (p as any).items_count ?? (p as any).menus ?? '',
+      p.amount,
+    ]);
+    downloadCsv(`payments-${new Date().toISOString().slice(0, 10)}.csv`, buildCsv(headers, rows));
+    setExportOpen(false);
+  }
+
+  const pageNums = useMemo(() => {
+    const nums: number[] = [];
+    const start = Math.max(1, safePage - 2);
+    const end   = Math.min(totalPages, start + 4);
+    for (let i = start; i <= end; i++) nums.push(i);
+    return nums;
+  }, [safePage, totalPages]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f0f2f7' }}>
+    <View style={s.shell}>
+      <View style={s.header}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Text style={s.title}>Payments</Text>
+          <Pressable onPress={() => { setRefreshing(true); load(true); }}
+            style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.6 }]}>
+            <Ionicons name="refresh-outline" size={15} color="#64748b" />
+          </Pressable>
+        </View>
+        <View style={{ position: 'relative' }}>
+          <Pressable style={s.exportBtn} onPress={() => setExportOpen(o => !o)}>
+            <Ionicons name="share-outline" size={14} color="#374151" />
+            <Text style={s.exportBtnTxt}>Export</Text>
+            <Ionicons name="chevron-down" size={13} color="#374151" />
+          </Pressable>
+          {exportOpen && (
+            <View style={s.dropMenu}>
+              <Pressable style={s.dropItem} onPress={handleExport}>
+                <Ionicons name="document-text-outline" size={14} color="#374151" />
+                <Text style={s.dropItemTxt}>Export CSV</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </View>
+
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); load(true); loadSummary(dateFilter); }} tintColor={FOREST} />
+            onRefresh={() => { setRefreshing(true); load(true); }} tintColor={FOREST} />
         }>
 
-        {/* ── Page header ── */}
-        <View style={s.pageHeader}>
-          <View>
-            <Text style={s.pageTitle}>Payments</Text>
-            <Text style={s.pageSub}>Payment transactions and collection summary</Text>
-          </View>
-          <Pressable style={({ pressed }) => [s.refreshBtn, pressed && { opacity: 0.7 }]}
-            onPress={() => { setRefreshing(true); load(true); loadSummary(dateFilter); }}>
-            <Ionicons name="refresh-outline" size={16} color="#64748b" />
-          </Pressable>
-        </View>
-
-        {/* ── Stats ── */}
-        <View style={s.statsBar}>
-          <View style={[s.statMain, { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' }]}>
-            <Ionicons name="wallet-outline" size={18} color="#16a34a" style={{ marginBottom: 4 }} />
-            <Text style={[s.statMainVal, { color: '#16a34a' }]}>₹{summary.total.toFixed(2)}</Text>
-            <Text style={s.statMainLbl}>Total Collected</Text>
-          </View>
-          <View style={s.statGrid}>
-            {[
-              { label: 'Cash',   val: summary.cash,  color: '#16a34a', bg: '#f0fdf4', icon: 'cash-outline'           as const },
-              { label: 'Card',   val: summary.card,  color: '#2563eb', bg: '#eff6ff', icon: 'card-outline'           as const },
-              { label: 'UPI',    val: summary.upi,   color: '#7c3aed', bg: '#f5f3ff', icon: 'phone-portrait-outline' as const },
-              { label: 'Online', val: summary.other, color: '#0891b2', bg: '#ecfeff', icon: 'globe-outline'          as const },
-            ].map(st => (
-              <View key={st.label} style={[s.statSmall, { backgroundColor: st.bg }]}>
-                <Ionicons name={st.icon} size={14} color={st.color} />
-                <Text style={[s.statSmallVal, { color: st.color }]}>₹{st.val.toFixed(0)}</Text>
-                <Text style={[s.statSmallLbl, { color: st.color }]}>{st.label}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* ── Search ── */}
-        <View style={s.searchRow}>
-          <View style={s.searchBox}>
-            <TextInput
-              style={s.searchInput}
-              value={search}
-              onChangeText={v => {
-                setSearch(v);
-                if ((load as any)._st) clearTimeout((load as any)._st);
-                (load as any)._st = setTimeout(() => load(false, { q: v }), 400);
-              }}
-              placeholder="Order #, reference, customer…"
-              placeholderTextColor="#9ca3af" />
-            {search
-              ? <Pressable onPress={() => { setSearch(''); load(false, { q: '' }); }}>
-                  <Ionicons name="close-circle" size={16} color="#9ca3af" />
+        <View style={s.tableCard}>
+          <View style={s.toolbar}>
+            <View style={s.searchBox}>
+              <TextInput
+                style={s.searchInput}
+                value={search}
+                onChangeText={v => { setSearch(v); setPage(1); }}
+                placeholder="Search"
+                placeholderTextColor="#9ca3af" />
+              {search
+                ? <Pressable onPress={() => { setSearch(''); setPage(1); }}>
+                    <Ionicons name="close-circle" size={15} color="#9ca3af" />
+                  </Pressable>
+                : <Ionicons name="search-outline" size={15} color="#9ca3af" />
+              }
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={{ position: 'relative' }}>
+                <Pressable style={[s.toolBtn, typeFilter !== 'all' && s.toolBtnActive]} onPress={() => setFilterOpen(o => !o)}>
+                  <Ionicons name="filter-outline" size={14} color="#374151" />
+                  <Text style={s.toolBtnTxt}>{typeFilter === 'all' ? 'Filter' : typeFilter}</Text>
                 </Pressable>
-              : <Ionicons name="search-outline" size={15} color="#9ca3af" />
-            }
+                {filterOpen && (
+                  <View style={s.dropMenu}>
+                    {TYPE_FILTERS.map(t => (
+                      <Pressable key={t} style={s.dropItem}
+                        onPress={() => { setTypeFilter(t); setFilterOpen(false); setPage(1); }}>
+                        <Text style={[s.dropItemTxt, typeFilter === t && { fontWeight: '700', color: FOREST }]}>{t === 'all' ? 'All types' : t}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </View>
+              <Pressable style={[s.toolBtn, compactView && s.toolBtnActive]} onPress={() => setCompactView(v => !v)}>
+                <Ionicons name="grid-outline" size={14} color="#374151" />
+              </Pressable>
+              <Pressable style={s.sortBtn} onPress={() => setSortNewest(v => !v)}>
+                <Text style={s.toolBtnTxt}>Sort by : {sortNewest ? 'Newest' : 'Oldest'}</Text>
+                <Ionicons name="chevron-down" size={13} color="#374151" />
+              </Pressable>
+            </View>
           </View>
-        </View>
 
-        {/* ── Date filter ── */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={s.pillRow}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
-          {DATE_PRESETS.map(dp => {
-            const active = dateFilter === dp.key;
-            return (
-              <Pressable key={dp.key}
-                style={({ pressed }) => [
-                  s.pill,
-                  active && { backgroundColor: FOREST, borderColor: FOREST },
-                  pressed && { opacity: 0.8 },
-                ]}
-                onPress={() => { setDateFilter(dp.key); load(false, { date: dp.key }); loadSummary(dp.key); }}>
-                <Text style={[s.pillTxt, active && { color: GOLD, fontWeight: '700' }]}>{dp.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+          {!compactView && (
+            <View style={s.colHead}>
+              <Text style={[s.colHd, { flex: 1.4 }]}>Transaction ID</Text>
+              <Text style={[s.colHd, { flex: 1   }]}>Order ID</Text>
+              <Text style={[s.colHd, { flex: 1.1 }]}>Token No</Text>
+              <Text style={[s.colHd, { flex: 1.5 }]}>Customer</Text>
+              <Text style={[s.colHd, { flex: 1.2 }]}>Type</Text>
+              <Text style={[s.colHd, { flex: 0.8 }]}>Menus</Text>
+              <Text style={[s.colHd, { flex: 1.2, textAlign: 'right' }]}>Grand Total</Text>
+            </View>
+          )}
 
-        {/* ── Method tabs ── */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={[s.pillRow, { borderTopWidth: 0 }]}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 8, gap: 8 }}>
-          {METHOD_TABS.map(tab => {
-            const active = methodTab === tab.key;
-            const mc     = METHOD_CFG[tab.key];
-            const cnt    = tab.key === 'all'
-              ? filtered.length
-              : tab.key === 'other'
-                ? filtered.filter(p => { const m = p.payment_method ?? (p as any).method; return m === 'other' || m === 'online'; }).length
-                : filtered.filter(p => (p.payment_method ?? (p as any).method) === tab.key).length;
-            return (
-              <Pressable key={tab.key}
-                style={({ pressed }) => [
-                  s.tabChip,
-                  active && { backgroundColor: mc?.color ?? FOREST, borderColor: mc?.color ?? FOREST },
-                  pressed && { opacity: 0.8 },
-                ]}
-                onPress={() => { setMethodTab(tab.key); load(false, { method: tab.key }); }}>
-                {mc && <Ionicons name={mc.icon} size={12} color={active ? '#fff' : mc.color} />}
-                <Text style={[s.tabChipTxt, active && { color: '#fff', fontWeight: '700' }]}>{tab.label}</Text>
-                <View style={[s.tabBadge, active && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
-                  <Text style={[s.tabBadgeTxt, active && { color: '#fff' }]}>{cnt}</Text>
+          {loading ? (
+            <View style={s.centerWrap}>
+              <ActivityIndicator color={FOREST} size="large" />
+              <Text style={s.centerTxt}>Loading payments…</Text>
+            </View>
+          ) : pageData.length === 0 ? (
+            <View style={s.centerWrap}>
+              <Ionicons name="wallet-outline" size={36} color="#d1d5db" />
+              <Text style={s.centerTxt}>No payments found</Text>
+            </View>
+          ) : compactView ? (
+            pageData.map(pay => {
+              const ref = pay.reference_number ?? `#${pay.id}`;
+              return (
+                <View key={pay.id} style={s.cardRow}>
+                  <Text style={s.cardRef}>{ref}</Text>
+                  <Text style={s.cardAmt}>₹{Number(pay.amount).toFixed(2)}</Text>
+                  <Text style={s.cardMeta}>{pay.customer_name ?? 'Walk-in'} · Order #{pay.order_id ?? '—'}</Text>
                 </View>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        {/* ── Status tabs ── */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={[s.pillRow, { borderTopWidth: 0 }]}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 10, gap: 8 }}>
-          {STATUS_TABS.map(tab => {
-            const active = statusTab === tab.key;
-            const sc     = STATUS_CFG[tab.key];
-            const cnt    = tab.key === 'all' ? filtered.length : filtered.filter(p => p.status === tab.key).length;
-            return (
-              <Pressable key={tab.key}
-                style={({ pressed }) => [
-                  s.tabChip,
-                  active && { backgroundColor: sc?.color ?? FOREST, borderColor: sc?.color ?? FOREST },
-                  pressed && { opacity: 0.8 },
-                ]}
-                onPress={() => { setStatusTab(tab.key); load(false, { status: tab.key }); }}>
-                <Text style={[s.tabChipTxt, active && { color: '#fff', fontWeight: '700' }]}>{tab.label}</Text>
-                <View style={[s.tabBadge, active && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
-                  <Text style={[s.tabBadgeTxt, active && { color: '#fff' }]}>{cnt}</Text>
+              );
+            })
+          ) : (
+            pageData.map((pay, i) => {
+              const ref      = pay.reference_number ?? `#${pay.id}`;
+              const orderId  = pay.order_id ?? '—';
+              const tokenNo  = (pay as any).token_no ?? '—';
+              const customer = pay.customer_name ?? 'Walk-in';
+              const type     = (pay as any).order_type ?? (pay as any).type ?? 'Dine in';
+              const menus    = (pay as any).items_count ?? (pay as any).menus ?? '—';
+              const total    = `₹${Number(pay.amount).toFixed(2)}`;
+              const isEven   = i % 2 === 1;
+              return (
+                <View key={pay.id} style={[s.row, isEven && s.rowAlt]}>
+                  <Text style={[s.cell, s.cellRef, { flex: 1.4 }]}>{ref}</Text>
+                  <Text style={[s.cell, { flex: 1   }]}>{orderId}</Text>
+                  <Text style={[s.cell, s.cellMuted, { flex: 1.1 }]}>{tokenNo}</Text>
+                  <Text style={[s.cell, { flex: 1.5 }]}>{customer}</Text>
+                  <Text style={[s.cell, { flex: 1.2 }]}>{type}</Text>
+                  <Text style={[s.cell, { flex: 0.8 }]}>{menus}</Text>
+                  <Text style={[s.cell, s.cellAmt, { flex: 1.2 }]}>{total}</Text>
                 </View>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+              );
+            })
+          )}
 
-        {/* ── Result row ── */}
-        <View style={s.resultRow}>
-          <Text style={s.resultTxt}>{filtered.length} payment{filtered.length !== 1 ? 's' : ''}</Text>
-          {hasFilter && (
-            <Pressable onPress={() => { setSearch(''); setMethodTab('all'); setStatusTab('all'); setDateFilter('all'); load(false, { date: 'all', method: 'all', status: 'all', q: '' }); loadSummary('all'); }}>
-              <Text style={s.clearAll}>Clear filters</Text>
-            </Pressable>
+          {!loading && filtered.length > 0 && (
+            <View style={s.paginBar}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Pressable style={s.entriesBox} onPress={() => {
+                  const idx = PAGE_SIZES.indexOf(pageSize as typeof PAGE_SIZES[number]);
+                  const next = PAGE_SIZES[(idx + 1) % PAGE_SIZES.length];
+                  setPageSize(next);
+                  setPage(1);
+                }}>
+                  <Text style={s.entriesTxt}>{pageSize}</Text>
+                </Pressable>
+                <Text style={s.entriesLabel}>Entries</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 4 }}>
+                <Pressable style={[s.pageBtn, safePage === 1 && s.pageBtnDis]}
+                  onPress={() => goPage(safePage - 1)} disabled={safePage === 1}>
+                  <Text style={[s.pageBtnTxt, safePage === 1 && { color: '#d1d5db' }]}>‹ Prev</Text>
+                </Pressable>
+                {[1, 2].filter(n => n <= totalPages).map(n => (
+                  <Pressable key={n} style={[s.pageBtn, safePage === n && s.pageBtnActive]}
+                    onPress={() => goPage(n)}>
+                    <Text style={[s.pageBtnTxt, safePage === n && { color: '#fff', fontWeight: '700' }]}>{n}</Text>
+                  </Pressable>
+                ))}
+                <Pressable style={[s.pageBtn, safePage === totalPages && s.pageBtnDis]}
+                  onPress={() => goPage(safePage + 1)} disabled={safePage === totalPages}>
+                  <Text style={[s.pageBtnTxt, safePage === totalPages && { color: '#d1d5db' }]}>Next ›</Text>
+                </Pressable>
+              </View>
+            </View>
           )}
         </View>
 
-        {/* ── List ── */}
-        {loading ? (
-          <View style={s.loadWrap}>
-            <ActivityIndicator color={FOREST} size="large" />
-            <Text style={s.loadTxt}>Loading payments…</Text>
-          </View>
-        ) : filtered.length === 0 ? (
-          <View style={s.emptyWrap}>
-            <View style={s.emptyIcon}>
-              <Ionicons name="wallet-outline" size={36} color="#94a3b8" />
-            </View>
-            <Text style={s.emptyTitle}>No payments found</Text>
-            <Text style={s.emptySub}>
-              {search ? `No results for "${search}"` : 'No payments match the current filters.'}
+        {!loading && filtered.length > 0 && (
+          <View style={s.footer}>
+            <Text style={s.footerTxt}>
+              Showing {fromRow} to {toRow} of {filtered.length} results
             </Text>
-          </View>
-        ) : (
-          <View style={{ padding: 10, paddingBottom: 40 }}>
-            {filtered.map(pay => <PaymentCard key={pay.id} pay={pay} />)}
+            <View style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
+              <Pressable style={s.pageBtn2} onPress={() => goPage(1)} disabled={safePage === 1}>
+                <Ionicons name="chevron-back" size={13} color={safePage === 1 ? '#d1d5db' : '#374151'} />
+              </Pressable>
+              {pageNums.map(n => (
+                <Pressable key={n} style={[s.pageBtn2, safePage === n && s.pageBtn2Active]}
+                  onPress={() => goPage(n)}>
+                  <Text style={[s.pageBtn2Txt, safePage === n && { color: '#fff', fontWeight: '700' }]}>{n}</Text>
+                </Pressable>
+              ))}
+              <Pressable style={s.pageBtn2} onPress={() => goPage(totalPages)} disabled={safePage === totalPages}>
+                <Ionicons name="chevron-forward" size={13} color={safePage === totalPages ? '#d1d5db' : '#374151'} />
+              </Pressable>
+            </View>
           </View>
         )}
+
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  pageHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  pageTitle:   { fontSize: 20, fontWeight: '800', color: '#0f172a' },
-  pageSub:     { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  refreshBtn:  { width: 34, height: 34, borderRadius: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' },
-
-  // Stats
-  statsBar:     { flexDirection: 'row', gap: 10, padding: 12, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  statMain:     { flex: 1, borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center', minHeight: 90 },
-  statMainVal:  { fontSize: 20, fontWeight: '800', marginTop: 2 },
-  statMainLbl:  { fontSize: 10, color: '#16a34a', marginTop: 2, fontWeight: '600' },
-  statGrid:     { flex: 2, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  statSmall:    { flex: 1, minWidth: '45%', borderRadius: 10, padding: 10, alignItems: 'center', gap: 2 },
-  statSmallVal: { fontSize: 14, fontWeight: '800' },
-  statSmallLbl: { fontSize: 9.5, fontWeight: '700' },
-
-  // Search
-  searchRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  searchBox:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f8fafc', borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e2e8f0' },
-  searchInput: { flex: 1, fontSize: 13, color: '#111827' },
-
-  // Tabs / pills
-  pillRow:      { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  pill:         { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  pillTxt:      { fontSize: 12, fontWeight: '600', color: '#374151' },
-  tabChip:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  tabChipTxt:   { fontSize: 12, fontWeight: '600', color: '#374151' },
-  tabBadge:     { backgroundColor: '#e5e7eb', borderRadius: 99, paddingHorizontal: 6, paddingVertical: 1 },
-  tabBadgeTxt:  { fontSize: 10, fontWeight: '700', color: '#6b7280' },
-
-  // Result
-  resultRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 7 },
-  resultTxt:  { fontSize: 11.5, color: '#9ca3af', fontWeight: '600' },
-  clearAll:   { fontSize: 12, color: PRIMARY, textDecorationLine: 'underline' },
-
-  // Load / empty
-  loadWrap:  { paddingTop: 80, alignItems: 'center', gap: 12 },
-  loadTxt:   { fontSize: 14, color: '#9ca3af' },
-  emptyWrap: { paddingTop: 80, alignItems: 'center', gap: 10 },
-  emptyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
-  emptyTitle:{ fontSize: 16, fontWeight: '700', color: '#374151' },
-  emptySub:  { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 40 },
-});
-
-const cd = StyleSheet.create({
-  card:     { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, borderLeftWidth: 4, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  top:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  iconBox:  { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  ref:      { fontSize: 14, fontWeight: '800', color: '#111827' },
-  order:    { fontSize: 11, color: '#9ca3af', marginTop: 1 },
-  amount:   { fontSize: 19, fontWeight: '900' },
-  customer: { fontSize: 11.5, fontWeight: '600', color: '#6b7280', marginBottom: 8 },
-  bot:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  chip:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
-  chipTxt:  { fontSize: 10.5, fontWeight: '700' },
-  date:     { fontSize: 11, color: '#9ca3af' },
-  notes:    { fontSize: 11, color: '#9ca3af', marginTop: 6, fontStyle: 'italic' },
+  shell:       { flex: 1, backgroundColor: '#f4f6f9' },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  title:       { fontSize: 22, fontWeight: '800', color: '#0f172a', letterSpacing: -0.5 },
+  iconBtn:     { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  exportBtn:   { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 9, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff' },
+  exportBtnTxt:{ fontSize: 13, fontWeight: '600', color: '#374151' },
+  dropMenu:    { position: 'absolute', top: '100%', right: 0, marginTop: 4, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', minWidth: 140, zIndex: 50, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
+  dropItem:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
+  dropItemTxt: { fontSize: 13, color: '#374151' },
+  tableCard:   { margin: 16, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  toolbar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  searchBox:   { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: '#e2e8f0', minWidth: 200 },
+  searchInput: { flex: 1, fontSize: 13, color: '#111827', minWidth: 120 },
+  toolBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff' },
+  toolBtnActive: { borderColor: FOREST, backgroundColor: '#f0fdf4' },
+  toolBtnTxt:  { fontSize: 12.5, fontWeight: '600', color: '#374151' },
+  sortBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff' },
+  colHead:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 11, backgroundColor: '#f9fafb', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  colHd:       { fontSize: 11.5, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.4 },
+  row:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  rowAlt:      { backgroundColor: '#fafafa' },
+  cell:        { fontSize: 13.5, color: '#374151', fontWeight: '500' },
+  cellRef:     { fontWeight: '700', color: '#111827' },
+  cellMuted:   { color: '#9ca3af' },
+  cellAmt:     { fontWeight: '800', color: '#111827', textAlign: 'right' },
+  cardRow:     { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  cardRef:     { fontSize: 14, fontWeight: '700', color: '#111827' },
+  cardAmt:     { fontSize: 16, fontWeight: '800', color: FOREST, marginTop: 2 },
+  cardMeta:    { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  paginBar:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  entriesBox:  { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff' },
+  entriesTxt:  { fontSize: 12.5, fontWeight: '600', color: '#374151' },
+  entriesLabel:{ fontSize: 12.5, color: '#6b7280' },
+  pageBtn:     { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff' },
+  pageBtnActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  pageBtnDis:  { opacity: 0.4 },
+  pageBtnTxt:  { fontSize: 12.5, fontWeight: '600', color: '#374151' },
+  footer:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12 },
+  footerTxt:   { fontSize: 12.5, color: '#f59e0b', fontWeight: '600' },
+  pageBtn2:    { width: 30, height: 30, borderRadius: 6, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  pageBtn2Active: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  pageBtn2Txt: { fontSize: 12.5, fontWeight: '600', color: '#374151' },
+  centerWrap:  { paddingVertical: 60, alignItems: 'center', gap: 12 },
+  centerTxt:   { fontSize: 14, color: '#9ca3af', fontWeight: '500' },
 });

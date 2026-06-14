@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { format, isToday, isYesterday } from 'date-fns';
 import { invoicesApi } from '@/api/invoices';
+import { buildCsv, downloadCsv } from '@/utils/export';
 import { useAppStore } from '@/store/appStore';
 import type { Invoice, PaymentMethod } from '@/types';
 
@@ -577,6 +578,7 @@ export default function InvoicesScreen() {
   const [sortOrder,    setSortOrder]    = useState<'newest' | 'oldest'>('newest');
   const [sortOpen,     setSortOpen]     = useState(false);
   const [filterOpen,   setFilterOpen]   = useState(false);
+  const [exportOpen,   setExportOpen]   = useState(false);
 
   const [selected,   setSelected]   = useState<Invoice | null>(null);
   const [showDetail, setShowDetail] = useState(false);
@@ -615,6 +617,21 @@ export default function InvoicesScreen() {
   function goPage(p: number) { setPage(p); load({ pg: p }); }
   function changePerPage(n: number) { setPerPage(n); setPage(1); load({ pg: 1, pp: n }); }
   function doRefresh() { setRefreshing(true); load({ silent: true }); }
+
+  function handleExport() {
+    const headers = ['Invoice #', 'Order', 'Customer', 'Table', 'Total', 'Status', 'Date'];
+    const rows = filtered.map(inv => [
+      inv.invoice_number,
+      inv.order_number ?? inv.order_id,
+      inv.customer_name ?? '',
+      inv.table_name ?? '',
+      inv.total,
+      inv.payment_status ?? '',
+      inv.created_at ?? '',
+    ]);
+    downloadCsv(`invoices-${new Date().toISOString().slice(0, 10)}.csv`, buildCsv(headers, rows));
+    setExportOpen(false);
+  }
 
   // Client-side filter + sort applied to current page data
   const filtered = useMemo(() => {
@@ -667,11 +684,21 @@ export default function InvoicesScreen() {
               : <Ionicons name="refresh-outline" size={16} color="#374151" />}
           </Pressable>
         </View>
-        <Pressable style={({ pressed }) => [s.exportBtn, pressed && { opacity: 0.8 }]}>
+        <View style={{ position: 'relative' }}>
+        <Pressable style={({ pressed }) => [s.exportBtn, pressed && { opacity: 0.8 }]} onPress={() => setExportOpen(o => !o)}>
           <Ionicons name="arrow-up-circle-outline" size={14} color="#374151" />
           <Text style={s.exportBtnTxt}>Export</Text>
           <Ionicons name="chevron-down" size={12} color="#374151" />
         </Pressable>
+        {exportOpen && (
+          <View style={[s.exportMenu]}>
+            <Pressable style={s.exportMenuItem} onPress={handleExport}>
+              <Ionicons name="document-text-outline" size={14} color="#374151" />
+              <Text style={s.exportMenuTxt}>Export CSV</Text>
+            </Pressable>
+          </View>
+        )}
+        </View>
       </View>
 
       {/* ── Search + filter bar ── */}
@@ -845,6 +872,9 @@ const s = StyleSheet.create({
   iconBtn:      { width: 32, height: 32, borderRadius: 8, backgroundColor: '#f5f6f8', borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' },
   exportBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
   exportBtnTxt: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  exportMenu:   { position: 'absolute', top: '100%', right: 0, marginTop: 4, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', minWidth: 140, zIndex: 50, elevation: 4 },
+  exportMenuItem:{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
+  exportMenuTxt:{ fontSize: 13, color: '#374151' },
 
   // Filter bar
   filterRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },

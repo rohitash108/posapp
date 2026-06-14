@@ -20,13 +20,11 @@ export interface Restaurant {
 export interface Category {
   id: number;
   name: string;
-  description?: string;
   image?: string;
-  image_url?: string;
-  color?: string;
   sort_order: number;
   is_active: boolean;
   items_count?: number;
+  created_at?: string;
   updated_at?: string;
 }
 
@@ -63,18 +61,27 @@ export interface Item {
 export interface RestaurantTable {
   id: number;
   name: string;
+  table_number?: number | null;
+  slug?: string;
   floor?: string;
   capacity?: number;
   status: 'available' | 'occupied' | 'reserved';
+  has_active_order?: boolean;
+  qr_url?: string;
+  qr_image_url?: string;
   updated_at?: string;
 }
 
 export interface Customer {
-  id: number;
+  id: number | null;       // null for order-derived customers (no record in customers table)
+  is_registered: boolean;  // true = in customers table; false = from orders only
   name: string;
   phone?: string;
   email?: string;
   address?: string;
+  date_of_birth?: string;
+  gender?: 'Male' | 'Female' | 'Other';
+  status?: 'active' | 'disabled';
   balance?: number;
   notes?: string;
   orders_count?: number;
@@ -164,6 +171,10 @@ export interface Order {
   waiter_id?: number;
   waiter_name?: string;
   delivery_address?: string;
+  rider_name?: string;
+  rider_phone?: string;
+  rider_status?: string;
+  delivery_partner?: string;
   subtotal: number;
   tax_amount: number;
   discount_amount: number;
@@ -332,6 +343,8 @@ export interface MenuItem {
   description?: string;
   image?: string;
   price: number;
+  master_price?: number | null;
+  price_override?: number | null;
   net_price?: number | null;
   food_type?: 'veg' | 'non_veg' | 'egg';
   is_available: boolean;

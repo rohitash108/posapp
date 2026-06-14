@@ -76,19 +76,31 @@ export async function upsertTables(tables: RestaurantTable[]): Promise<void> {
   const db = await getDatabase();
   for (const t of tables) {
     await db.runAsync(
-      `INSERT INTO restaurant_tables (id, name, floor, capacity, status, updated_at)
-       VALUES (?,?,?,?,?,?)
+      `INSERT INTO restaurant_tables
+         (id, name, table_number, slug, floor, capacity, status, has_active_order, qr_url, qr_image_url, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(id) DO UPDATE SET
-         name=excluded.name, floor=excluded.floor, capacity=excluded.capacity,
-         status=excluded.status, updated_at=excluded.updated_at`,
-      [t.id, t.name, t.floor ?? null, t.capacity ?? null, t.status, t.updated_at ?? null]
+         name=excluded.name, table_number=excluded.table_number, slug=excluded.slug,
+         floor=excluded.floor, capacity=excluded.capacity, status=excluded.status,
+         has_active_order=excluded.has_active_order, qr_url=excluded.qr_url,
+         qr_image_url=excluded.qr_image_url, updated_at=excluded.updated_at`,
+      [
+        t.id, t.name, t.table_number ?? null, t.slug ?? null, t.floor ?? null,
+        t.capacity ?? null, t.status, t.has_active_order ? 1 : 0,
+        t.qr_url ?? null, t.qr_image_url ?? null, t.updated_at ?? null,
+      ]
     );
   }
 }
 
 export async function getTables(): Promise<RestaurantTable[]> {
   const db = await getDatabase();
-  return db.getAllAsync<RestaurantTable>('SELECT * FROM restaurant_tables ORDER BY floor, name');
+  const rows = await db.getAllAsync<any>(
+    `SELECT * FROM restaurant_tables
+     ORDER BY CASE WHEN table_number IS NULL THEN 1 ELSE 0 END, table_number,
+              CASE WHEN floor IS NULL OR floor='' THEN 1 ELSE 0 END, floor, name`
+  );
+  return rows.map(r => ({ ...r, has_active_order: !!r.has_active_order }));
 }
 
 export async function updateTableStatus(id: number, status: RestaurantTable['status']): Promise<void> {
@@ -96,11 +108,18 @@ export async function updateTableStatus(id: number, status: RestaurantTable['sta
   await db.runAsync('UPDATE restaurant_tables SET status=? WHERE id=?', [status, id]);
 }
 
+export async function deleteTableLocal(id: number): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync('DELETE FROM restaurant_tables WHERE id=?', [id]);
+}
+
 // ── Customers ─────────────────────────────────────────────────────────────────
 
 export async function upsertCustomers(customers: Customer[]): Promise<void> {
   const db = await getDatabase();
   for (const c of customers) {
+    // Only persist registered customers (those with a real id from the customers table)
+    if (!c.is_registered || c.id === null) continue;
     await db.runAsync(
       `INSERT INTO customers (id, name, phone, email, address, updated_at)
        VALUES (?,?,?,?,?,?)

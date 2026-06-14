@@ -8,8 +8,11 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build:web": "npx expo export -p web",
+    "make:ico": "node scripts/make-ico.js",
     "electron:dev": "npm run build:web && electron electron/main.js",
-    "electron:build:win": "npm run build:web && electron-builder --win portable"
+    "electron:build:portable": "npm run make:ico && npm run build:web && electron-builder --win portable --x64",
+    "electron:build:installer": "npm run make:ico && npm run build:web && electron-builder --win nsis --x64",
+    "electron:build:win": "npm run make:ico && npm run build:web && electron-builder --win --x64"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -53,19 +56,36 @@
     },
     "files": ["main.js", "package.json"],
     "extraResources": [
-      { "from": "dist", "to": "dist" }
+      { "from": "dist", "to": "dist" },
+      { "from": "assets/global-tea-cafe-logo.png", "to": "assets/global-tea-cafe-logo.png" },
+      { "from": "assets/icon.ico",                 "to": "assets/icon.ico" }
     ],
     "win": {
-      "target": "portable",
-      "icon": "assets/global-tea-cafe-logo.png"
+      "icon": "assets/icon.ico",
+      "target": ["nsis", "portable"],
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "requestedExecutionLevel": "asInvoker",
+      "publisherName": "Global Tea Cafe",
+      "verifyUpdateCodeSignature": false
     },
     "portable": {
-      "requestExecutionLevel": "user"
+      "artifactName": "GTC-POS-Portable-${version}.exe",
+      "requestExecutionLevel": "user",
+      "useZip": false
     },
     "nsis": {
-      "artifactName": "GTC-POS-Setup.exe",
+      "artifactName": "GTC-POS-Setup-${version}.exe",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
       "shortcutName": "GTC POS",
-      "uninstallDisplayName": "GTC POS — Global Tea Cafe"
+      "menuCategory": "Global Tea Cafe",
+      "uninstallDisplayName": "GTC POS — Global Tea Cafe",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "deleteAppDataOnUninstall": false,
+      "license": false
     }
   }
 }

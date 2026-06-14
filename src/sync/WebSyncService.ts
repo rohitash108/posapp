@@ -12,14 +12,25 @@ import {
 
 export const webSyncService = {
   async pull(): Promise<void> {
-    const res = await client.get('/sync/pull');
-    const { categories = [], items = [], tables = [], taxes = [] } = res.data;
+    const lastSync = useAppStore.getState().lastSyncedAt;
+    const res = await client.get('/sync/pull', { params: lastSync ? { since: lastSync } : {} });
+    const {
+      categories = [], items = [], tables = [], taxes = [],
+      customers = [], orders = [], settings = {}, synced_at,
+    } = res.data;
     await webSaveCategories(categories);
     await webSaveItems(items);
     if (tables.length > 0) await webSaveTables(tables);
     useAppStore.getState().setTaxes(taxes);
-    await webSetLastSync(new Date().toISOString());
-    useAppStore.getState().setLastSyncedAt(new Date().toISOString());
+    if (settings && Object.keys(settings).length > 0) {
+      useAppStore.getState().setRestaurantSettings(settings);
+    }
+    const syncedAt = synced_at ?? new Date().toISOString();
+    await webSetLastSync(syncedAt);
+    useAppStore.getState().setLastSyncedAt(syncedAt);
+    // customers/orders cached in memory for web session via API calls; full IDB parity optional
+    void customers;
+    void orders;
   },
 
   async push(): Promise<void> {
@@ -34,7 +45,6 @@ export const webSyncService = {
         }
         await webRemoveSyncQueue(item.id);
       } catch (e: any) {
-        // Stop push on network error, retry next time
         if (!e?.response) break;
         console.warn('[WebSync] Push failed:', item.id, e?.message);
       }
@@ -49,6 +59,7 @@ export const webSyncService = {
       await this.push();
     } catch (e) {
       console.warn('[WebSync] Sync failed:', e);
+      throw e;
     } finally {
       store.setSyncing(false);
     }

@@ -9,4 +9,6 @@ export const itemsApi = {
   delete: (id: number) => client.delete(`/items/${id}`),
   updateAvailability: (id: number, is_available: boolean) =>
     client.patch(`/items/${id}/availability`, { is_available }),
+  updateMyMenu: (id: number, payload: { price_override?: number | null; is_available: boolean }) =>
+    client.patch(`/items/${id}/my-menu`, payload),
 };

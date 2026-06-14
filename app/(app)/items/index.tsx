@@ -13,8 +13,10 @@ import {
   Pressable, useWindowDimensions, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Toast from 'react-native-toast-message';
 import { itemsApi } from '@/api/items';
 import { categoriesApi } from '@/api/categories';
+import { useAppStore } from '@/store/appStore';
 import type { MenuItem, Category, Variation, Addon } from '@/types';
 import { API_BASE_URL } from '@/api/client';
 
@@ -135,7 +137,7 @@ function ItemForm({ item, categories, onSave, onClose }: FormProps) {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#fff' }}>
+    <View style={{ flexShrink: 1, backgroundColor: '#fff' }}>
       <View style={f.header}>
         <View>
           <Text style={f.title}>{item ? 'Edit Item' : 'New Item'}</Text>
@@ -146,7 +148,7 @@ function ItemForm({ item, categories, onSave, onClose }: FormProps) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 18, gap: 16 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 18, gap: 16 }} showsVerticalScrollIndicator={false}>
         {/* Name */}
         <View>
           <Text style={f.label}>Item Name <Text style={{ color: '#dc2626' }}>*</Text></Text>
@@ -242,19 +244,149 @@ function ItemForm({ item, categories, onSave, onClose }: FormProps) {
   );
 }
 
+// ── My Menu Modal (master items: set price override + availability) ───────────
+interface MyMenuModalProps {
+  item: MenuItem;
+  onSave: (updated: MenuItem) => void;
+  onClose: () => void;
+}
+
+function MyMenuModal({ item, onSave, onClose }: MyMenuModalProps) {
+  const [priceOverride, setPriceOverride] = useState(
+    item.price_override != null ? String(item.price_override) : ''
+  );
+  const [isAvailable, setIsAvailable] = useState(item.is_available);
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState('');
+
+  const masterPrice = item.master_price ?? item.price;
+
+  async function save() {
+    if (priceOverride !== '' && isNaN(Number(priceOverride))) {
+      setError('Price must be a valid number'); return;
+    }
+    setLoading(true); setError('');
+    try {
+      const payload = {
+        price_override: priceOverride !== '' ? Number(priceOverride) : null,
+        is_available: isAvailable,
+      };
+      const res = await itemsApi.updateMyMenu(item.id, payload);
+      const updated = res.data?.data ?? res.data;
+      Toast.show({
+        type: 'success',
+        text1: 'My Menu updated',
+        text2: `${item.name} saved successfully.`,
+        position: 'bottom',
+        visibilityTime: 3000,
+      });
+      onSave(updated);
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? 'Failed to save';
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <View style={{ flexShrink: 1, backgroundColor: '#fff' }}>
+      {/* Header — "My menu — {item name}" */}
+      <View style={mm.header}>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={mm.title} numberOfLines={1}>My menu — {item.name}</Text>
+          <Text style={mm.headerSub}>Per-outlet price + active flag for this item</Text>
+        </View>
+        <TouchableOpacity onPress={onClose} style={f.closeBtn}>
+          <Ionicons name="close" size={20} color="#374151" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 18, gap: 16 }} showsVerticalScrollIndicator={false}>
+
+        {/* My selling price */}
+        <View>
+          <Text style={mm.fieldLabel}>My selling price</Text>
+          {/* ₹ prefix + input + "Use master" button — matches web layout */}
+          <View style={mm.priceRow}>
+            <View style={mm.pricePrefix}>
+              <Text style={mm.pricePrefixTxt}>₹</Text>
+            </View>
+            <TextInput
+              style={mm.priceInput}
+              value={priceOverride}
+              onChangeText={setPriceOverride}
+              placeholder={Number(masterPrice).toFixed(2)}
+              placeholderTextColor="#9ca3af"
+              keyboardType="decimal-pad"
+            />
+            <TouchableOpacity style={mm.useMasterBtn} onPress={() => setPriceOverride('')}>
+              <Text style={mm.useMasterTxt}>Use master</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={mm.priceHint}>
+            Leave blank (or tap <Text style={{ fontStyle: 'italic' }}>Use master</Text>) to use the chain's master price (₹{Number(masterPrice).toFixed(2)}).
+          </Text>
+        </View>
+
+        {/* Active on my menu toggle */}
+        <View>
+          <View style={mm.toggleRow}>
+            <Switch
+              value={isAvailable}
+              onValueChange={setIsAvailable}
+              trackColor={{ true: '#2563eb', false: '#e5e7eb' }}
+              thumbColor="#fff"
+            />
+            <Text style={mm.toggleLabel}>Active on my menu</Text>
+          </View>
+          <Text style={mm.toggleHint}>
+            Inactive items stay assigned to your outlet but are hidden from the POS and customer-facing menu. You can re-enable them any time.
+          </Text>
+        </View>
+
+        {!!error && (
+          <View style={f.errBox}>
+            <Ionicons name="alert-circle-outline" size={15} color="#dc2626" />
+            <Text style={f.errTxt}>{error}</Text>
+          </View>
+        )}
+        <View style={{ height: 4 }} />
+      </ScrollView>
+
+      <View style={f.footer}>
+        <TouchableOpacity style={f.cancelBtn} onPress={onClose}>
+          <Text style={f.cancelTxt}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[f.saveBtn, { flexDirection: 'row', gap: 6 }]} onPress={save} disabled={loading}>
+          {loading
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <>
+                <Ionicons name="save-outline" size={15} color={GOLD} />
+                <Text style={f.saveTxt}>Save</Text>
+              </>}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 // ── Item Card (grid) ──────────────────────────────────────────────────────────
-function ItemCard({ item, onToggle, onEdit, onDelete, toggling }: {
+function ItemCard({ item, onToggle, onEdit, onDelete, onMyMenu, toggling, isSuperAdmin, canManageItems, canManageMyMenu }: {
   item: MenuItem;
   onToggle: (item: MenuItem) => void;
   onEdit:   (item: MenuItem) => void;
   onDelete: (item: MenuItem) => void;
+  onMyMenu: (item: MenuItem) => void;
   toggling: boolean;
+  isSuperAdmin: boolean;
+  canManageItems: boolean;
+  canManageMyMenu: boolean;
 }) {
   const ft      = ftCfg(item.food_type ?? (item.is_veg === false ? 'non_veg' : 'veg'));
   const imgUrl  = itemImage(item.image);
   const varCount = item.variations?.filter(v => v.name)?.length ?? 0;
   const addCount = item.addons?.filter(a => a.name)?.length ?? 0;
   const isMaster = !!item.is_master;
+  const hasOverride = item.price_override != null;
 
   return (
     <View style={[ic.wrap, !item.is_available && ic.wrapHidden]}>
@@ -288,7 +420,12 @@ function ItemCard({ item, onToggle, onEdit, onDelete, toggling }: {
 
         {/* Price + food type */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-          <Text style={ic.price}>₹{Number(item.price).toFixed(2)}</Text>
+          <View>
+            <Text style={ic.price}>₹{Number(item.price).toFixed(2)}</Text>
+            {hasOverride && (
+              <Text style={ic.overrideTxt}>Custom price</Text>
+            )}
+          </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
             <View style={[ic.ftBadgeDot, { backgroundColor: ft.color }]} />
             <Text style={[ic.ftLabel, { color: ft.color }]}>{ft.label}</Text>
@@ -325,45 +462,61 @@ function ItemCard({ item, onToggle, onEdit, onDelete, toggling }: {
           <Text style={ic.taxLine}>{item.tax_name} ({item.tax_rate}%)</Text>
         )}
 
-        {/* Actions */}
-        <View style={ic.actions}>
-          {/* Availability toggle */}
-          {toggling ? (
-            <ActivityIndicator size="small" color={FOREST} />
-          ) : (
-            <Switch value={!!item.is_available} onValueChange={() => onToggle(item)}
-              trackColor={{ true: '#16a34a', false: '#e5e7eb' }} thumbColor="#fff"
-              style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }} />
-          )}
+        {/* Actions — only render row if there's at least one visible action */}
+        {(canManageItems || (canManageMyMenu && isMaster)) && (
+          <View style={ic.actions}>
+            {/* Availability toggle — super admin all items; restaurant admin own non-master */}
+            {(isSuperAdmin || (canManageItems && !isMaster)) && (
+              toggling ? (
+                <ActivityIndicator size="small" color={FOREST} />
+              ) : (
+                <Switch value={!!item.is_available} onValueChange={() => onToggle(item)}
+                  trackColor={{ true: '#16a34a', false: '#e5e7eb' }} thumbColor="#fff"
+                  style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }} />
+              )
+            )}
 
-          {/* Edit / Delete for own (non-master) items */}
-          {!isMaster && (
-            <View style={{ flexDirection: 'row', gap: 5 }}>
-              <TouchableOpacity style={[ic.iconBtn, { backgroundColor: '#eff6ff' }]} onPress={() => onEdit(item)}>
-                <Ionicons name="pencil-outline" size={13} color={PRIMARY} />
+            {/* Master items: My Menu for restaurant_admin + super_admin */}
+            {canManageMyMenu && isMaster && (
+              <TouchableOpacity style={[ic.iconBtn, { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' }]} onPress={() => onMyMenu(item)}>
+                <Ionicons name="pricetag-outline" size={13} color="#16a34a" />
               </TouchableOpacity>
-              <TouchableOpacity style={[ic.iconBtn, { backgroundColor: '#fff1f2' }]} onPress={() => onDelete(item)}>
-                <Ionicons name="trash-outline" size={13} color="#dc2626" />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+            )}
+
+            {/* Own (non-master) items: edit + delete */}
+            {canManageItems && !isMaster && (
+              <View style={{ flexDirection: 'row', gap: 5 }}>
+                <TouchableOpacity style={[ic.iconBtn, { backgroundColor: '#eff6ff' }]} onPress={() => onEdit(item)}>
+                  <Ionicons name="pencil-outline" size={13} color={PRIMARY} />
+                </TouchableOpacity>
+                <TouchableOpacity style={[ic.iconBtn, { backgroundColor: '#fff1f2' }]} onPress={() => onDelete(item)}>
+                  <Ionicons name="trash-outline" size={13} color="#dc2626" />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
       </View>
     </View>
   );
 }
 
 // ── Item List Row ─────────────────────────────────────────────────────────────
-function ItemListRow({ item, onToggle, onEdit, onDelete, toggling }: {
+function ItemListRow({ item, onToggle, onEdit, onDelete, onMyMenu, toggling, isSuperAdmin, canManageItems, canManageMyMenu }: {
   item: MenuItem;
   onToggle: (item: MenuItem) => void;
   onEdit:   (item: MenuItem) => void;
   onDelete: (item: MenuItem) => void;
+  onMyMenu: (item: MenuItem) => void;
   toggling: boolean;
+  isSuperAdmin: boolean;
+  canManageItems: boolean;
+  canManageMyMenu: boolean;
 }) {
-  const ft       = ftCfg(item.food_type ?? (item.is_veg === false ? 'non_veg' : 'veg'));
-  const imgUrl   = itemImage(item.image);
-  const isMaster = !!item.is_master;
+  const ft         = ftCfg(item.food_type ?? (item.is_veg === false ? 'non_veg' : 'veg'));
+  const imgUrl     = itemImage(item.image);
+  const isMaster   = !!item.is_master;
+  const hasOverride = item.price_override != null;
 
   return (
     <View style={[ll.row, !item.is_available && { backgroundColor: '#fffbeb' }]}>
@@ -418,19 +571,31 @@ function ItemListRow({ item, onToggle, onEdit, onDelete, toggling }: {
       {/* Price */}
       <View style={ll.c4}>
         <Text style={ll.price}>₹{Number(item.price).toFixed(2)}</Text>
-        {item.tax_name && <Text style={ll.tax}>{item.tax_name}</Text>}
+        {hasOverride && <Text style={ll.overrideTxt}>Custom</Text>}
+        {!hasOverride && item.tax_name && <Text style={ll.tax}>{item.tax_name}</Text>}
       </View>
 
       {/* Actions */}
       <View style={ll.c5}>
-        {toggling ? (
-          <ActivityIndicator size="small" color={FOREST} />
-        ) : (
-          <Switch value={!!item.is_available} onValueChange={() => onToggle(item)}
-            trackColor={{ true: '#16a34a', false: '#e5e7eb' }} thumbColor="#fff"
-            style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }} />
+        {/* Toggle — super admin all; restaurant admin own non-master */}
+        {(isSuperAdmin || (canManageItems && !isMaster)) && (
+          toggling ? (
+            <ActivityIndicator size="small" color={FOREST} />
+          ) : (
+            <Switch value={!!item.is_available} onValueChange={() => onToggle(item)}
+              trackColor={{ true: '#16a34a', false: '#e5e7eb' }} thumbColor="#fff"
+              style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }} />
+          )
         )}
-        {!isMaster && (
+        {/* My Menu — master items for restaurant_admin + super_admin */}
+        {canManageMyMenu && isMaster && (
+          <TouchableOpacity style={[ll.iconBtn, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}
+            onPress={() => onMyMenu(item)}>
+            <Ionicons name="pricetag-outline" size={13} color="#16a34a" />
+          </TouchableOpacity>
+        )}
+        {/* Edit + Delete — own non-master items */}
+        {canManageItems && !isMaster && (
           <View style={{ flexDirection: 'row', gap: 4 }}>
             <TouchableOpacity style={[ll.iconBtn, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}
               onPress={() => onEdit(item)}>
@@ -449,17 +614,25 @@ function ItemListRow({ item, onToggle, onEdit, onDelete, toggling }: {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function ItemsScreen() {
-  const [items,       setItems]       = useState<MenuItem[]>([]);
-  const [categories,  setCategories]  = useState<Category[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [search,      setSearch]      = useState('');
-  const [catFilter,   setCatFilter]   = useState<number | 'all'>('all');
-  const [foodFilters, setFoodFilters] = useState<Record<FoodType, boolean>>({ veg: true, non_veg: true, egg: true });
-  const [viewMode,    setViewMode]    = useState<'grid' | 'list'>('grid');
-  const [formVisible, setFormVisible] = useState(false);
-  const [editing,     setEditing]     = useState<MenuItem | null>(null);
-  const [toggling,    setToggling]    = useState<Set<number>>(new Set());
+  const [items,          setItems]          = useState<MenuItem[]>([]);
+  const [categories,     setCategories]     = useState<Category[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [search,         setSearch]         = useState('');
+  const [catFilter,      setCatFilter]      = useState<number | 'all'>('all');
+  const [foodFilters,    setFoodFilters]    = useState<Record<FoodType, boolean>>({ veg: true, non_veg: true, egg: true });
+  const [viewMode,       setViewMode]       = useState<'grid' | 'list'>('grid');
+  const [formVisible,    setFormVisible]    = useState(false);
+  const [editing,        setEditing]        = useState<MenuItem | null>(null);
+  const [myMenuVisible,  setMyMenuVisible]  = useState(false);
+  const [myMenuItem,     setMyMenuItem]     = useState<MenuItem | null>(null);
+  const [toggling,       setToggling]       = useState<Set<number>>(new Set());
+  const user       = useAppStore(s => s.user);
+  const isSuperAdmin       = user?.role === 'super_admin';
+  const isRestaurantAdmin  = user?.role === 'restaurant_admin';
+  const canManageItems     = isSuperAdmin || isRestaurantAdmin;
+  const canManageMyMenu    = isRestaurantAdmin || isSuperAdmin;
+
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const contentW  = isDesktop ? width - 220 : width;
@@ -500,6 +673,12 @@ export default function ItemsScreen() {
         catch (e: any) { Alert.alert('Error', e?.response?.data?.message ?? 'Delete failed'); }
       }},
     ]);
+  }
+
+  function handleMyMenuSave(updated: MenuItem) {
+    setItems(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated } : i));
+    setMyMenuVisible(false);
+    setMyMenuItem(null);
   }
 
   // ── Derived counts ────────────────────────────────────────────────────────
@@ -562,10 +741,13 @@ export default function ItemsScreen() {
                 </TouchableOpacity>
               </View>
             )}
-            <TouchableOpacity style={s.addBtn} onPress={() => { setEditing(null); setFormVisible(true); }}>
-              <Ionicons name="add" size={16} color={GOLD} />
-              <Text style={s.addBtnTxt}>Add Item</Text>
-            </TouchableOpacity>
+            {/* Add Item — restaurant admin + super admin */}
+            {canManageItems && (
+              <TouchableOpacity style={s.addBtn} onPress={() => { setEditing(null); setFormVisible(true); }}>
+                <Ionicons name="add" size={16} color={GOLD} />
+                <Text style={s.addBtnTxt}>Add Item</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -691,7 +873,7 @@ export default function ItemsScreen() {
                 <Text style={s.clearFiltersBtnTxt}>Clear Filters</Text>
               </TouchableOpacity>
             )}
-            {!hasActiveFilter && (
+            {!hasActiveFilter && canManageItems && (
               <TouchableOpacity style={s.clearFiltersBtn}
                 onPress={() => { setEditing(null); setFormVisible(true); }}>
                 <Ionicons name="add" size={14} color={GOLD} />
@@ -707,7 +889,11 @@ export default function ItemsScreen() {
                   onToggle={handleToggle}
                   onEdit={i => { setEditing(i); setFormVisible(true); }}
                   onDelete={handleDelete}
-                  toggling={toggling.has(item.id)} />
+                  onMyMenu={i => { setMyMenuItem(i); setMyMenuVisible(true); }}
+                  toggling={toggling.has(item.id)}
+                  isSuperAdmin={isSuperAdmin}
+                  canManageItems={canManageItems}
+                  canManageMyMenu={canManageMyMenu} />
               </View>
             ))}
           </View>
@@ -722,7 +908,9 @@ export default function ItemsScreen() {
                   <Text style={[ll.hCell, ll.c2]}>Category</Text>
                   <Text style={[ll.hCell, ll.c3]}>Type</Text>
                   <Text style={[ll.hCell, ll.c4, { textAlign: 'right' }]}>Price</Text>
-                  <Text style={[ll.hCell, ll.c5, { textAlign: 'right' }]}>Actions</Text>
+                  {(canManageItems || canManageMyMenu) && (
+                    <Text style={[ll.hCell, ll.c5, { textAlign: 'right' }]}>Actions</Text>
+                  )}
                 </View>
                 {filtered.map((item, idx) => (
                   <View key={item.id} style={idx % 2 === 1 ? { backgroundColor: '#f9fafb' } : {}}>
@@ -730,7 +918,11 @@ export default function ItemsScreen() {
                       onToggle={handleToggle}
                       onEdit={i => { setEditing(i); setFormVisible(true); }}
                       onDelete={handleDelete}
-                      toggling={toggling.has(item.id)} />
+                      onMyMenu={i => { setMyMenuItem(i); setMyMenuVisible(true); }}
+                      toggling={toggling.has(item.id)}
+                      isSuperAdmin={isSuperAdmin}
+                      canManageItems={canManageItems}
+                      canManageMyMenu={canManageMyMenu} />
                   </View>
                 ))}
               </View>
@@ -741,18 +933,66 @@ export default function ItemsScreen() {
         <View style={{ height: 48 }} />
       </ScrollView>
 
-      {/* ── Create / Edit Modal ── */}
-      <Modal visible={formVisible} animationType="slide" presentationStyle="pageSheet"
+      {/* ── Create / Edit Modal (centered dialog, web-safe) ── */}
+      <Modal visible={formVisible} animationType="fade" transparent
         onRequestClose={() => setFormVisible(false)}>
-        <ItemForm
-          item={editing}
-          categories={categories}
-          onSave={() => { setFormVisible(false); load(true); }}
-          onClose={() => setFormVisible(false)} />
+        <Pressable style={m.backdrop} onPress={() => setFormVisible(false)}>
+          <Pressable style={m.sheet} onPress={e => e.stopPropagation()}>
+            <ItemForm
+              item={editing}
+              categories={categories}
+              onSave={() => { setFormVisible(false); load(true); }}
+              onClose={() => setFormVisible(false)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── My Menu Modal (master items: price override + availability) ── */}
+      <Modal visible={myMenuVisible} animationType="fade" transparent
+        onRequestClose={() => { setMyMenuVisible(false); setMyMenuItem(null); }}>
+        <Pressable style={m.backdrop} onPress={() => { setMyMenuVisible(false); setMyMenuItem(null); }}>
+          <Pressable style={[m.sheet, { maxWidth: 420 }]} onPress={e => e.stopPropagation()}>
+            {myMenuItem && (
+              <MyMenuModal
+                item={myMenuItem}
+                onSave={handleMyMenuSave}
+                onClose={() => { setMyMenuVisible(false); setMyMenuItem(null); }} />
+            )}
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
 }
+
+// ── Modal overlay ─────────────────────────────────────────────────────────────
+const m = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  sheet:    { width: '100%', maxWidth: 520, maxHeight: '90%', backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
+});
+
+// ── My Menu modal local styles ────────────────────────────────────────────────
+const mm = StyleSheet.create({
+  // Header
+  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 18, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  title:       { fontSize: 17, fontWeight: '800', color: '#0f172a', marginBottom: 3 },
+  headerSub:   { fontSize: 12.5, color: '#d97706', fontWeight: '600' },
+
+  // Selling price field
+  fieldLabel:  { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 8 },
+  priceRow:    { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 10, overflow: 'hidden', backgroundColor: '#fafafa' },
+  pricePrefix: { paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#f3f4f6', borderRightWidth: 1, borderRightColor: '#e5e7eb' },
+  pricePrefixTxt: { fontSize: 15, fontWeight: '700', color: '#374151' },
+  priceInput:  { flex: 1, fontSize: 15, color: '#111827', paddingHorizontal: 12, paddingVertical: 12 },
+  useMasterBtn:{ paddingHorizontal: 12, paddingVertical: 12, borderLeftWidth: 1, borderLeftColor: '#e5e7eb', backgroundColor: '#f9fafb' },
+  useMasterTxt:{ fontSize: 13, fontWeight: '600', color: '#374151' },
+  priceHint:   { fontSize: 12, color: '#d97706', marginTop: 6, lineHeight: 17 },
+
+  // Toggle
+  toggleRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  toggleLabel: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  toggleHint:  { fontSize: 12, color: '#6b7280', marginTop: 6, lineHeight: 17 },
+});
 
 // ── StyleSheets ───────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
@@ -842,6 +1082,7 @@ const ic = StyleSheet.create({
   metaChip:    { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#f1f5f9', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
   metaChipTxt: { fontSize: 10, color: '#64748b', fontWeight: '600' },
   taxLine:     { fontSize: 10.5, color: '#9ca3af', marginTop: 3 },
+  overrideTxt: { fontSize: 10, color: '#16a34a', fontWeight: '700', marginTop: 1 },
   actions:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   iconBtn:     { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
 });
@@ -867,9 +1108,10 @@ const ll = StyleSheet.create({
   badge:     { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
   badgeTxt:  { fontSize: 10, fontWeight: '800' },
   cellTxt:   { fontSize: 12.5, color: '#374151' },
-  price:     { fontSize: 13, fontWeight: '800', color: FOREST },
-  tax:       { fontSize: 10.5, color: '#9ca3af' },
-  iconBtn:   { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  price:       { fontSize: 13, fontWeight: '800', color: FOREST },
+  overrideTxt: { fontSize: 10, color: '#16a34a', fontWeight: '700', marginTop: 1 },
+  tax:         { fontSize: 10.5, color: '#9ca3af' },
+  iconBtn:     { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
 });
 
 // Form styles

@@ -193,6 +193,11 @@ function TicketDetail({
   }
 
   async function saveEdit() {
+    if (detail.status === 'closed') {
+      Alert.alert('Ticket Closed', 'This ticket has been closed and can no longer be updated.');
+      setEditing(false);
+      return;
+    }
     if (!editForm.subject.trim()) { Alert.alert('Subject required'); return; }
     if (!editForm.description.trim()) { Alert.alert('Description required'); return; }
     setEditSaving(true);
@@ -318,13 +323,15 @@ function TicketDetail({
           {detail.ticket_number && <Text style={dp.headerSub}>#{detail.ticket_number}</Text>}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          {/* Edit */}
-          <Pressable
-            style={({ pressed }) => [dp.headerBtn, pressed && { opacity: 0.7 }]}
-            onPress={() => setEditing(true)}
-          >
-            <Ionicons name="create-outline" size={18} color="#fff" />
-          </Pressable>
+          {/* Edit — hidden for closed tickets */}
+          {detail.status !== 'closed' && (
+            <Pressable
+              style={({ pressed }) => [dp.headerBtn, pressed && { opacity: 0.7 }]}
+              onPress={() => setEditing(true)}
+            >
+              <Ionicons name="create-outline" size={18} color="#fff" />
+            </Pressable>
+          )}
           {/* Delete */}
           <Pressable
             style={({ pressed }) => [dp.headerBtn, { backgroundColor: 'rgba(220,38,38,0.25)' }, pressed && { opacity: 0.7 }]}

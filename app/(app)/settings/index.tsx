@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '@/store/appStore';
 import { useTheme } from '@/store/themeStore';
 import { syncService } from '@/sync/SyncService';
+import { webSyncService } from '@/sync/WebSyncService';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -103,7 +104,11 @@ export default function SettingsScreen() {
 
   async function handleSync() {
     try {
-      await syncService.manualSync();
+      if (Platform.OS === 'web') {
+        await webSyncService.sync();
+      } else {
+        await syncService.manualSync();
+      }
       if (Platform.OS === 'web') window.alert('Synced successfully!');
       else Alert.alert('Done', 'Synced successfully!');
     } catch (e: any) {
@@ -246,6 +251,19 @@ export default function SettingsScreen() {
           <Text style={row.label}>Server</Text>
           <Text style={[row.value, { fontSize: 11, maxWidth: 200 }]} numberOfLines={1}>restaurant.softwar.in</Text>
         </View>
+      </Section>
+
+      {/* ── Team ─────────────────────────────────────────────────────────── */}
+      <Section title="TEAM" icon="people-outline">
+        <PressableRow
+          icon="people-circle-outline"
+          iconBg="#f0fdf4"
+          iconColor="#16a34a"
+          label="Staff"
+          sub="View team members used in POS waiter picker"
+          onPress={() => router.push('/(app)/staff' as any)}
+          last
+        />
       </Section>
 
       {/* ── About ────────────────────────────────────────────────────────── */}

@@ -101,7 +101,7 @@ const SOURCES = [
 ] as const;
 
 const IN_PROGRESS = ['confirmed', 'preparing', 'ready', 'served'];
-const POLL_MS     = 30_000;
+const POLL_MS     = 15_000; // 15s — fast enough to catch QR orders quickly
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function sCfg(s: string) { return STATUS_CFG[s as keyof typeof STATUS_CFG] ?? STATUS_CFG.pending; }
@@ -487,6 +487,16 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
             <Text style={cd.notesText} numberOfLines={2}>{order.notes}</Text>
           </View>
         ) : null}
+        {agg && (order.rider_name || order.rider_status) ? (
+          <View style={cd.riderBox}>
+            <Ionicons name="bicycle-outline" size={11} color="#0369a1" />
+            <Text style={cd.riderText} numberOfLines={1}>
+              {order.rider_name ? order.rider_name : 'Rider'}
+              {order.rider_phone ? ` · ${order.rider_phone}` : ''}
+              {order.rider_status ? ` — ${order.rider_status.replace(/_/g, ' ')}` : ''}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {/* ── Total bar ── */}
@@ -744,7 +754,9 @@ export default function OrdersScreen() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [toastMsg,   setToastMsg]   = useState('');
   const [aggAlert,   setAggAlert]   = useState<{ source: string; orders: Order[] } | null>(null);
+  const [qrAlert,    setQrAlert]    = useState<Order[]>([]);
   const aggAlertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const qrAlertTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const knownOrderIds = useRef<Set<number>>(new Set());
   const isFirstLoad   = useRef(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -761,6 +773,13 @@ export default function OrdersScreen() {
     aggAlertTimer.current = setTimeout(() => setAggAlert(null), 8000);
   }, []);
 
+  const showQRAlert = useCallback((newOrders: Order[]) => {
+    if (qrAlertTimer.current) clearTimeout(qrAlertTimer.current);
+    setQrAlert(newOrders);
+    playNewOrderBeep();
+    qrAlertTimer.current = setTimeout(() => setQrAlert([]), 8000);
+  }, []);
+
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -768,20 +787,36 @@ export default function OrdersScreen() {
       const params: any = { per_page: 300 };
       if (range) { params.from = range.from; params.to = range.to; }
       const res  = await ordersApi.list(params);
-      const data: Order[] = Array.isArray(res.data?.data ?? res.data) ? (res.data?.data ?? res.data) : [];
+      const raw: Order[] = Array.isArray(res.data?.data ?? res.data) ? (res.data?.data ?? res.data) : [];
+      // Zomato & Swiggy orders are always pre-paid — force payment_status = 'paid'
+      const data = raw.map(o =>
+        isAgg(o) && o.payment_status !== 'paid'
+          ? { ...o, payment_status: 'paid' as const }
+          : o
+      );
       setOrders(data);
 
-      // Detect new Zomato/Swiggy orders on background polls (skip first load)
+      // Detect new orders on background polls (skip first load)
       if (isFirstLoad.current) {
         data.forEach(o => knownOrderIds.current.add(o.id));
         isFirstLoad.current = false;
       } else {
+        // Zomato / Swiggy detection
         const newAgg = data.filter(o => isAgg(o) && !knownOrderIds.current.has(o.id));
         if (newAgg.length > 0) {
-          // If mixed sources, prefer whichever has more; otherwise use the first
           const src = newAgg.filter(o => o.source === 'zomato').length >= newAgg.filter(o => o.source === 'swiggy').length
             ? 'zomato' : 'swiggy';
           showAggAlert(src, newAgg);
+        }
+        // QR order detection
+        const newQR = data.filter(o => o.source === 'qr' && !knownOrderIds.current.has(o.id));
+        if (newQR.length > 0) {
+          // Delay slightly if there's already an agg alert showing
+          if (newAgg.length > 0) {
+            setTimeout(() => showQRAlert(newQR), 9000);
+          } else {
+            showQRAlert(newQR);
+          }
         }
         data.forEach(o => knownOrderIds.current.add(o.id));
       }
@@ -898,6 +933,24 @@ export default function OrdersScreen() {
         </Pressable>
       )}
 
+      {/* ── New QR order alert banner ── */}
+      {qrAlert.length > 0 && (
+        <Pressable style={s.qrBanner} onPress={() => setQrAlert([])}>
+          <View style={s.qrBannerIcon}>
+            <Ionicons name="qr-code-outline" size={20} color="#fff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.aggBannerTitle}>
+              {qrAlert.length === 1 ? 'New QR Order!' : `${qrAlert.length} New QR Orders!`}
+            </Text>
+            <Text style={s.aggBannerSub} numberOfLines={1}>
+              {qrAlert.map(o => o.order_number ?? `#${o.id}`).join(' · ')}
+            </Text>
+          </View>
+          <Ionicons name="close" size={18} color="rgba(255,255,255,0.8)" />
+        </Pressable>
+      )}
+
       {!!toastMsg && (
         <View style={s.toast}>
           <Ionicons name="alert-circle" size={14} color="#fff" />
@@ -909,20 +962,22 @@ export default function OrdersScreen() {
         showsVerticalScrollIndicator={false}>
 
         {/* ── Stat summary ── */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={s.statsScroll} contentContainerStyle={[s.statsRow, isDesktop && { minWidth: '100%' }]}>
-          {STAT_CARDS.map(sc => (
-            <View key={sc.key} style={[s.statCard, isDesktop && { flex: 1 }]}>
-              <View>
-                <Text style={s.statLabel}>{sc.label}</Text>
-                <Text style={s.statNum}>{statCounts[sc.key] ?? 0}</Text>
+        <View style={s.statsScroll}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[s.statsRow, isDesktop && { minWidth: '100%' }]}>
+            {STAT_CARDS.map(sc => (
+              <View key={sc.key} style={[s.statCard, isDesktop && { flex: 1 }]}>
+                <View>
+                  <Text style={s.statLabel}>{sc.label}</Text>
+                  <Text style={s.statNum}>{statCounts[sc.key] ?? 0}</Text>
+                </View>
+                <View style={[s.statIconBox, { backgroundColor: sc.bg }]}>
+                  <Ionicons name={sc.icon} size={22} color={sc.color} />
+                </View>
               </View>
-              <View style={[s.statIconBox, { backgroundColor: sc.bg }]}>
-                <Ionicons name={sc.icon} size={22} color={sc.color} />
-              </View>
-            </View>
-          ))}
-        </ScrollView>
+            ))}
+          </ScrollView>
+        </View>
 
         {/* ── Filters ── */}
         <View style={s.filterSection}>
@@ -1076,57 +1131,99 @@ export default function OrdersScreen() {
 
 // ── StyleSheets ───────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  shell:          { flex: 1, backgroundColor: '#f0f2f7' },
-  toast:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#dc2626', paddingHorizontal: 14, paddingVertical: 10, zIndex: 99 },
+  shell:          { flex: 1, backgroundColor: '#f4f6f9' },
+  toast:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#dc2626', paddingHorizontal: 16, paddingVertical: 12, zIndex: 99 },
   toastTxt:       { flex: 1, fontSize: 13, color: '#fff', fontWeight: '600' },
-  aggBanner:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, zIndex: 100 },
+  aggBanner:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14, zIndex: 100 },
   aggBannerZomato:{ backgroundColor: '#dc2626' },
   aggBannerSwiggy:{ backgroundColor: '#ea580c' },
-  aggBannerIcon:  { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  aggBannerTitle: { fontSize: 15, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
-  aggBannerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+  aggBannerIcon:  { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  aggBannerTitle: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+  aggBannerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 3 },
+  qrBanner:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14, zIndex: 100, backgroundColor: '#7c3aed' },
+  qrBannerIcon:   { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+
+  // ── Stat summary row ──
   statsScroll:    { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  statsRow:       { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
-  statCard:       { minWidth: 148, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
-  statLabel:      { fontSize: 12, fontWeight: '500', color: '#64748b', marginBottom: 4 },
-  statNum:        { fontSize: 26, fontWeight: '800', color: '#0f172a', letterSpacing: -0.5 },
-  statIconBox:    { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  statsRow:       { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 14, paddingVertical: 14, gap: 10 },
+  statCard:       {
+    minWidth: 152, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#fff', borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: '#f1f5f9',
+    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+  },
+  statLabel:      { fontSize: 11.5, fontWeight: '600', color: '#64748b', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.4 },
+  statNum:        { fontSize: 28, fontWeight: '900', color: '#0f172a', letterSpacing: -1 },
+  statIconBox:    { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+
+  // ── Filters ──
   filterSection:  { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  tabRow:         { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4, gap: 6 },
-  tabPill:        { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1.5, borderColor: 'transparent' },
-  tabPillTxt:     { fontSize: 12.5, fontWeight: '700', color: '#475569' },
-  tabCount:       { backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 10, minWidth: 18, paddingHorizontal: 5, paddingVertical: 1, alignItems: 'center', justifyContent: 'center' },
-  tabCountTxt:    { fontSize: 10, fontWeight: '800', color: '#374151' },
+  tabRow:         { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, gap: 6 },
+  tabPill:        {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 22,
+    backgroundColor: '#f1f5f9', borderWidth: 1.5, borderColor: 'transparent',
+  },
+  tabPillTxt:     { fontSize: 13, fontWeight: '700', color: '#475569' },
+  tabCount:       {
+    backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 10,
+    minWidth: 20, paddingHorizontal: 6, paddingVertical: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tabCountTxt:    { fontSize: 10.5, fontWeight: '800', color: '#374151' },
   row2:           { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, gap: 6 },
-  srcChip:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  srcChip:        {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 11, paddingVertical: 6, borderRadius: 18,
+    borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc',
+  },
   srcDot:         { width: 6, height: 6, borderRadius: 3 },
-  srcChipTxt:     { fontSize: 12, fontWeight: '700', color: '#374151' },
+  srcChipTxt:     { fontSize: 12.5, fontWeight: '700', color: '#374151' },
   srcCount:       { backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1 },
-  srcCountTxt:    { fontSize: 9.5, fontWeight: '800', color: '#374151' },
-  divider:        { width: 1, height: 20, backgroundColor: '#e2e8f0', marginHorizontal: 4 },
-  datePill:       { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  srcCountTxt:    { fontSize: 10, fontWeight: '800', color: '#374151' },
+  divider:        { width: 1, height: 22, backgroundColor: '#e2e8f0', marginHorizontal: 4 },
+  datePill:       {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 11, paddingVertical: 6, borderRadius: 18,
+    borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc',
+  },
   datePillActive: { backgroundColor: FOREST, borderColor: FOREST },
-  datePillTxt:    { fontSize: 12, fontWeight: '600', color: '#374151' },
-  row3:           { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
-  searchBox:      { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f8fafc', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9, borderWidth: 1.5, borderColor: '#e2e8f0' },
-  searchInput:    { flex: 1, fontSize: 13, color: '#111827' },
-  viewToggle:     { flexDirection: 'row', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, overflow: 'hidden', backgroundColor: '#f8fafc', padding: 2, gap: 2 },
-  viewBtn:        { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 7 },
+  datePillTxt:    { fontSize: 12.5, fontWeight: '600', color: '#374151' },
+  row3:           { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 12 },
+  searchBox:      {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#f8fafc', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderWidth: 1.5, borderColor: '#e2e8f0',
+  },
+  searchInput:    { flex: 1, fontSize: 13.5, color: '#111827' },
+  viewToggle:     {
+    flexDirection: 'row', borderWidth: 1.5, borderColor: '#e2e8f0',
+    borderRadius: 11, overflow: 'hidden', backgroundColor: '#f8fafc',
+    padding: 3, gap: 2,
+  },
+  viewBtn:        { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
   viewBtnActive:  { backgroundColor: FOREST },
   activeFilters:  { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingBottom: 10 },
-  activeFiltersTxt: { flex: 1, fontSize: 11.5, color: '#64748b', fontWeight: '500' },
-  clearFilters:   { fontSize: 11.5, fontWeight: '700', color: '#dc2626' },
-  resultsBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8 },
-  resultsCount:   { fontSize: 12.5, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 },
-  loadWrap:       { paddingTop: 80, alignItems: 'center', gap: 12 },
-  loadTxt:        { fontSize: 14, color: '#9ca3af' },
-  emptyWrap:      { paddingTop: 80, alignItems: 'center', gap: 12 },
-  emptyIcon:      { width: 72, height: 72, borderRadius: 36, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
-  emptyTitle:     { fontSize: 16, fontWeight: '700', color: '#374151' },
-  emptySub:       { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 40 },
-  grid:           { padding: 6, width: '100%' },
+  activeFiltersTxt: { flex: 1, fontSize: 12, color: '#64748b', fontWeight: '500' },
+  clearFilters:   { fontSize: 12, fontWeight: '700', color: '#dc2626' },
+
+  // ── Results & content ──
+  resultsBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 10 },
+  resultsCount:   { fontSize: 12, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.7 },
+  loadWrap:       { paddingTop: 100, alignItems: 'center', gap: 14 },
+  loadTxt:        { fontSize: 14, color: '#94a3b8', fontWeight: '500' },
+  emptyWrap:      { paddingTop: 100, alignItems: 'center', gap: 14 },
+  emptyIcon:      { width: 80, height: 80, borderRadius: 40, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
+  emptyTitle:     { fontSize: 17, fontWeight: '700', color: '#374151' },
+  emptySub:       { fontSize: 13.5, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 40, lineHeight: 20 },
+  grid:           { padding: 8, width: '100%' },
   gridRow:        { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
-  listWrap:       { margin: 12, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  listWrap:       {
+    margin: 14, backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden',
+    borderWidth: 1, borderColor: '#e5e7eb',
+    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+  },
 });
 
 // Positioned dropdown styles
@@ -1134,128 +1231,142 @@ const dd = StyleSheet.create({
   panel: {
     position: 'absolute',
     backgroundColor: '#ffffff',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#e5e7eb',
     shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.20,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 24,
     paddingVertical: 6,
     zIndex: 9999,
   },
-  header:      { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 6 },
-  headerTitle: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
-  headerSub:   { fontSize: 11, color: '#9ca3af', marginTop: 2 },
-  sep:         { height: 1, backgroundColor: '#f1f5f9', marginVertical: 4, marginHorizontal: 8 },
-  item:        { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 9, marginHorizontal: 4, marginVertical: 1 },
-  itemIcon:    { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  itemLabel:   { flex: 1, fontSize: 13, fontWeight: '600', color: '#1f2937' },
+  header:      { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6 },
+  headerTitle: { fontSize: 13.5, fontWeight: '800', color: '#0f172a' },
+  headerSub:   { fontSize: 11.5, color: '#9ca3af', marginTop: 2 },
+  sep:         { height: 1, backgroundColor: '#f1f5f9', marginVertical: 5, marginHorizontal: 8 },
+  item:        { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 11, borderRadius: 10, marginHorizontal: 4, marginVertical: 1 },
+  itemIcon:    { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  itemLabel:   { flex: 1, fontSize: 13.5, fontWeight: '600', color: '#1f2937' },
   statusDot:   { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
 });
 
 // Order card styles
 const cd = StyleSheet.create({
-  wrap:        { backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: '#e8edf2', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
-  head:        { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: FOREST, paddingHorizontal: 14, paddingVertical: 12 },
+  wrap:        {
+    backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden',
+    borderWidth: 1, borderColor: '#e8edf2',
+    shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 3 }, elevation: 3,
+  },
+  head:        { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: FOREST, paddingHorizontal: 14, paddingVertical: 13 },
   headL:       { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
-  avatar:      { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  orderNum:    { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
-  srcBadge:    { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
+  avatar:      {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+  },
+  orderNum:    { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+  srcBadge:    { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7 },
   srcDot:      { width: 5, height: 5, borderRadius: 3 },
   srcTxt:      { fontSize: 10, fontWeight: '800' },
-  headSub:     { fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 2 },
-  headR:       { alignItems: 'flex-end', gap: 4, flexShrink: 0 },
-  time:        { fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
-  menuBtn:     { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
-  customerRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 2 },
-  customerName:{ fontSize: 12.5, fontWeight: '600', color: '#374151', flex: 1 },
+  headSub:     { fontSize: 12, color: 'rgba(255,255,255,0.60)', marginTop: 2 },
+  headR:       { alignItems: 'flex-end', gap: 5, flexShrink: 0 },
+  time:        { fontSize: 11, color: 'rgba(255,255,255,0.65)', fontWeight: '600' },
+  menuBtn:     { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+  customerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingTop: 11, paddingBottom: 2 },
+  customerName:{ fontSize: 13, fontWeight: '600', color: '#374151', flex: 1 },
   extId:       { fontSize: 11, color: '#9ca3af' },
-  itemsWrap:   { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  itemRow:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 3 },
+  itemsWrap:   { paddingHorizontal: 14, paddingTop: 7, paddingBottom: 11, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  itemRow:     { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 3.5 },
   itemDot:     { width: 5, height: 5, borderRadius: 3, backgroundColor: '#cbd5e1', flexShrink: 0 },
-  itemName:    { flex: 1, fontSize: 12.5, color: '#374151', lineHeight: 17 },
+  itemName:    { flex: 1, fontSize: 12.5, color: '#374151', lineHeight: 17.5 },
   itemQty:     { fontSize: 12, fontWeight: '700', color: '#64748b' },
-  itemPrice:   { fontSize: 12, color: '#374151', fontWeight: '500' },
-  moreItems:   { fontSize: 12, fontWeight: '700', color: PRIMARY, marginTop: 4 },
-  noItems:     { fontSize: 12, color: '#f59e0b', fontStyle: 'italic' },
-  notesBox:    { flexDirection: 'row', alignItems: 'flex-start', gap: 5, backgroundColor: '#fffbeb', borderRadius: 7, padding: 7, marginTop: 6 },
-  notesText:   { flex: 1, fontSize: 11.5, color: '#92400e', lineHeight: 16 },
-  totalBar:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 8, backgroundColor: '#fafbfc', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  totalAmt:    { fontSize: 18, fontWeight: '800', color: '#0f172a', letterSpacing: -0.3 },
+  itemPrice:   { fontSize: 12, color: '#374151', fontWeight: '600' },
+  moreItems:   { fontSize: 12.5, fontWeight: '700', color: PRIMARY, marginTop: 5 },
+  noItems:     { fontSize: 12.5, color: '#f59e0b', fontStyle: 'italic' },
+  notesBox:    { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#fffbeb', borderRadius: 8, padding: 8, marginTop: 7 },
+  notesText:   { flex: 1, fontSize: 12, color: '#92400e', lineHeight: 17 },
+  riderBox:    { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f0f9ff', borderRadius: 8, padding: 8, marginTop: 7 },
+  riderText:   { flex: 1, fontSize: 12, color: '#0369a1', lineHeight: 17 },
+  totalBar:    {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 11, gap: 8,
+    backgroundColor: '#fafbfc', borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+  },
+  totalAmt:    { fontSize: 20, fontWeight: '800', color: '#0f172a', letterSpacing: -0.5 },
   payMethodRow:{ flexDirection: 'row', gap: 5 },
-  pmBtn:       { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff' },
+  pmBtn:       { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1.5, borderColor: '#d1d5db', backgroundColor: '#fff' },
   pmBtnActive: { backgroundColor: FOREST, borderColor: FOREST },
-  pmText:      { fontSize: 11, fontWeight: '700', color: '#374151' },
+  pmText:      { fontSize: 11.5, fontWeight: '700', color: '#374151' },
   footer:      { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10, flexWrap: 'wrap' },
-  payPill:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
+  payPill:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
   payDot:      { width: 6, height: 6, borderRadius: 3 },
-  payText:     { fontSize: 11, fontWeight: '700' },
+  payText:     { fontSize: 11.5, fontWeight: '700' },
   paidPill:    { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
   unpaidPill:  { backgroundColor: '#fff7ed', borderColor: '#fde68a' },
-  markPaidBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20, backgroundColor: '#16a34a' },
-  markPaidTxt: { fontSize: 11, fontWeight: '700', color: '#fff' },
-  statusPill:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
-  statusDot:   { width: 6, height: 6, borderRadius: 3 },
-  statusTxt:   { fontSize: 11.5, fontWeight: '700' },
-  acceptBtn:   { paddingHorizontal: 11, paddingVertical: 5, borderRadius: 7, backgroundColor: '#16a34a' },
-  acceptTxt:   { fontSize: 11.5, fontWeight: '700', color: '#fff' },
-  rejectBtn:   { paddingHorizontal: 11, paddingVertical: 5, borderRadius: 7, borderWidth: 1, borderColor: '#dc2626' },
-  rejectTxt:   { fontSize: 11.5, fontWeight: '700', color: '#dc2626' },
-  iconBtn:     { width: 30, height: 30, borderRadius: 7, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' },
+  markPaidBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: '#16a34a' },
+  markPaidTxt: { fontSize: 11.5, fontWeight: '700', color: '#fff' },
+  statusPill:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
+  statusDot:   { width: 7, height: 7, borderRadius: 4 },
+  statusTxt:   { fontSize: 12, fontWeight: '700' },
+  acceptBtn:   { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#16a34a' },
+  acceptTxt:   { fontSize: 12, fontWeight: '700', color: '#fff' },
+  rejectBtn:   { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1.5, borderColor: '#dc2626' },
+  rejectTxt:   { fontSize: 12, fontWeight: '700', color: '#dc2626' },
+  iconBtn:     { width: 32, height: 32, borderRadius: 8, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' },
 });
 
 // List row styles
 const lr = StyleSheet.create({
-  header:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  hCell:     { fontSize: 11, fontWeight: '800', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 },
-  row:       { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  header:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  hCell:     { fontSize: 11, fontWeight: '800', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.6 },
+  row:       { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 13, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   c1: { width: 155, paddingRight: 8 },
   c2: { width: 130, paddingRight: 8 },
   c3: { width: 110, paddingRight: 8 },
   c4: { width: 58,  paddingRight: 8 },
   c5: { width: 80,  paddingRight: 8 },
-  c6: { width: 105, paddingRight: 8 },
-  c7: { width: 135, paddingRight: 8 },
+  c6: { width: 110, paddingRight: 8 },
+  c7: { width: 140, paddingRight: 8 },
   c8: { width: 150 },
-  orderNum:  { fontSize: 13, fontWeight: '800', color: FOREST },
+  orderNum:  { fontSize: 13.5, fontWeight: '800', color: FOREST },
   srcChip:   { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
   srcDot:    { width: 5, height: 5, borderRadius: 3 },
   srcTxt:    { fontSize: 9.5, fontWeight: '800' },
-  sub:       { fontSize: 11, color: '#9ca3af', marginTop: 2 },
-  customer:  { fontSize: 12.5, fontWeight: '600', color: '#1f2937' },
+  sub:       { fontSize: 11.5, color: '#9ca3af', marginTop: 2 },
+  customer:  { fontSize: 13, fontWeight: '600', color: '#1f2937' },
   type:      { fontSize: 12, color: '#374151', fontWeight: '600' },
   countBadge:{ backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 9, paddingVertical: 3, alignSelf: 'center' },
-  countTxt:  { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  countTxt:  { fontSize: 12.5, fontWeight: '700', color: '#64748b' },
   total:     { fontSize: 14, fontWeight: '800', color: '#0f172a' },
-  statusChip:{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, borderWidth: 1, alignSelf: 'flex-start' },
-  statusDot: { width: 5, height: 5, borderRadius: 3 },
-  statusTxt: { fontSize: 11.5, fontWeight: '700' },
-  payChip:   { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1, alignSelf: 'flex-start' },
+  statusChip:{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 9, borderWidth: 1, alignSelf: 'flex-start' },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusTxt: { fontSize: 12, fontWeight: '700' },
+  payChip:   { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20, borderWidth: 1, alignSelf: 'flex-start' },
   paidChip:  { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
   unpaidChip:{ backgroundColor: '#fff7ed', borderColor: '#fde68a' },
-  payTxt:    { fontSize: 11, fontWeight: '700' },
-  pmBtn:     { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 5, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff' },
+  payTxt:    { fontSize: 11.5, fontWeight: '700' },
+  pmBtn:     { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff' },
   pmBtnActive: { backgroundColor: FOREST, borderColor: FOREST },
-  pmTxt:     { fontSize: 10, fontWeight: '700', color: '#374151' },
-  acceptBtn: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 5, backgroundColor: '#16a34a' },
-  acceptTxt: { fontSize: 11, fontWeight: '700', color: '#fff' },
-  rejectBtn: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 5, borderWidth: 1, borderColor: '#dc2626', backgroundColor: '#fff' },
-  rejectTxt: { fontSize: 11, fontWeight: '700', color: '#dc2626' },
-  iconBtn:   { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  pmTxt:     { fontSize: 10.5, fontWeight: '700', color: '#374151' },
+  acceptBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 7, backgroundColor: '#16a34a' },
+  acceptTxt: { fontSize: 11.5, fontWeight: '700', color: '#fff' },
+  rejectBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 7, borderWidth: 1.5, borderColor: '#dc2626', backgroundColor: '#fff' },
+  rejectTxt: { fontSize: 11.5, fontWeight: '700', color: '#dc2626' },
+  iconBtn:   { width: 30, height: 30, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
 });
 
 // Fallback sheet modal styles (native)
 const ms = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet:        { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 8, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 16 },
-  centeredSheet:{ backgroundColor: '#fff', borderRadius: 20, paddingTop: 8, width: 320, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: { width: 0, height: 8 }, elevation: 16 },
-  handle:   { width: 36, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0', alignSelf: 'center', marginBottom: 8 },
-  title:    { fontSize: 15, fontWeight: '800', color: '#0f172a', paddingHorizontal: 18, paddingTop: 4, paddingBottom: 2 },
-  sub:      { fontSize: 12, color: '#9ca3af', paddingHorizontal: 18, paddingBottom: 8 },
-  item:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 10, marginHorizontal: 6, marginVertical: 1 },
-  itemTxt:  { flex: 1, fontSize: 14, color: '#374151', fontWeight: '500' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  sheet:        { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingTop: 8, shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 28, shadowOffset: { width: 0, height: -8 }, elevation: 20 },
+  centeredSheet:{ backgroundColor: '#fff', borderRadius: 22, paddingTop: 8, width: 320, shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 28, shadowOffset: { width: 0, height: 10 }, elevation: 20 },
+  handle:   { width: 40, height: 4, borderRadius: 2, backgroundColor: '#e2e8f0', alignSelf: 'center', marginBottom: 8 },
+  title:    { fontSize: 16, fontWeight: '800', color: '#0f172a', paddingHorizontal: 18, paddingTop: 4, paddingBottom: 2 },
+  sub:      { fontSize: 12.5, color: '#9ca3af', paddingHorizontal: 18, paddingBottom: 8 },
+  item:     { flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 11, marginHorizontal: 8, marginVertical: 1 },
+  itemTxt:  { flex: 1, fontSize: 14, color: '#374151', fontWeight: '600' },
   dot:      { width: 8, height: 8, borderRadius: 4 },
-  itemIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  itemIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
 });

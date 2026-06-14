@@ -92,11 +92,26 @@ function warmCache(distPath) {
   setImmediate(() => walk(distPath));
 }
 
+// ── Logo path (works both in dev and when packaged) ───────────────────────────
+function getLogoPath() {
+  // When packaged: extraResources places it at resources/assets/
+  // In dev: it's in the project root assets/ directory
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'assets', 'global-tea-cafe-logo.png')
+    : path.join(__dirname, '..', 'assets', 'global-tea-cafe-logo.png');
+}
+
+function getIconPath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'assets', 'icon.ico')
+    : path.join(__dirname, '..', 'assets', 'icon.ico');
+}
+
 // ── Splash screen HTML ─────────────────────────────────────────────────────────
-function makeSplashHtml(distPath) {
+function makeSplashHtml() {
   let imgTag;
   try {
-    const logoPath = path.join(distPath, 'global-tea-cafe-logo.png');
+    const logoPath = getLogoPath();
     const logoB64  = fs.readFileSync(logoPath).toString('base64');
     imgTag = `<img src="data:image/png;base64,${logoB64}"
                    alt="GTC"
@@ -280,6 +295,7 @@ function serveEntry(req, res, entry, ext) {
 
 // ── Window ────────────────────────────────────────────────────────────────────
 function createWindow() {
+  const iconPath = getIconPath();
   const win = new BrowserWindow({
     width:    1440,
     height:   900,
@@ -287,6 +303,7 @@ function createWindow() {
     minHeight: 700,
     title:    'GTC POS — Global Tea Cafe',
     backgroundColor: '#1A2B1A',
+    icon:     fs.existsSync(iconPath) ? iconPath : undefined,
     show: false,            // will show after ready-to-show to avoid white flash
     webPreferences: {
       nodeIntegration:         false,
@@ -303,7 +320,8 @@ function createWindow() {
 
 // ── Startup ───────────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
-  // Windows taskbar / notification grouping
+  // Windows taskbar / notification grouping + branding
+  app.setName('GTC POS');
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.gtc.pos');
   }
@@ -320,7 +338,7 @@ app.whenReady().then(async () => {
 
   // ── Show splash immediately ────────────────────────────────────────────────
   const win = createWindow();
-  const splashHtml = makeSplashHtml(distPath);
+  const splashHtml = makeSplashHtml();
   win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashHtml)}`);
   // Show now (splash is data: URL, loads instantly) — ready-to-show fires immediately
   win.once('ready-to-show', () => win.show());

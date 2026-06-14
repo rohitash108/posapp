@@ -35,6 +35,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'CUSTOMERS',
     items: [
       { name: 'customers/index',    route: '/(app)/customers',    label: 'Customers',    icon: 'people-outline'       as const },
+      { name: 'wallet/index',       route: '/(app)/wallet',       label: 'Wallet',       icon: 'wallet-outline'       as const },
       { name: 'reservations/index', route: '/(app)/reservations', label: 'Reservations', icon: 'calendar-outline'     as const },
       { name: 'invoices/index',     route: '/(app)/invoices',     label: 'Invoices',     icon: 'document-text-outline' as const },
       { name: 'payments/index',     route: '/(app)/payments',     label: 'Payments',     icon: 'card-outline'          as const },
@@ -57,6 +58,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'SUPPORT',
     items: [
       { name: 'tickets/index', route: '/(app)/tickets', label: 'Tickets', icon: 'headset-outline' as const },
+      { name: 'notifications/index', route: '/(app)/notifications', label: 'Notifications', icon: 'notifications-outline' as const },
     ],
   },
   {
@@ -68,6 +70,8 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'SYSTEM',
     items: [
+      { name: 'staff/index', route: '/(app)/staff', label: 'Staff', icon: 'people-circle-outline' as const },
+      { name: 'more/index', route: '/(app)/more', label: 'All Modules', icon: 'apps-outline' as const },
       { name: 'settings/index', route: '/(app)/settings', label: 'Settings', icon: 'settings-outline' as const },
     ],
   },
@@ -81,7 +85,7 @@ const TAB_ITEMS = [
   { name: 'pos/index',     route: '/(app)/pos',     label: 'POS',     icon: 'cart-outline'     as const },
   { name: 'kitchen/index', route: '/(app)/kitchen', label: 'Kitchen', icon: 'flame-outline'    as const },
   { name: 'orders/index',  route: '/(app)/orders',  label: 'Orders',  icon: 'receipt-outline'  as const },
-  { name: 'tables/index',  route: '/(app)/tables',  label: 'Tables',  icon: 'grid-outline'     as const },
+  // Tables hidden from bottom tab bar
   { name: 'settings/index',route: '/(app)/settings',label: 'More',    icon: 'ellipsis-horizontal-outline' as const },
 ];
 
@@ -325,6 +329,7 @@ export default function AppLayout() {
             <Tabs.Screen name="orders/index"     options={{ title: 'Orders' }} />
             <Tabs.Screen name="tables/index"     options={{ title: 'Tables' }} />
             <Tabs.Screen name="customers/index"      options={{ title: 'Customers' }} />
+            <Tabs.Screen name="wallet/index"        options={{ title: 'Wallet' }} />
             <Tabs.Screen name="reservations/index"  options={{ headerShown: false }} />
             <Tabs.Screen name="menu/index"          options={{ headerShown: false }} />
             <Tabs.Screen name="categories/index"    options={{ headerShown: false }} />
@@ -337,6 +342,9 @@ export default function AppLayout() {
             <Tabs.Screen name="expense-report/index" options={{ headerShown: false }} />
             <Tabs.Screen name="tickets/index"       options={{ title: 'Support Tickets' }} />
             <Tabs.Screen name="reports/index"       options={{ title: 'Reports' }} />
+            <Tabs.Screen name="staff/index"         options={{ title: 'Staff' }} />
+            <Tabs.Screen name="notifications/index" options={{ title: 'Notifications' }} />
+            <Tabs.Screen name="more/index"          options={{ title: 'All Modules', headerShown: false }} />
             <Tabs.Screen name="settings/index"      options={{ title: 'Settings' }} />
           </Tabs>
         </View>
@@ -366,8 +374,10 @@ export default function AppLayout() {
       <Tabs.Screen name="pos/index" options={{ headerTitle: () => <RestaurantHeader />, tabBarIcon: ({ color, size }) => <Ionicons name="cart-outline" color={color} size={size} />, tabBarLabel: 'POS', headerRight: () => <HeaderActions /> }} />
       <Tabs.Screen name="kitchen/index" options={{ title: 'Kitchen', tabBarIcon: ({ color, size }) => <Ionicons name="flame-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="orders/index" options={{ title: 'Orders', tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" color={color} size={size} /> }} />
-      <Tabs.Screen name="tables/index" options={{ title: 'Tables', tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" color={color} size={size} />, tabBarStyle: { display: 'none' } }} />
+      <Tabs.Screen name="more/index" options={{ title: 'More', tabBarIcon: ({ color, size }) => <Ionicons name="ellipsis-horizontal-outline" color={color} size={size} />, tabBarLabel: 'More', headerShown: false }} />
+      <Tabs.Screen name="tables/index" options={{ title: 'Tables', href: null, tabBarButton: () => null }} />
       <Tabs.Screen name="customers/index"       options={{ title: 'Customers',      tabBarButton: () => null }} />
+      <Tabs.Screen name="wallet/index"         options={{ title: 'Wallet',         tabBarButton: () => null }} />
       <Tabs.Screen name="reservations/index"   options={{ headerShown: false, tabBarButton: () => null }} />
       <Tabs.Screen name="menu/index"           options={{ headerShown: false, tabBarButton: () => null }} />
       <Tabs.Screen name="categories/index"     options={{ headerShown: false, tabBarButton: () => null }} />
@@ -380,6 +390,8 @@ export default function AppLayout() {
       <Tabs.Screen name="expense-report/index" options={{ headerShown: false, tabBarButton: () => null }} />
       <Tabs.Screen name="tickets/index"        options={{ title: 'Support Tickets',    tabBarButton: () => null }} />
       <Tabs.Screen name="reports/index"        options={{ title: 'Reports',        tabBarButton: () => null }} />
+      <Tabs.Screen name="staff/index"          options={{ title: 'Staff',          tabBarButton: () => null }} />
+      <Tabs.Screen name="notifications/index"  options={{ title: 'Notifications',  tabBarButton: () => null }} />
       <Tabs.Screen name="settings/index"       options={{ title: 'Settings',       tabBarButton: () => null }} />
     </Tabs>
   );

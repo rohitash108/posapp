@@ -124,13 +124,15 @@ export async function webUpdateOrderStatus(localUuid: string, status: string): P
 }
 
 // ── Tables ────────────────────────────────────────────────────────────────────
-export const webGetTables = () => getAll<any>('tables');
+export const webGetTables = (): Promise<any[]> => getAll<any>('tables');
 export const webSaveTables = (tables: any[]) => clearAndPut('tables', tables);
 export async function webUpdateTableStatus(id: number, status: string): Promise<void> {
   const tables = await getAll<any>('tables');
   const table = tables.find(t => t.id === id);
   if (table) { table.status = status; await putOne('tables', table); }
 }
+export const webPutTable = (table: any) => putOne('tables', table);
+export const webDeleteTable = (id: number) => deleteOne('tables', id);
 
 // ── Sync queue ────────────────────────────────────────────────────────────────
 export const webAddSyncQueue = (item: any) => putOne('sync_queue', item);

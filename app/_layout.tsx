@@ -2,12 +2,12 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { getItem } from '@/utils/storage';
+import { setItem, getItem, deleteItem } from '@/utils/storage';
 import Toast from 'react-native-toast-message';
 import { initDatabase } from '@/database/schema';
+import { useAppStore } from '@/store/appStore';
 import { syncService } from '@/sync/SyncService';
 import { webSyncService } from '@/sync/WebSyncService';
-import { useAppStore } from '@/store/appStore';
 import { useThemeStore } from '@/store/themeStore';
 
 export default function RootLayout() {
@@ -47,6 +47,25 @@ export default function RootLayout() {
       const restaurantJson = await getItem('auth_restaurant');
       if (token && userJson && restaurantJson) {
         setAuth(JSON.parse(userJson), JSON.parse(restaurantJson), token);
+        // Validate session with server when online
+        try {
+          const { authApi } = await import('@/api/auth');
+          const meRes = await authApi.me();
+          const me = meRes.data?.user ?? meRes.data;
+          const rest = meRes.data?.restaurant ?? JSON.parse(restaurantJson);
+          if (me) {
+            setAuth(me, rest, token);
+            await setItem('auth_user', JSON.stringify(me));
+            if (rest) await setItem('auth_restaurant', JSON.stringify(rest));
+          }
+        } catch (e: any) {
+          if (e?.response?.status === 401) {
+            await deleteItem('sanctum_token');
+            await deleteItem('auth_user');
+            await deleteItem('auth_restaurant');
+            useAppStore.getState().clearAuth();
+          }
+        }
       }
 
       setHydrated();

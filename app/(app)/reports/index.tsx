@@ -80,8 +80,8 @@ function periodDates(key: string): { date_from: string; date_to: string } {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const rupee = (v: number) => `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-const rupee2 = (v: number) => `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const rupee  = (v: number) => `₹${(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const rupee2 = (v: number) => `₹${(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function BarRow({ label, value, max, color, suffix = '' }: { label: string; value: number; max: number; color: string; suffix?: string }) {
   const pct = max > 0 ? Math.max(2, (value / max) * 100) : 0;
@@ -165,13 +165,16 @@ export default function ReportsScreen() {
 
   // ── Derived ──────────────────────────────────────────────────────────────
 
-  const salesEntries: SalesEntry[] = salesData?.entries ?? [];
+  const rawEntries  = salesData?.entries ?? [];
+  const salesEntries: SalesEntry[] = Array.isArray(rawEntries) ? rawEntries : Object.values(rawEntries);
   const maxSales    = Math.max(...salesEntries.map(e => e.revenue), 1);
-  const maxTopItem  = Math.max(...topItems.map(i => i.total_revenue), 1);
-  const pmList      = payMethods?.data ?? [];
-  const maxPm       = Math.max(...pmList.map(p => p.total), 1);
-  const expCats     = expenses?.category_breakdown ?? [];
-  const maxExpCat   = Math.max(...expCats.map(c => c.total), 1);
+  const rawTopItems = Array.isArray(topItems) ? topItems : Object.values(topItems ?? {});
+  const maxTopItem  = Math.max(...rawTopItems.map((i: any) => i.total_revenue), 1);
+  const pmList      = Array.isArray(payMethods?.data) ? payMethods!.data : Object.values(payMethods?.data ?? {});
+  const maxPm       = Math.max(...pmList.map((p: any) => p.total), 1);
+  const rawExpCats  = expenses?.category_breakdown ?? [];
+  const expCats     = Array.isArray(rawExpCats) ? rawExpCats : Object.values(rawExpCats);
+  const maxExpCat   = Math.max(...expCats.map((c: any) => c.total), 1);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -283,14 +286,14 @@ export default function ReportsScreen() {
                 {salesData && (
                   <View style={[ss.card, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
                     <Text style={[ss.cardTitle, { color: t.colors.textMuted }]}>Sales Summary</Text>
-                    <StatRow label="Gross Revenue"  value={rupee2(salesData.total_revenue)}  color={GOLD} />
-                    <StatRow label="Paid Revenue"   value={rupee2(salesData.paid_revenue)}   color="#16a34a" />
-                    <StatRow label="Tax Collected"  value={rupee2(salesData.total_tax)}      color="#2563eb" />
-                    <StatRow label="Discounts"      value={rupee2(salesData.total_discount)} color="#dc2626" />
+                    <StatRow label="Gross Revenue"  value={rupee2(salesData.total_revenue  ?? 0)} color={GOLD} />
+                    <StatRow label="Paid Revenue"   value={rupee2(salesData.paid_revenue   ?? 0)} color="#16a34a" />
+                    <StatRow label="Tax Collected"  value={rupee2(salesData.total_tax      ?? 0)} color="#2563eb" />
+                    <StatRow label="Discounts"      value={rupee2(salesData.total_discount ?? 0)} color="#dc2626" />
                     <View style={[ss.divider, { borderTopColor: t.colors.border }]} />
                     <View style={ss.totalRow}>
                       <Text style={[ss.totalLabel, { color: t.colors.textMuted }]}>Net Paid</Text>
-                      <Text style={[ss.totalVal, { color: FOREST }]}>{rupee2(salesData.paid_revenue - salesData.total_tax)}</Text>
+                      <Text style={[ss.totalVal, { color: FOREST }]}>{rupee2((salesData.paid_revenue ?? 0) - (salesData.total_tax ?? 0))}</Text>
                     </View>
                   </View>
                 )}
@@ -302,19 +305,19 @@ export default function ReportsScreen() {
               <>
                 <View style={[ss.card, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
                   <Text style={[ss.cardTitle, { color: t.colors.textMuted }]}>Order Status</Text>
-                  <StatRow label="Total Orders"  value={salesData.total_orders} color={t.colors.heading} />
-                  <StatRow label="Completed"     value={salesData.completed}    color="#16a34a" />
-                  <StatRow label="Cancelled"     value={salesData.cancelled}    color="#dc2626" />
-                  <StatRow label="Avg Order Value" value={rupee2(salesData.avg_order)} color={GOLD} />
+                  <StatRow label="Total Orders"  value={salesData.total_orders ?? 0} color={t.colors.heading} />
+                  <StatRow label="Completed"     value={salesData.completed    ?? 0} color="#16a34a" />
+                  <StatRow label="Cancelled"     value={salesData.cancelled    ?? 0} color="#dc2626" />
+                  <StatRow label="Avg Order Value" value={rupee2(salesData.avg_order ?? 0)} color={GOLD} />
                 </View>
                 <View style={[ss.card, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
                   <Text style={[ss.cardTitle, { color: t.colors.textMuted }]}>Order Type</Text>
                   {(() => {
-                    const total = salesData.dine_in + salesData.takeaway + salesData.delivery || 1;
+                    const total = (salesData.dine_in ?? 0) + (salesData.takeaway ?? 0) + (salesData.delivery ?? 0) || 1;
                     return [
-                      { label: 'Dine In',   val: salesData.dine_in,   color: GOLD },
-                      { label: 'Takeaway',  val: salesData.takeaway,  color: '#7c3aed' },
-                      { label: 'Delivery',  val: salesData.delivery,  color: '#0891b2' },
+                      { label: 'Dine In',   val: salesData.dine_in  ?? 0, color: GOLD },
+                      { label: 'Takeaway',  val: salesData.takeaway ?? 0, color: '#7c3aed' },
+                      { label: 'Delivery',  val: salesData.delivery ?? 0, color: '#0891b2' },
                     ].map((row, i) => (
                       <View key={i} style={ss.typeRow}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, width: 90 }}>

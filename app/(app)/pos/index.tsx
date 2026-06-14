@@ -458,6 +458,10 @@ export default function POSScreen() {
   }
 
   function handleAdd(item: Item) {
+    if (cart.order_type === 'dine_in' && !cart.table_id) {
+      Alert.alert('Table Required', 'Please select a table before adding items to the cart.');
+      return;
+    }
     if (item.variations?.length) setVariationItem(item);
     else addToCart(item);
   }
@@ -515,6 +519,10 @@ export default function POSScreen() {
 
   // ── Add custom item ────────────────────────────────────────────────────────
   function handleAddCustomItem() {
+    if (cart.order_type === 'dine_in' && !cart.table_id) {
+      Alert.alert('Table Required', 'Please select a table before adding items to the cart.');
+      return;
+    }
     const name  = customItemName.trim();
     const price = parseFloat(customItemPrice) || 0;
     const qty   = parseInt(customItemQty) || 1;
@@ -683,9 +691,10 @@ export default function POSScreen() {
   const change    = received > 0 ? Math.max(0, received - total) : 0;
 
   const filteredCustomers = customers.filter(c =>
-    !custSearch
+    c.is_registered !== false &&
+    (!custSearch
     || c.name.toLowerCase().includes(custSearch.toLowerCase())
-    || (c.phone ?? '').includes(custSearch)
+    || (c.phone ?? '').includes(custSearch))
   );
 
   // ── "Order Placed!" modal — matches csPos style ────────────────────────────
@@ -1362,9 +1371,9 @@ export default function POSScreen() {
         <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 280 }}>
           {filteredCustomers.map(c => (
             <Pressable
-              key={c.id}
+              key={String(c.id)}
               style={({ pressed }) => [cpm.row, cart.customer_id === c.id && cpm.rowSelected, pressed && { backgroundColor: '#f0f4ff' }]}
-              onPress={() => { setCustomer(c.id, c.name, c.phone); setWalkInName(''); setShowCustPicker(false); setCustSearch(''); }}
+              onPress={() => { setCustomer(c.id as number, c.name, c.phone); setWalkInName(''); setShowCustPicker(false); setCustSearch(''); }}
             >
               <View style={[cpm.avatar, { width: 34, height: 34, borderRadius: 17 }]}>
                 <Text style={[cpm.avatarText, { fontSize: 14 }]}>{c.name.charAt(0).toUpperCase()}</Text>
@@ -1484,7 +1493,7 @@ export default function POSScreen() {
             <View style={[cpm.emptyState, { paddingTop: 20 }]}>
               <Ionicons name="people-outline" size={28} color="#d1d5db" />
               <Text style={cpm.emptyTitle}>{waiterSearch ? 'No staff found' : 'No staff members'}</Text>
-              <Text style={cpm.emptyText}>Add staff in Settings → Staff</Text>
+              <Text style={cpm.emptyText}>Add staff in More → Staff or Settings → Staff</Text>
             </View>
           )}
         </ScrollView>

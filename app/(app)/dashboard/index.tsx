@@ -28,7 +28,7 @@
  */
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  View, Text, ScrollView, TouchableOpacity, Pressable, StyleSheet,
   RefreshControl, useWindowDimensions, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,14 +40,45 @@ import client from '@/api/client';
 import { useAppStore } from '@/store/appStore';
 import { AppBrandLogo, APP_BRAND_NAME, APP_BRAND_TAGLINE } from '@/components/AppBrandLogo';
 import { useTheme } from '@/store/themeStore';
-import { themes } from '@/theme/tokens';
-import type { Order, Reservation } from '@/types';
+import type { Order, Reservation, RestaurantTable } from '@/types';
 
-const C = themes.light.dashboard;
+/* ── Static semantic colors (same in light & dark: primary, success, …) ─────── */
+const S = {
+  primary: '#0D76E1',
+  success: '#14B51D',
+  danger:  '#FF3636',
+  warning: '#FDAF22',
+  purple:  '#A91CFF',
+  info:    '#2088EE',
+  orange:  '#E65100',
+  indigo:  '#1B36E0',
+  gold:    '#d4b45a',
+  dark:    '#1B2E1B',
+};
 
-const POLL_MS  = 60_000;
+const POLL_MS  = 20_000; // 20s — fast enough to catch QR orders on dashboard
 const SIDEBAR  = 220;
 const CUR      = '₹';
+
+// ── QR order beep (Web Audio API) ────────────────────────────────────────────
+function playQRBeep() {
+  if (typeof window === 'undefined') return;
+  try {
+    const Ctx = (window as any).AudioContext ?? (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx  = new Ctx();
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    const play = (freq: number, start: number, dur: number) => {
+      const osc = ctx.createOscillator();
+      osc.connect(gain); osc.frequency.value = freq; osc.type = 'sine';
+      gain.gain.setValueAtTime(0.4, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+      osc.start(ctx.currentTime + start); osc.stop(ctx.currentTime + start + dur);
+    };
+    play(1046, 0, 0.15); play(880, 0.18, 0.15); play(1046, 0.36, 0.25);
+  } catch { /* audio permission denied */ }
+}
 
 // ── Date-range presets ────────────────────────────────────────────────────────
 type Preset = 'today' | 'yesterday' | 'week' | 'month' | 'all';
@@ -86,45 +117,43 @@ function last7Labels() {
 const ONLINE_SOURCES = ['zomato', 'swiggy'];
 
 const PM_CFG: Record<string, { label: string; icon: any; color: string }> = {
-  cash:    { label: 'Cash',       icon: 'cash-outline',        color: C.success },
-  card:    { label: 'Card',       icon: 'card-outline',        color: C.info    },
-  upi:     { label: 'UPI',        icon: 'qr-code-outline',     color: C.purple  },
-  razorpay:{ label: 'Razorpay',  icon: 'card-outline',        color: C.primary },
-  gpay:    { label: 'Google Pay', icon: 'wallet-outline',      color: C.primary },
-  phonepe: { label: 'PhonePe',   icon: 'wallet-outline',      color: C.indigo  },
-  paytm:   { label: 'Paytm',     icon: 'wallet-outline',      color: C.indigo  },
-  zomato:  { label: 'Zomato',    icon: 'bicycle-outline',     color: C.danger  },
-  swiggy:  { label: 'Swiggy',    icon: 'bicycle-outline',     color: C.orange  },
-  other:   { label: 'Other',     icon: 'help-circle-outline', color: C.muted   },
+  cash:    { label: 'Cash',       icon: 'cash-outline',        color: S.success },
+  card:    { label: 'Card',       icon: 'card-outline',        color: S.info    },
+  upi:     { label: 'UPI',        icon: 'qr-code-outline',     color: S.purple  },
+  razorpay:{ label: 'Razorpay',  icon: 'card-outline',        color: S.primary },
+  gpay:    { label: 'Google Pay', icon: 'wallet-outline',      color: S.primary },
+  phonepe: { label: 'PhonePe',   icon: 'wallet-outline',      color: S.indigo  },
+  paytm:   { label: 'Paytm',     icon: 'wallet-outline',      color: S.indigo  },
+  zomato:  { label: 'Zomato',    icon: 'bicycle-outline',     color: S.danger  },
+  swiggy:  { label: 'Swiggy',    icon: 'bicycle-outline',     color: S.orange  },
+  other:   { label: 'Other',     icon: 'help-circle-outline', color: '#64748B' },
 };
 
 const BILL_TYPE_CFG: Record<string, { label: string; icon: any; color: string }> = {
-  dine_in:  { label: 'Dine In',    icon: 'restaurant-outline', color: C.primary },
-  takeaway: { label: 'Quick Bill', icon: 'bag-outline',         color: C.muted   },
-  pickup:   { label: 'Pickup',     icon: 'cube-outline',        color: C.warning },
-  delivery: { label: 'Delivery',   icon: 'bicycle-outline',     color: C.success },
-  qr_order: { label: 'QR Order',   icon: 'qr-code-outline',     color: C.purple  },
+  dine_in:  { label: 'Dine In',    icon: 'restaurant-outline', color: S.primary },
+  takeaway: { label: 'Quick Bill', icon: 'bag-outline',         color: '#64748B' },
+  pickup:   { label: 'Pickup',     icon: 'cube-outline',        color: S.warning },
+  delivery: { label: 'Delivery',   icon: 'bicycle-outline',     color: S.success },
+  qr_order: { label: 'QR Order',   icon: 'qr-code-outline',     color: S.purple  },
 };
 
-const STATUS_CFG: Record<string, { color: string; bg: string }> = {
-  pending:   { color: '#d97706', bg: '#fef9ec' },
-  confirmed: { color: C.primary, bg: '#eff6ff' },
-  preparing: { color: C.purple,  bg: '#f5f3ff' },
-  ready:     { color: C.info,    bg: '#ecfeff' },
-  served:    { color: C.success, bg: '#ecfdf5' },
-  completed: { color: '#16a34a', bg: '#f0fdf4' },
-  cancelled: { color: C.danger,  bg: '#fff1f2' },
+const STATUS_CFG: Record<string, { color: string; bg: string; bgDark: string }> = {
+  pending:   { color: '#d97706', bg: '#fef9ec', bgDark: 'rgba(217,119,6,0.15)' },
+  confirmed: { color: S.primary, bg: '#eff6ff', bgDark: 'rgba(13,118,225,0.15)' },
+  preparing: { color: S.purple,  bg: '#f5f3ff', bgDark: 'rgba(169,28,255,0.15)' },
+  ready:     { color: S.info,    bg: '#ecfeff', bgDark: 'rgba(32,136,238,0.15)' },
+  served:    { color: S.success, bg: '#ecfdf5', bgDark: 'rgba(20,181,29,0.15)' },
+  completed: { color: '#16a34a', bg: '#f0fdf4', bgDark: 'rgba(22,163,74,0.15)' },
+  cancelled: { color: S.danger,  bg: '#fff1f2', bgDark: 'rgba(255,54,54,0.15)' },
 };
 
 // ── Data shapes ───────────────────────────────────────────────────────────────
 interface Summary {
-  // Fixed (always today / this-month)
   today_sales:       number;
   today_orders:      number;
   month_sales:       number;
   month_orders:      number;
   sales_growth_pct:  number;
-  // Date-filtered
   total_sales:       number;
   total_orders:      number;
   total_tax:         number;
@@ -139,36 +168,15 @@ interface Summary {
   unpaid_total:      number;
   cancelled_count:   number;
   free_bills:        number;
+  deleted_count:     number;
   reservations_count:number;
   bill_types:        Record<string, { count: number; total: number }>;
 }
 
-interface SalesDay {
-  date:         string;
-  total_sales:  number;
-  total_orders: number;
-}
-
-interface TopItem {
-  item_name: string;
-  name?:     string;
-  quantity:  number;
-  qty?:      number;
-  total?:    number;
-}
-
-interface PmRow {
-  payment_method?: string;
-  method?:         string;
-  count:           number;
-  total:           number;
-}
-
-interface ExpenseSummary {
-  total:     number;
-  tax_total: number;
-  count:     number;
-}
+interface SalesDay { date: string; total_sales: number; total_orders: number; }
+interface TopItem  { item_name: string; name?: string; quantity: number; qty?: number; total?: number; }
+interface PmRow    { payment_method?: string; method?: string; count: number; total: number; }
+interface ExpenseSummary { total: number; tax_total: number; count: number; }
 
 // ── Client-side fallback: compute summary from raw orders ─────────────────────
 function summaryFromOrders(
@@ -227,53 +235,73 @@ function summaryFromOrders(
     unpaid_total:       sum(unpaidOrders, 'total'),
     cancelled_count:    filteredOrders.filter(o => o.status === 'cancelled').length,
     free_bills:         filteredOrders.filter(o => o.status !== 'cancelled' && Number(o.total) === 0).length,
+    deleted_count:      0,
     reservations_count: reservCount,
     bill_types,
   };
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Sub-components (all theme-aware) ──────────────────────────────────────────
 
 function SectionHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+  const { colors } = useTheme();
+  const D = colors.dashboard;
   return (
     <View style={sh.row}>
-      <View style={sh.titleWrap}>
-        <View style={sh.accent} />
-        <Text style={sh.title}>{title}</Text>
-      </View>
+      <Text style={[sh.title, { color: D.text }]}>{title}</Text>
       {action && (
-        <TouchableOpacity onPress={onAction} style={sh.actionBtn}>
+        <TouchableOpacity onPress={onAction} style={sh.actionBtn} activeOpacity={0.7}>
           <Text style={sh.actionText}>{action}</Text>
-          <Ionicons name="arrow-forward" size={12} color={C.primary} />
+          <Ionicons name="chevron-forward" size={13} color={S.primary} />
         </TouchableOpacity>
       )}
     </View>
   );
 }
 
-function BigCard({ label, value, sub, icon, color, bg, growthPct, onPress }: {
+function BigCard({ label, value, sub, icon, color, bg, growthPct, subColor, onPress }: {
   label: string; value: string; sub: string; icon: any;
-  color: string; bg: string; growthPct?: number; onPress?: () => void;
+  color: string; bg: string; growthPct?: number; subColor?: string; onPress?: () => void;
 }) {
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
   return (
-    <TouchableOpacity style={bc.wrap} onPress={onPress} activeOpacity={0.85}>
-      <View style={bc.top}>
-        <View style={[bc.iconWrap, { backgroundColor: bg }]}>
-          <Ionicons name={icon} size={22} color={color} />
+    <TouchableOpacity
+      style={[bc.wrap, {
+        backgroundColor: isDark ? color + '12' : color + '08',
+        borderColor: isDark ? color + '35' : D.border,
+        borderLeftColor: color,
+        shadowColor: color,
+      }]}
+      onPress={onPress} activeOpacity={0.82}
+    >
+      {/* Text — paddingRight clears the icon box on the right */}
+      <View style={{ paddingRight: 86 }}>
+        <Text style={[bc.label, { color: D.muted }]}>{label}</Text>
+        <Text style={[bc.value, { color: D.text }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+          <Text style={[bc.sub, { color: subColor ?? color }]}>{sub}</Text>
+          {growthPct !== undefined && growthPct !== 0 && (
+            <View style={[bc.growthBadge, {
+              backgroundColor: isDark
+                ? (growthPct > 0 ? 'rgba(20,181,29,0.18)' : 'rgba(255,54,54,0.18)')
+                : (growthPct > 0 ? '#f0fdf4' : '#fff1f2'),
+            }]}>
+              <Ionicons name={growthPct > 0 ? 'trending-up' : 'trending-down'} size={10}
+                color={growthPct > 0 ? S.success : S.danger} />
+              <Text style={[bc.growthText, { color: growthPct > 0 ? S.success : S.danger }]}>
+                {growthPct > 0 ? '+' : ''}{growthPct}%
+              </Text>
+            </View>
+          )}
         </View>
-        {growthPct !== undefined && growthPct !== 0 && (
-          <View style={[bc.growthBadge, { backgroundColor: growthPct > 0 ? '#f0fdf4' : '#fff1f2' }]}>
-            <Ionicons name={growthPct > 0 ? 'trending-up' : 'trending-down'} size={10}
-              color={growthPct > 0 ? C.success : C.danger} />
-            <Text style={[bc.growthText, { color: growthPct > 0 ? C.success : C.danger }]}>
-              {growthPct > 0 ? '+' : ''}{growthPct}%
-            </Text>
-          </View>
-        )}
       </View>
-      <Text style={bc.value}>{value}</Text>
-      <Text style={bc.label}>{label}</Text>
-      <Text style={bc.sub}>{sub}</Text>
+      {/* Icon — rounded-square, vertically centered on right via absolute stretch wrapper */}
+      <View style={{ position: 'absolute', right: 18, top: 0, bottom: 0, width: 70, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={[bc.iconBox, { backgroundColor: color + '20' }]}>
+          <Ionicons name={icon} size={28} color={color} />
+        </View>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -282,60 +310,257 @@ function SmallCard({ label, value, sub, icon, color, bg, danger, onPress }: {
   label: string; value: string | number; sub?: string; icon: any;
   color: string; bg: string; danger?: boolean; onPress?: () => void;
 }) {
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
+  const c = danger ? S.danger : color;
+  const valueColor = danger ? S.danger : D.text;
   return (
-    <TouchableOpacity style={[smc.wrap, danger && smc.dangerBorder]} onPress={onPress} activeOpacity={0.85}>
-      <View style={[smc.iconWrap, { backgroundColor: bg }]}>
-        <Ionicons name={icon} size={16} color={color} />
+    <TouchableOpacity
+      style={[smc.wrap, {
+        backgroundColor: isDark ? c + '12' : c + '08',
+        borderColor: isDark ? c + '35' : D.border,
+        borderTopColor: c,
+        shadowColor: c,
+      }]}
+      onPress={onPress} activeOpacity={0.82}
+    >
+      {/* Text — paddingRight clears the icon box */}
+      <View style={{ paddingRight: 54 }}>
+        <Text style={[smc.label, { color: D.muted }]} numberOfLines={1}>{label}</Text>
+        <Text style={[smc.value, { color: valueColor }]} numberOfLines={1}>{String(value)}</Text>
+        {sub ? <Text style={[smc.sub, { color: c }]} numberOfLines={1}>{sub}</Text> : null}
       </View>
-      <Text style={[smc.value, danger && { color: C.danger }]}>{String(value)}</Text>
-      <Text style={smc.label} numberOfLines={1}>{label}</Text>
-      {sub ? <Text style={smc.sub} numberOfLines={1}>{sub}</Text> : null}
+      {/* Icon — rounded-square, vertically centered on right */}
+      <View style={{ position: 'absolute', right: 12, top: 0, bottom: 0, width: 46, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={[smc.iconBox, { backgroundColor: c + '20' }]}>
+          <Ionicons name={icon} size={18} color={c} />
+        </View>
+      </View>
     </TouchableOpacity>
   );
 }
 
-function BarChart({ labels, data, orderCounts }: { labels: string[]; data: number[]; orderCounts: number[] }) {
-  const max = Math.max(...data, 1);
+// ── Dual-axis Line Chart (Revenue + Orders) — matches CSPos Sale Analysis ──────
+function LineChart({ labels, revData, ordData }: {
+  labels: string[]; revData: number[]; ordData: number[];
+}) {
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
+  const [chartW, setChartW] = useState(300);
+
+  const CHART_H   = 160;
+  const PAD_LEFT  = 44;   // Y-axis (Revenue) width
+  const PAD_RIGHT = 36;   // Y-axis (Orders) width
+  const PAD_TOP   = 10;
+  const PAD_BOT   = 0;
+  const plotW     = Math.max(60, chartW - PAD_LEFT - PAD_RIGHT);
+  const plotH     = CHART_H - PAD_TOP - PAD_BOT;
+
+  const n         = Math.max(labels.length, 2);
+  const maxRev    = Math.max(...revData, 1);
+  const maxOrd    = Math.max(...ordData, 1);
+  const gridLines = 4; // horizontal lines
+
+  const gridBg = isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9';
+  const axisClr = isDark ? 'rgba(255,255,255,0.2)' : '#e2e8f0';
+
+  // Pixel positions for each data point
+  const revPts = revData.map((v, i) => ({
+    x: PAD_LEFT + (i / (n - 1)) * plotW,
+    y: PAD_TOP  + (1 - v / maxRev) * plotH,
+    v,
+  }));
+  const ordPts = ordData.map((v, i) => ({
+    x: PAD_LEFT + (i / (n - 1)) * plotW,
+    y: PAD_TOP  + (1 - v / maxOrd) * plotH,
+    v,
+  }));
+
+  // Y-axis labels for Revenue (left)
+  const revTicks = Array.from({ length: gridLines + 1 }, (_, i) => {
+    const frac = i / gridLines;
+    const val  = maxRev * (1 - frac);
+    return { y: PAD_TOP + frac * plotH, label: val >= 1000 ? `${(val / 1000).toFixed(1)}k` : String(Math.round(val)) };
+  });
+  // Y-axis labels for Orders (right)
+  const ordTicks = Array.from({ length: gridLines + 1 }, (_, i) => {
+    const frac = i / gridLines;
+    const val  = Math.round(maxOrd * (1 - frac));
+    return { y: PAD_TOP + frac * plotH, label: String(val) };
+  });
+
   return (
-    <View style={ch.wrap}>
-      <View style={ch.bars}>
-        {data.map((v, i) => {
-          const h = Math.max(4, (v / max) * 120);
-          return (
-            <View key={i} style={ch.col}>
-              {v > 0 && (
-                <Text style={ch.topVal}>
-                  {v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v))}
-                </Text>
-              )}
-              <View style={ch.track}>
-                <View style={[ch.bar, { height: h, backgroundColor: C.primary }]} />
-              </View>
-              <View style={[ch.orderBadge, { backgroundColor: C.success + '20' }]}>
-                <Text style={[ch.orderText, { color: C.success }]}>{orderCounts[i]}</Text>
-              </View>
-              <Text style={ch.dayLabel}>{labels[i]}</Text>
-            </View>
-          );
-        })}
-      </View>
+    <View style={ch.wrap} onLayout={e => setChartW(e.nativeEvent.layout.width)}>
+      {/* Legend row — top right matching web */}
       <View style={ch.legend}>
         <View style={ch.legendItem}>
-          <View style={[ch.legendDot, { backgroundColor: C.primary }]} />
-          <Text style={ch.legendText}>Revenue</Text>
+          <View style={[ch.legendDot, { backgroundColor: S.primary }]} />
+          <Text style={[ch.legendText, { color: D.muted }]}>Revenue</Text>
         </View>
         <View style={ch.legendItem}>
-          <View style={[ch.legendDot, { backgroundColor: C.success }]} />
-          <Text style={ch.legendText}>Orders (count below bar)</Text>
+          <View style={[ch.legendDot, { backgroundColor: S.success }]} />
+          <Text style={[ch.legendText, { color: D.muted }]}>Orders</Text>
+        </View>
+      </View>
+
+      {/* Chart canvas */}
+      <View style={{ height: CHART_H + 24, position: 'relative' }}>
+
+        {/* Horizontal grid lines */}
+        {revTicks.map((tick, i) => (
+          <View key={i} style={{
+            position: 'absolute', left: PAD_LEFT, right: PAD_RIGHT,
+            top: tick.y, height: 1, backgroundColor: axisClr,
+          }} />
+        ))}
+
+        {/* Left Y-axis labels (Revenue) */}
+        {revTicks.map((tick, i) => (
+          <Text key={i} style={[ch.yLabel, { color: D.muted, top: tick.y - 7, left: 0, width: PAD_LEFT - 4, textAlign: 'right' }]}>
+            {tick.label}
+          </Text>
+        ))}
+
+        {/* Right Y-axis labels (Orders) */}
+        {ordTicks.map((tick, i) => (
+          <Text key={i} style={[ch.yLabel, { color: D.muted, top: tick.y - 7, right: 0, width: PAD_RIGHT - 4, textAlign: 'left' }]}>
+            {tick.label}
+          </Text>
+        ))}
+
+        {/* Revenue line segments (blue) — 2.5px thick */}
+        {revPts.map((pt, i) => {
+          if (i >= revPts.length - 1) return null;
+          const p2  = revPts[i + 1];
+          const dx  = p2.x - pt.x, dy = p2.y - pt.y;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          const ang = Math.atan2(dy, dx) * (180 / Math.PI);
+          const cx  = (pt.x + p2.x) / 2, cy = (pt.y + p2.y) / 2;
+          return (
+            <View key={i} style={{
+              position: 'absolute', left: cx, top: cy,
+              width: len, height: 2.5, backgroundColor: S.primary,
+              transform: [{ translateX: -len / 2 }, { translateY: -1.25 }, { rotate: `${ang}deg` }],
+            }} />
+          );
+        })}
+
+        {/* Orders line segments (green) — 2.5px thick */}
+        {ordPts.map((pt, i) => {
+          if (i >= ordPts.length - 1) return null;
+          const p2  = ordPts[i + 1];
+          const dx  = p2.x - pt.x, dy = p2.y - pt.y;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          const ang = Math.atan2(dy, dx) * (180 / Math.PI);
+          const cx  = (pt.x + p2.x) / 2, cy = (pt.y + p2.y) / 2;
+          return (
+            <View key={i} style={{
+              position: 'absolute', left: cx, top: cy,
+              width: len, height: 2, backgroundColor: S.success,
+              transform: [{ translateX: -len / 2 }, { translateY: -1 }, { rotate: `${ang}deg` }],
+            }} />
+          );
+        })}
+
+        {/* Revenue dots — larger with white ring */}
+        {revPts.map((pt, i) => (
+          <View key={i} style={{
+            position: 'absolute', left: pt.x - 5, top: pt.y - 5,
+            width: 10, height: 10, borderRadius: 5,
+            backgroundColor: S.primary, borderWidth: 2.5, borderColor: D.white,
+          }} />
+        ))}
+
+        {/* Orders dots — medium with white ring */}
+        {ordPts.map((pt, i) => (
+          <View key={i} style={{
+            position: 'absolute', left: pt.x - 4, top: pt.y - 4,
+            width: 8, height: 8, borderRadius: 4,
+            backgroundColor: S.success, borderWidth: 2, borderColor: D.white,
+          }} />
+        ))}
+
+        {/* X-axis labels */}
+        <View style={{ position: 'absolute', top: CHART_H + 4, left: PAD_LEFT, right: PAD_RIGHT, flexDirection: 'row' }}>
+          {labels.map((lbl, i) => (
+            <Text key={i} style={[ch.dayLabel, { color: D.muted, flex: 1, textAlign: 'center' }]}>{lbl}</Text>
+          ))}
         </View>
       </View>
     </View>
   );
 }
 
+// ── DonutChart for Payment Type panel — matches CSPos web design ──────────────
+function DonutChart({ methods, totalRevenue }: {
+  methods: { key: string; label: string; color: string; icon: any; count: number; total: number; percent: number }[];
+  totalRevenue: number;
+}) {
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
+  const RING_SIZE = 130;
+  const RING_W    = 20;
+
+  const hasData = methods.length > 0 && totalRevenue > 0;
+  const ringBg  = isDark ? 'rgba(255,255,255,0.07)' : '#f1f5f9';
+
+  return (
+    <View style={donut.wrap}>
+      {/* Donut ring + center text */}
+      <View style={donut.ringWrap}>
+        {/* Outer ring (background) */}
+        <View style={[donut.ring, {
+          width: RING_SIZE, height: RING_SIZE, borderRadius: RING_SIZE / 2,
+          borderWidth: RING_W, borderColor: hasData ? (methods[0]?.color + '30') : ringBg,
+        }]} />
+        {/* Inner overlay creates "hole" illusion */}
+        <View style={[donut.center, { width: RING_SIZE - RING_W * 2, height: RING_SIZE - RING_W * 2, borderRadius: (RING_SIZE - RING_W * 2) / 2, backgroundColor: D.white }]}>
+          <Text style={[donut.totalLabel, { color: D.muted }]}>Total</Text>
+          <Text style={[donut.totalValue, { color: D.text }]}>{fmtMoney(totalRevenue)}</Text>
+        </View>
+      </View>
+
+      {/* No-data state */}
+      {!hasData && (
+        <Text style={[donut.noData, { color: S.warning }]}>No payment data yet.</Text>
+      )}
+
+      {/* Legend — each payment method */}
+      {hasData && (
+        <View style={donut.legend}>
+          {methods.slice(0, 6).map((m, i) => (
+            <View key={i} style={donut.legendRow}>
+              <View style={[donut.legendDot, { backgroundColor: m.color }]} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[donut.legendLabel, { color: D.text }]} numberOfLines={1}>
+                  {m.label}
+                </Text>
+                <Text style={[donut.legendSub, { color: D.muted }]}>{m.count} orders</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[donut.legendValue, { color: D.text }]}>{fmtMoney(m.total)}</Text>
+                <Text style={[donut.legendPct, { color: m.color }]}>{m.percent}%</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+      {!hasData && (
+        <Text style={[donut.note, { color: D.muted }]}>
+          {'Other / Not Specified'} — orders where no payment method was recorded.
+        </Text>
+      )}
+    </View>
+  );
+}
+
+// ProgressItem is kept for compatibility with BillType etc.
 function ProgressItem({ label, sub, value, percent, color, icon }: {
   label: string; sub?: string; value: string; percent: number; color: string; icon?: any;
 }) {
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
+  const trackBg = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9';
   return (
     <View style={pi.wrap}>
       <View style={pi.top}>
@@ -346,18 +571,18 @@ function ProgressItem({ label, sub, value, percent, color, icon }: {
             </View>
           )}
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={pi.label} numberOfLines={1}>{label}</Text>
-            {sub ? <Text style={pi.sub} numberOfLines={1}>{sub}</Text> : null}
+            <Text style={[pi.label, { color: D.text }]} numberOfLines={1}>{label}</Text>
+            {sub ? <Text style={[pi.sub, { color: D.muted }]} numberOfLines={1}>{sub}</Text> : null}
           </View>
         </View>
         <View style={pi.right}>
-          <Text style={pi.value}>{value}</Text>
+          <Text style={[pi.value, { color: D.text }]}>{value}</Text>
           <View style={[pi.pctBadge, { backgroundColor: color + '18' }]}>
             <Text style={[pi.pctText, { color }]}>{percent}%</Text>
           </View>
         </View>
       </View>
-      <View style={pi.track}>
+      <View style={[pi.track, { backgroundColor: trackBg }]}>
         <View style={[pi.fill, { width: `${Math.min(percent, 100)}%` as any, backgroundColor: color }]} />
       </View>
     </View>
@@ -368,22 +593,25 @@ function PaymentCard({ label, icon, color, count, total, percent }: {
   label: string; icon: any; color: string;
   count: number; total: number; percent: number;
 }) {
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
+  const trackBg = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9';
   return (
-    <View style={pmc.wrap}>
+    <View style={[pmc.wrap, { backgroundColor: D.white, borderColor: D.border, shadowColor: D.cardShadow }]}>
       <View style={pmc.top}>
         <View style={[pmc.iconWrap, { backgroundColor: color + '18' }]}>
           <Ionicons name={icon} size={18} color={color} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={pmc.label} numberOfLines={1}>{label}</Text>
-          <Text style={pmc.sub}>{count} bills</Text>
+          <Text style={[pmc.label, { color: D.text }]} numberOfLines={1}>{label}</Text>
+          <Text style={[pmc.sub, { color: D.muted }]}>{count} bills</Text>
         </View>
       </View>
-      <Text style={pmc.amount}>{fmtFull(total)}</Text>
-      <View style={pmc.track}>
+      <Text style={[pmc.amount, { color: D.text }]}>{fmtFull(total)}</Text>
+      <View style={[pmc.track, { backgroundColor: trackBg }]}>
         <View style={[pmc.fill, { width: `${Math.min(percent, 100)}%` as any, backgroundColor: color }]} />
       </View>
-      <Text style={pmc.pct}>{percent}% of revenue</Text>
+      <Text style={[pmc.pct, { color: D.muted }]}>{percent}% of revenue</Text>
     </View>
   );
 }
@@ -391,8 +619,10 @@ function PaymentCard({ label, icon, color, count, total, percent }: {
 function BillTypeCard({ label, icon, color, count, total }: {
   label: string; icon: any; color: string; count: number; total: number;
 }) {
+  const { colors } = useTheme();
+  const D = colors.dashboard;
   return (
-    <View style={btc.wrap}>
+    <View style={[btc.wrap, { backgroundColor: D.white, borderColor: D.border, shadowColor: D.cardShadow }]}>
       <View style={btc.top}>
         <View style={[btc.icon, { backgroundColor: color + '15' }]}>
           <Ionicons name={icon} size={18} color={color} />
@@ -401,16 +631,19 @@ function BillTypeCard({ label, icon, color, count, total }: {
           <Text style={[btc.badgeText, { color }]}>{count}</Text>
         </View>
       </View>
-      <Text style={btc.label}>{label}</Text>
+      <Text style={[btc.label, { color: D.muted }]}>{label}</Text>
       <Text style={[btc.amount, { color }]}>{fmtMoney(total)}</Text>
     </View>
   );
 }
 
 function TopItemRow({ name, qty, maxQty, rank }: { name: string; qty: number; maxQty: number; rank: number }) {
-  const colors = [C.primary, C.success, C.warning, C.purple, C.orange, C.info];
-  const color  = colors[(rank - 1) % colors.length];
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
+  const palette = [S.primary, S.success, S.warning, S.purple, S.orange, S.info];
+  const color  = palette[(rank - 1) % palette.length];
   const w      = maxQty > 0 ? (qty / maxQty) * 100 : 0;
+  const trackBg = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9';
   return (
     <View style={ti.wrap}>
       <View style={[ti.rank, { backgroundColor: color + '18' }]}>
@@ -418,10 +651,10 @@ function TopItemRow({ name, qty, maxQty, rank }: { name: string; qty: number; ma
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
         <View style={ti.nameRow}>
-          <Text style={ti.name} numberOfLines={1}>{name}</Text>
+          <Text style={[ti.name, { color: D.text }]} numberOfLines={1}>{name}</Text>
           <Text style={[ti.qty, { color }]}>{qty} sold</Text>
         </View>
-        <View style={ti.track}>
+        <View style={[ti.track, { backgroundColor: trackBg }]}>
           <View style={[ti.fill, { width: `${w}%` as any, backgroundColor: color }]} />
         </View>
       </View>
@@ -430,25 +663,29 @@ function TopItemRow({ name, qty, maxQty, rank }: { name: string; qty: number; ma
 }
 
 function ActiveOrderRow({ order }: { order: Order }) {
-  const st = STATUS_CFG[order.status] ?? { color: C.muted, bg: '#f3f4f6' };
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
+  const stCfg = STATUS_CFG[order.status] ?? { color: '#64748B', bg: '#f3f4f6', bgDark: 'rgba(100,116,139,0.15)' };
+  const stBg = isDark ? stCfg.bgDark : stCfg.bg;
   return (
-    <TouchableOpacity style={ar.row} onPress={() => router.push('/(app)/orders' as any)} activeOpacity={0.8}>
-      <View style={[ar.avatar, { backgroundColor: st.bg }]}>
-        <Ionicons name="restaurant-outline" size={13} color={st.color} />
+    <TouchableOpacity style={[ar.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.04)' : '#f9fafb' }]}
+      onPress={() => router.push('/(app)/orders' as any)} activeOpacity={0.8}>
+      <View style={[ar.avatar, { backgroundColor: stBg }]}>
+        <Ionicons name="restaurant-outline" size={13} color={stCfg.color} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={ar.num} numberOfLines={1}>
+        <Text style={[ar.num, { color: D.text }]} numberOfLines={1}>
           #{order.order_number} · {order.customer_name ?? 'Walk-in'}
         </Text>
-        <Text style={ar.meta} numberOfLines={1}>
+        <Text style={[ar.meta, { color: D.muted }]} numberOfLines={1}>
           {(order.order_type ?? '').replace(/_/g, ' ')}
           {order.table_name ? ` · ${order.table_name}` : ''}
         </Text>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 3 }}>
-        <Text style={ar.amount}>{fmtFull(Number(order.total ?? 0))}</Text>
-        <View style={[ar.badge, { backgroundColor: st.bg }]}>
-          <Text style={[ar.badgeText, { color: st.color }]}>{order.status}</Text>
+        <Text style={[ar.amount, { color: S.gold }]}>{fmtFull(Number(order.total ?? 0))}</Text>
+        <View style={[ar.badge, { backgroundColor: stBg }]}>
+          <Text style={[ar.badgeText, { color: stCfg.color }]}>{order.status}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -456,39 +693,46 @@ function ActiveOrderRow({ order }: { order: Order }) {
 }
 
 function RecentOrderRow({ order }: { order: Order }) {
-  const st     = STATUS_CFG[order.status] ?? { color: C.muted, bg: '#f3f4f6' };
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
+  const stCfg  = STATUS_CFG[order.status] ?? { color: '#64748B', bg: '#f3f4f6', bgDark: 'rgba(100,116,139,0.15)' };
+  const stBg   = isDark ? stCfg.bgDark : stCfg.bg;
   const src    = order.source ?? 'pos';
-  const srcClr: Record<string, string> = { pos: C.dark, zomato: C.danger, swiggy: C.orange, qr: C.purple };
-  const color  = srcClr[src] ?? C.dark;
+  const srcClr: Record<string, string> = { pos: D.text, zomato: S.danger, swiggy: S.orange, qr: S.purple };
+  const color  = srcClr[src] ?? D.text;
   const isPaid = order.payment_status === 'paid';
+  const paidBg = isDark
+    ? (isPaid ? 'rgba(20,181,29,0.15)' : 'rgba(217,119,6,0.15)')
+    : (isPaid ? '#f0fdf4' : '#fef9ec');
   return (
-    <TouchableOpacity style={rr.row} onPress={() => router.push('/(app)/orders' as any)} activeOpacity={0.8}>
-      <View style={[rr.avatar, { backgroundColor: C.primary + '15' }]}>
-        <Ionicons name="bag-outline" size={14} color={C.primary} />
+    <TouchableOpacity style={[rr.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.04)' : '#f9fafb' }]}
+      onPress={() => router.push('/(app)/orders' as any)} activeOpacity={0.8}>
+      <View style={[rr.avatar, { backgroundColor: S.primary + '15' }]}>
+        <Ionicons name="bag-outline" size={14} color={S.primary} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={rr.num}>#{order.order_number}</Text>
+          <Text style={[rr.num, { color: D.text }]}>#{order.order_number}</Text>
           {src !== 'pos' && (
             <View style={[rr.srcBadge, { backgroundColor: color + '18' }]}>
               <Text style={[rr.srcText, { color }]}>{src.toUpperCase()}</Text>
             </View>
           )}
         </View>
-        <Text style={rr.meta} numberOfLines={1}>
+        <Text style={[rr.meta, { color: D.muted }]} numberOfLines={1}>
           {order.customer_name ?? 'Walk-in'} · {(order.order_type ?? '').replace(/_/g, ' ')}
           {order.table_name ? ` · ${order.table_name}` : ''}
         </Text>
-        <Text style={rr.time}>
+        <Text style={[rr.time, { color: isDark ? 'rgba(255,255,255,0.35)' : '#9ca3af' }]}>
           {order.created_at ? format(new Date(order.created_at), 'dd MMM, hh:mm a') : '—'}
         </Text>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 4 }}>
-        <Text style={rr.amount}>{fmtFull(Number(order.total ?? 0))}</Text>
-        <View style={[rr.badge, { backgroundColor: st.bg }]}>
-          <Text style={[rr.badgeText, { color: st.color }]}>{order.status}</Text>
+        <Text style={[rr.amount, { color: S.gold }]}>{fmtFull(Number(order.total ?? 0))}</Text>
+        <View style={[rr.badge, { backgroundColor: stBg }]}>
+          <Text style={[rr.badgeText, { color: stCfg.color }]}>{order.status}</Text>
         </View>
-        <View style={[rr.badge, { backgroundColor: isPaid ? '#f0fdf4' : '#fef9ec' }]}>
+        <View style={[rr.badge, { backgroundColor: paidBg }]}>
           <Text style={[rr.badgeText, { color: isPaid ? '#16a34a' : '#d97706' }]}>
             {isPaid ? 'PAID' : 'UNPAID'}
           </Text>
@@ -499,22 +743,24 @@ function RecentOrderRow({ order }: { order: Order }) {
 }
 
 function ReservationRow({ res }: { res: Reservation }) {
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
   const statusColors: Record<string, string> = {
-    pending: '#d97706', confirmed: C.primary, seated: C.success,
-    cancelled: C.danger, no_show: C.muted,
+    pending: '#d97706', confirmed: S.primary, seated: S.success,
+    cancelled: S.danger, no_show: '#64748B',
   };
-  const color = statusColors[res.status] ?? C.muted;
+  const color = statusColors[res.status] ?? '#64748B';
   return (
-    <View style={resR.row}>
+    <View style={[resR.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.04)' : '#f9fafb' }]}>
       <View style={[resR.avatar, { backgroundColor: color + '18' }]}>
         <Ionicons name="calendar-outline" size={14} color={color} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={resR.name} numberOfLines={1}>{res.customer_name}</Text>
-        <Text style={resR.meta}>
+        <Text style={[resR.name, { color: D.text }]} numberOfLines={1}>{res.customer_name}</Text>
+        <Text style={[resR.meta, { color: D.muted }]}>
           {res.guest_count} guests{res.table_name ? ` · ${res.table_name}` : ''}
         </Text>
-        <Text style={resR.time}>
+        <Text style={[resR.time, { color: isDark ? 'rgba(255,255,255,0.35)' : '#9ca3af' }]}>
           {res.reserved_at ? format(new Date(res.reserved_at), 'dd MMM, hh:mm a') : '—'}
         </Text>
       </View>
@@ -525,15 +771,130 @@ function ReservationRow({ res }: { res: Reservation }) {
   );
 }
 
+// ── TableCard — matches CSPos web Tables Available card design ────────────────
+function TableChip({ table }: { table: RestaurantTable }) {
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
+  const cfg = table.status === 'available'
+    ? { color: S.success, borderColor: S.success, iconBg: S.success + '18', label: 'Available' }
+    : table.status === 'occupied'
+    ? { color: S.warning,  borderColor: S.warning,  iconBg: S.warning  + '18', label: 'Occupied'  }
+    : { color: S.info,    borderColor: S.info,    iconBg: S.info    + '18', label: 'Reserved'  };
+  return (
+    <TouchableOpacity
+      style={[tablC.wrap, {
+        backgroundColor: D.white,
+        borderColor: cfg.borderColor + '60',
+        shadowColor: cfg.color,
+      }]}
+      onPress={() => router.push('/(app)/tables' as any)} activeOpacity={0.82}
+    >
+      {/* Icon area — light bg with restaurant table icon, like CSPos web */}
+      <View style={[tablC.iconArea, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#f8f9fb' }]}>
+        <Ionicons name="grid-outline" size={38} color={cfg.color} />
+      </View>
+      {/* Info area */}
+      <View style={tablC.info}>
+        <Text style={[tablC.name, { color: D.text }]} numberOfLines={1}>{table.name}</Text>
+        {table.capacity
+          ? <Text style={[tablC.cap, { color: D.muted }]}>Guests : {table.capacity}</Text>
+          : null}
+        <Text style={[tablC.statusLabel, { color: cfg.color }]}>{cfg.label}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ── TrendingMenuCard — card per top-selling item in the Trending Menus grid ──
+function TrendingMenuCard({ name, qty, rank, maxQty }: { name: string; qty: number; rank: number; maxQty: number }) {
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
+  const palette = [S.primary, S.success, S.warning, S.purple, S.orange, S.info];
+  const color = palette[(rank - 1) % palette.length];
+  const barW  = maxQty > 0 ? Math.round((qty / maxQty) * 100) : 0;
+  const trackBg = isDark ? 'rgba(255,255,255,0.07)' : '#f1f5f9';
+  return (
+    <View style={[tmc.wrap, {
+      backgroundColor: isDark ? D.white : color + '08',
+      borderColor: isDark ? color + '35' : D.border,
+      borderTopColor: color,
+      shadowColor: color,
+    }]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <View style={[tmc.rankBadge, { backgroundColor: color + '1A' }]}>
+          <Text style={[tmc.rankText, { color }]}>#{rank}</Text>
+        </View>
+        {rank === 1 && (
+          <View style={[tmc.trendBadge, { backgroundColor: S.success + '14' }]}>
+            <Ionicons name="trending-up" size={10} color={S.success} />
+            <Text style={[tmc.trendText, { color: S.success }]}>Hot</Text>
+          </View>
+        )}
+      </View>
+      <Text style={[tmc.name, { color: D.text }]} numberOfLines={2}>{name}</Text>
+      <Text style={[tmc.qty, { color }]}>{qty} sold</Text>
+      <View style={[tmc.track, { backgroundColor: trackBg, marginTop: 6 }]}>
+        <View style={[tmc.fill, { width: `${barW}%` as any, backgroundColor: color }]} />
+      </View>
+    </View>
+  );
+}
+
+// ── NotificationRow — single notification list item ───────────────────────────
+function NotificationRow({ notif }: { notif: { id: number; title?: string; message?: string; type?: string; created_at?: string; read_at?: string | null } }) {
+  const { colors, isDark } = useTheme();
+  const D = colors.dashboard;
+  const isUnread = !notif.read_at;
+  const typeColor: Record<string, string> = {
+    order: S.primary, reservation: S.success, payment: S.warning,
+    alert: S.danger,  info: S.info,           system: '#64748B',
+  };
+  const color = typeColor[notif.type ?? 'info'] ?? S.primary;
+  const title = notif.title ?? notif.message ?? 'Notification';
+  const msg   = notif.title && notif.message ? notif.message : undefined;
+  return (
+    <View style={[nr.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : '#f3f4f6' }]}>
+      <View style={[nr.iconWrap, { backgroundColor: color + '14' }]}>
+        <Ionicons
+          name={notif.type === 'order' ? 'receipt-outline'
+              : notif.type === 'reservation' ? 'calendar-outline'
+              : notif.type === 'payment' ? 'cash-outline'
+              : notif.type === 'alert' ? 'warning-outline'
+              : 'notifications-outline'}
+          size={14} color={color}
+        />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[nr.title, { color: D.text, fontWeight: isUnread ? '700' : '500' }]} numberOfLines={1}>{title}</Text>
+        {msg ? <Text style={[nr.msg, { color: D.muted }]} numberOfLines={1}>{msg}</Text> : null}
+      </View>
+      <View style={{ alignItems: 'flex-end', gap: 3 }}>
+        {notif.created_at
+          ? <Text style={[nr.time, { color: D.muted }]}>{format(new Date(notif.created_at), 'HH:mm')}</Text>
+          : null}
+        {isUnread && <View style={[nr.dot, { backgroundColor: color }]} />}
+      </View>
+    </View>
+  );
+}
+
 const QUICK_LINKS = [
-  { label: 'POS',          icon: 'cart-outline',      route: '/(app)/pos',          color: C.dark    },
+  { label: 'POS',          icon: 'cart-outline',      route: '/(app)/pos',          color: S.dark    },
   { label: 'Kitchen',      icon: 'flame-outline',     route: '/(app)/kitchen',      color: '#f59e0b' },
-  { label: 'Orders',       icon: 'receipt-outline',   route: '/(app)/orders',       color: C.primary },
-  { label: 'Tables',       icon: 'grid-outline',      route: '/(app)/tables',       color: C.purple  },
-  { label: 'Customers',    icon: 'people-outline',    route: '/(app)/customers',    color: C.success },
-  { label: 'Reservations', icon: 'calendar-outline',  route: '/(app)/reservations', color: C.danger  },
-  { label: 'Expenses',     icon: 'wallet-outline',    route: '/(app)/expenses',     color: C.warning },
-  { label: 'Menu',         icon: 'restaurant-outline',route: '/(app)/menu',         color: C.info    },
+  { label: 'Orders',       icon: 'receipt-outline',   route: '/(app)/orders',       color: S.primary },
+  { label: 'Tables',       icon: 'grid-outline',      route: '/(app)/tables',       color: S.purple  },
+  { label: 'Customers',    icon: 'people-outline',    route: '/(app)/customers',    color: S.success },
+  { label: 'Wallet',       icon: 'wallet-outline',    route: '/(app)/wallet',       color: '#d97706' },
+  { label: 'Reservations', icon: 'calendar-outline',  route: '/(app)/reservations', color: S.danger  },
+  { label: 'Invoices',     icon: 'document-text-outline', route: '/(app)/invoices', color: '#4f46e5' },
+  { label: 'Payments',     icon: 'card-outline',      route: '/(app)/payments',     color: '#0284c7' },
+  { label: 'Coupons',      icon: 'pricetag-outline',  route: '/(app)/coupons',      color: '#db2777' },
+  { label: 'Expenses',     icon: 'wallet-outline',    route: '/(app)/expenses',     color: S.warning },
+  { label: 'Reports',      icon: 'bar-chart-outline', route: '/(app)/reports',      color: S.info    },
+  { label: 'Menu',         icon: 'restaurant-outline',route: '/(app)/menu',         color: S.info    },
+  { label: 'Staff',        icon: 'people-circle-outline', route: '/(app)/staff',  color: S.dark    },
+  { label: 'Settings',     icon: 'settings-outline',  route: '/(app)/settings',     color: '#64748b' },
+  { label: 'All Modules',  icon: 'apps-outline',      route: '/(app)/more',         color: '#1A2B1A' },
 ];
 
 // ── Main screen ───────────────────────────────────────────────────────────────
@@ -550,18 +911,32 @@ export default function DashboardScreen() {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservCount,  setReservCount]  = useState(0);
+  const [tables,       setTables]       = useState<RestaurantTable[]>([]);
+  const [notifications,setNotifications]= useState<{ id: number; title?: string; message?: string; type?: string; created_at?: string; read_at?: string | null }[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [refreshing,   setRefreshing]   = useState(false);
 
   const { restaurant, isOnline } = useAppStore();
-  const { colors }               = useTheme();
+  const { colors, isDark }       = useTheme();
+  const D                        = colors.dashboard;
   const { width }                = useWindowDimensions();
   const contentW = width >= 640 ? width - SIDEBAR : width;
   const isWide   = contentW >= 900;
   const cols4    = contentW >= 1200 ? 4 : contentW >= 800 ? 3 : contentW >= 500 ? 2 : 2;
   const cols6    = contentW >= 1200 ? 6 : contentW >= 800 ? 4 : contentW >= 500 ? 3 : 2;
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef         = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [qrAlert, setQrAlert]         = useState<Order[]>([]);
+  const qrAlertTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dashKnownIds  = useRef<Set<number>>(new Set());
+  const dashFirstLoad = useRef(true);
+
+  const showDashQRAlert = useCallback((orders: Order[]) => {
+    if (qrAlertTimer.current) clearTimeout(qrAlertTimer.current);
+    setQrAlert(orders);
+    playQRBeep();
+    qrAlertTimer.current = setTimeout(() => setQrAlert([]), 8000);
+  }, []);
 
   const load = useCallback(async (silent = false, p: Preset = preset) => {
     if (!silent) setLoading(true);
@@ -588,15 +963,12 @@ export default function DashboardScreen() {
       // ── 2. Summary ────────────────────────────────────────────────────────
       if (summaryRes.status === 'fulfilled') {
         const d = summaryRes.value.data ?? {};
-        // The API may nest under `data` key
         const raw = d.data ?? d;
 
-        // Bill types: server may return bill_types or we compute from sub-keys
         const bill_types: Record<string, { count: number; total: number }> = {};
         if (raw.bill_types) {
           Object.assign(bill_types, raw.bill_types);
         } else {
-          // fallback: look for individual keys like dine_in_count / dine_in_total
           for (const k of Object.keys(BILL_TYPE_CFG)) {
             bill_types[k] = {
               count: Number(raw[`${k}_count`] ?? raw[`${k}_orders`] ?? 0),
@@ -625,6 +997,7 @@ export default function DashboardScreen() {
           unpaid_total:       Number(raw.unpaid_total       ?? raw.unpaidTotal       ?? 0),
           cancelled_count:    Number(raw.cancelled_count    ?? raw.cancelledBills    ?? 0),
           free_bills:         Number(raw.free_bills         ?? raw.freeBills         ?? 0),
+          deleted_count:      Number(raw.deleted_count      ?? raw.deletedBills      ?? raw.deleted_bills ?? 0),
           reservations_count: Number(raw.reservations_count ?? raw.reservationsCount ?? 0),
           bill_types,
         });
@@ -648,7 +1021,6 @@ export default function DashboardScreen() {
           const [td, mo, pm, fi] = [toArr(tRes), toArr(mRes), toArr(pmRes), toArr(fRes)];
           setSummary(summaryFromOrders(td, mo, fi, pm, reservCount));
 
-          // Build chart from filtered orders (fallback)
           const days = last7Labels();
           const paid = (arr: Order[]) => arr.filter(o => o.payment_status === 'paid');
           const sm   = (arr: Order[]) => arr.reduce((s, o) => s + (Number(o.total) || 0), 0);
@@ -656,7 +1028,6 @@ export default function DashboardScreen() {
           setChartRev(days.map(d => sm(paid(fi.filter(o => (o.created_at ?? '').startsWith(d.date))))));
           setChartOrders(days.map(d => fi.filter(o => (o.created_at ?? '').startsWith(d.date)).length));
 
-          // Payment methods fallback
           const pmMap: Record<string, { count: number; total: number }> = {};
           for (const o of paid(fi)) {
             const k = ONLINE_SOURCES.includes(o.source ?? '') ? (o.source ?? 'other') : (o.payment_method ?? 'other');
@@ -669,11 +1040,10 @@ export default function DashboardScreen() {
             .map(([key, v]) => ({
               key, count: v.count, total: v.total,
               percent: pct(v.total, pmTotal),
-              ...(PM_CFG[key] ?? { label: key, icon: 'wallet-outline', color: C.muted }),
+              ...(PM_CFG[key] ?? { label: key, icon: 'wallet-outline', color: '#64748B' }),
             }))
             .sort((a, b) => b.total - a.total));
 
-          // Top items fallback
           const itemMap: Record<string, number> = {};
           for (const o of fi) {
             for (const item of o.items ?? []) {
@@ -690,12 +1060,15 @@ export default function DashboardScreen() {
       // ── 3. Sales chart (7-day) ────────────────────────────────────────────
       if (salesRes.status === 'fulfilled') {
         const raw  = salesRes.value.data ?? {};
-        const rows: SalesDay[] = Array.isArray(raw.data) ? raw.data : (Array.isArray(raw) ? raw : []);
+        // API returns { data: [...entries], meta: {...} }
+        const rows: SalesDay[] = Array.isArray(raw.data) ? raw.data
+          : Array.isArray(raw.data?.entries) ? raw.data.entries
+          : Array.isArray(raw) ? raw : [];
         const days = last7Labels();
         setChartDays(days.map(d => d.label));
         setChartRev(days.map(d => {
           const row = rows.find(r => r.date === d.date) as any;
-          return Number(row?.total_sales ?? row?.sales ?? 0);
+          return Number(row?.total_sales ?? row?.revenue ?? row?.sales ?? 0);
         }));
         setChartOrders(days.map(d => {
           const row = rows.find(r => r.date === d.date) as any;
@@ -721,7 +1094,7 @@ export default function DashboardScreen() {
         setPayMethods(rows
           .map(r => {
             const key  = (r.payment_method ?? r.method ?? 'other').toLowerCase();
-            const cfg  = PM_CFG[key] ?? { label: key, icon: 'wallet-outline', color: C.muted };
+            const cfg  = PM_CFG[key] ?? { label: key, icon: 'wallet-outline', color: '#64748B' };
             return { key, ...cfg, count: Number(r.count ?? 0), total: Number(r.total ?? 0), percent: pct(Number(r.total ?? 0), pmTotal) };
           })
           .sort((a, b) => b.total - a.total));
@@ -747,6 +1120,16 @@ export default function DashboardScreen() {
           : (Array.isArray(aoRes.data) ? aoRes.data : []);
         setActiveOrders(aoArr.slice(0, 10));
 
+        // QR order detection on background polls
+        if (dashFirstLoad.current) {
+          aoArr.forEach(o => dashKnownIds.current.add(o.id));
+          dashFirstLoad.current = false;
+        } else if (silent) {
+          const newQR = aoArr.filter(o => o.source === 'qr' && !dashKnownIds.current.has(o.id));
+          if (newQR.length > 0) showDashQRAlert(newQR);
+          aoArr.forEach(o => dashKnownIds.current.add(o.id));
+        }
+
         const rrRes = await ordersApi.list({ per_page: 8 });
         const rrArr: Order[] = Array.isArray(rrRes.data?.data) ? rrRes.data.data
           : (Array.isArray(rrRes.data) ? rrRes.data : []);
@@ -761,8 +1144,24 @@ export default function DashboardScreen() {
         const rData = rRes.data?.data ?? rRes.data ?? [];
         const rArr: Reservation[] = Array.isArray(rData) ? rData : [];
         setReservations(rArr.slice(0, 5));
-        setReservCount(rRes.data?.total ?? rArr.length);
+        // Prefer the summary count (filtered by preset) over the raw list count.
+        // Only fall back to the reservation list total when the summary didn't load.
+        setReservCount(prev => prev || (rRes.data?.total ?? rArr.length));
       } catch { /* reservations optional */ }
+
+      // ── 9. Tables ─────────────────────────────────────────────────────────
+      try {
+        const tblRes = await client.get('/tables');
+        const tbls: RestaurantTable[] = tblRes.data?.data ?? tblRes.data ?? [];
+        setTables(Array.isArray(tbls) ? tbls : []);
+      } catch { /* tables optional */ }
+
+      // ── 10. Notifications ─────────────────────────────────────────────────
+      try {
+        const notifRes = await client.get('/notifications', { params: { per_page: 10 } });
+        const notifs = notifRes.data?.data ?? notifRes.data ?? [];
+        setNotifications(Array.isArray(notifs) ? notifs.slice(0, 10) : []);
+      } catch { /* notifications optional */ }
 
     } catch (e) {
       console.warn('Dashboard load:', e);
@@ -783,31 +1182,68 @@ export default function DashboardScreen() {
     setRefreshing(false);
   }
 
+  // Only update state — the useEffect [preset] dependency triggers load automatically.
+  // Calling load() here AND relying on useEffect was causing every filter tap to
+  // fire two back-to-back API bursts (the direct call + the effect re-run).
   function changePreset(p: Preset) {
     setPreset(p);
-    load(false, p);
   }
 
   const go = (route: string) => router.push(route as any);
 
+  // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.dashboard.bg, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-        <ActivityIndicator color={C.gold} size="large" />
-        <Text style={{ color: C.muted, fontSize: 13 }}>Loading dashboard…</Text>
+      <View style={{ flex: 1, backgroundColor: D.bg, alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+        <View style={{
+          width: 80, height: 80, borderRadius: 22,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f8f9fb',
+          borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb',
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <ActivityIndicator color={S.primary} size="large" />
+        </View>
+        <View style={{ alignItems: 'center', gap: 5 }}>
+          <Text style={{ color: D.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.3 }}>Loading Dashboard</Text>
+          <Text style={{ color: D.muted, fontSize: 12.5 }}>Fetching your restaurant data…</Text>
+        </View>
       </View>
     );
   }
 
-  const st    = summary;
-  const cardS = { backgroundColor: colors.dashboard.white, borderColor: colors.dashboard.border };
+  const st       = summary;
+  const cardS    = { backgroundColor: D.white, borderColor: D.border, shadowColor: D.cardShadow };
   const netProfit = (st?.total_sales ?? 0) - expenses.total;
+  const dividerColor = isDark ? 'rgba(255,255,255,0.04)' : '#f3f4f6';
 
   return (
+    <View style={{ flex: 1, backgroundColor: D.bg }}>
+
+      {/* ── QR Order notification banner ── */}
+      {qrAlert.length > 0 && (
+        <Pressable
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14, zIndex: 200, backgroundColor: '#7c3aed' }}
+          onPress={() => setQrAlert([])}
+        >
+          <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="qr-code-outline" size={20} color="#fff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.2 }}>
+              {qrAlert.length === 1 ? 'New QR Order!' : `${qrAlert.length} New QR Orders!`}
+            </Text>
+            <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 3 }} numberOfLines={1}>
+              {qrAlert.map(o => o.order_number ?? `#${o.id}`).join(' · ')} · Tap to dismiss
+            </Text>
+          </View>
+          <Ionicons name="close" size={18} color="rgba(255,255,255,0.8)" />
+        </Pressable>
+      )}
+
     <ScrollView
-      style={[s.shell, { backgroundColor: colors.dashboard.bg }]}
+      style={{ flex: 1, backgroundColor: D.bg }}
       contentContainerStyle={{ flexGrow: 1 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.gold} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={S.gold} />}
       showsVerticalScrollIndicator={false}
     >
       {/* ── Hero header ── */}
@@ -825,8 +1261,8 @@ export default function DashboardScreen() {
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <View style={[s.onlinePill, { backgroundColor: isOnline ? 'rgba(20,181,29,0.15)' : 'rgba(239,68,68,0.15)' }]}>
-            <View style={[s.onlineDot, { backgroundColor: isOnline ? C.success : C.danger }]} />
-            <Text style={[s.onlineText, { color: isOnline ? C.success : C.danger }]}>
+            <View style={[s.onlineDot, { backgroundColor: isOnline ? S.success : S.danger }]} />
+            <Text style={[s.onlineText, { color: isOnline ? S.success : S.danger }]}>
               {isOnline ? 'Online' : 'Offline'}
             </Text>
           </View>
@@ -836,47 +1272,59 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      {/* ── Date-range filter chips ── */}
-      <View style={[s.filterBar, { backgroundColor: colors.dashboard.white, borderColor: colors.dashboard.border }]}>
-        <Ionicons name="calendar-outline" size={14} color={C.muted} style={{ marginRight: 4 }} />
-        {PRESETS.map(p => (
-          <TouchableOpacity
-            key={p.key}
-            style={[s.filterChip, preset === p.key && s.filterChipActive]}
-            onPress={() => changePreset(p.key)}
-          >
-            <Text style={[s.filterChipText, preset === p.key && s.filterChipTextActive]}>
-              {p.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-        <TouchableOpacity style={s.filterRefresh} onPress={() => changePreset('today')}>
-          <Ionicons name="refresh-outline" size={13} color={C.muted} />
-          <Text style={s.filterRefreshText}>Today</Text>
+      {/* ── Date-range filter — segmented chips ── */}
+      <View style={[s.filterBar, { backgroundColor: D.white, borderColor: D.border }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: 'center' }}>
+          {PRESETS.map(p => (
+            <TouchableOpacity
+              key={p.key}
+              style={[
+                s.filterChip,
+                preset === p.key
+                  ? { backgroundColor: S.primary, borderColor: S.primary }
+                  : { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f4f4f5', borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e4e4e7' },
+              ]}
+              onPress={() => changePreset(p.key)}
+              activeOpacity={0.8}
+            >
+              <Text style={[s.filterChipText, { color: preset === p.key ? '#fff' : D.muted }]}>
+                {p.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <TouchableOpacity
+          style={[s.filterRefreshBtn, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e4e4e7' }]}
+          onPress={handleRefresh}
+        >
+          <Ionicons name="refresh-outline" size={14} color={D.muted} />
         </TouchableOpacity>
       </View>
 
-      <View style={s.body}>
+      <View style={[s.body, { paddingTop: 16 }]}>
 
         {/* ── ROW 1: 3 BigCards ── */}
         <View style={s.row}>
           <BigCard
             label="Today's Sales"      value={fmtFull(st?.today_sales ?? 0)}
             sub={`${st?.today_orders ?? 0} orders today`}
-            icon="calendar-outline"        color={C.primary} bg={C.primary + '18'}
+            icon="calendar-outline"        color={S.primary} bg={S.primary + '20'}
+            subColor={S.warning}
             onPress={() => go('/(app)/orders')}
           />
           <BigCard
             label="This Month's Sales" value={fmtFull(st?.month_sales ?? 0)}
             sub={`${st?.month_orders ?? 0} orders this month`}
-            icon="calendar-number-outline" color={C.success} bg={C.success + '18'}
+            icon="calendar-number-outline" color={S.success} bg={S.success + '20'}
             growthPct={st?.sales_growth_pct}
+            subColor={S.warning}
             onPress={() => go('/(app)/orders')}
           />
           <BigCard
             label="Total Sales"        value={fmtFull(st?.total_sales ?? 0)}
             sub={`${st?.total_orders ?? 0} total orders`}
-            icon="trending-up-outline"     color={C.purple} bg={C.purple + '18'}
+            icon="trending-up-outline"     color={S.purple} bg={S.purple + '20'}
+            subColor={S.warning}
             onPress={() => go('/(app)/orders')}
           />
         </View>
@@ -884,14 +1332,14 @@ export default function DashboardScreen() {
         {/* ── ROW 1b: 6 Sales Breakdown SmallCards ── */}
         <View style={s.section}>
           <SectionHeader title="Sales Breakdown" />
-          <View style={[s.grid, { gap: 8 }]}>
+          <View style={s.grid}>
             {[
-              { label: 'Offline Orders', value: st?.offline_orders ?? 0,         icon: 'desktop-outline',   color: C.success, bg: C.success + '18', sub: 'non-aggregator' },
-              { label: 'Online Orders',  value: st?.online_orders  ?? 0,         icon: 'bicycle-outline',   color: C.danger,  bg: C.danger  + '18', sub: 'Zomato & Swiggy' },
-              { label: 'Offline Sale',   value: fmtMoney(st?.offline_sales ?? 0),icon: 'cash-outline',      color: C.warning, bg: C.warning + '18', sub: 'excl. GST' },
-              { label: 'Online Sale',    value: fmtMoney(st?.online_sales  ?? 0),icon: 'globe-outline',     color: C.primary, bg: C.primary + '18', sub: 'aggregator paid' },
-              { label: 'Net Sale',       value: fmtMoney(st?.net_sales     ?? 0),icon: 'analytics-outline', color: C.orange,  bg: C.orange  + '18', sub: 'excl. GST' },
-              { label: 'Total Sale',     value: fmtMoney(st?.total_sales   ?? 0),icon: 'wallet-outline',    color: C.purple,  bg: C.purple  + '18', sub: 'incl. GST' },
+              { label: 'Offline Orders', value: st?.offline_orders ?? 0,         icon: 'desktop-outline',   color: S.success, bg: S.success + '20', sub: 'non-aggregator' },
+              { label: 'Online Orders',  value: st?.online_orders  ?? 0,         icon: 'bicycle-outline',   color: S.danger,  bg: S.danger  + '20', sub: 'Zomato & Swiggy' },
+              { label: 'Offline Sale',   value: fmtMoney(st?.offline_sales ?? 0),icon: 'cash-outline',      color: S.warning, bg: S.warning + '20', sub: 'excl. GST' },
+              { label: 'Online Sale',    value: fmtMoney(st?.online_sales  ?? 0),icon: 'globe-outline',     color: S.primary, bg: S.primary + '20', sub: 'aggregator paid' },
+              { label: 'Net Sale',       value: fmtMoney(st?.net_sales     ?? 0),icon: 'analytics-outline', color: S.orange,  bg: S.orange  + '20', sub: 'Excl. GST' },
+              { label: 'Total Sale',     value: fmtMoney(st?.total_sales   ?? 0),icon: 'wallet-outline',    color: S.purple,  bg: S.purple  + '20', sub: 'Incl. GST' },
             ].map((c, i) => (
               <View key={i} style={{ width: `${100 / cols6}%` as any, padding: 4 }}>
                 <SmallCard label={c.label} value={c.value} sub={c.sub}
@@ -902,49 +1350,79 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ── ROW 2: 5 Key Metric SmallCards ── */}
+        {/* ── ROW 2: 5 Key Metric SmallCards — matches CSPos exactly ── */}
         <View style={s.section}>
           <SectionHeader title="Key Metrics" />
-          <View style={[s.grid, { gap: 8 }]}>
-            {[
-              { label: 'Total Orders',  value: st?.total_orders      ?? 0,              icon: 'cube-outline',         color: C.orange,  bg: C.orange  + '18', danger: false },
-              { label: 'Avg Value',     value: fmtMoney(st?.avg_order_value ?? 0),      icon: 'diamond-outline',      color: C.info,    bg: C.info    + '18', danger: false, sub: 'per paid order' },
-              { label: 'Total Tax',     value: fmtMoney(st?.total_tax       ?? 0),      icon: 'receipt-outline',      color: C.warning, bg: C.warning + '18', danger: false },
-              { label: 'Reservations',  value: st?.reservations_count ?? reservCount,   icon: 'calendar-outline',     color: C.success, bg: C.success + '18', danger: false },
-              { label: 'Unpaid Orders', value: st?.unpaid_count       ?? 0,             icon: 'alert-circle-outline', color: C.danger,  bg: C.danger  + '18',
+          <View style={s.grid}>
+            {([
+              { label: 'Total Orders',   value: st?.total_orders      ?? 0,            icon: 'cube-outline',         color: S.orange,  bg: S.orange  + '20', danger: false, route: '/(app)/orders' },
+              { label: 'Average Value',  value: fmtMoney(st?.avg_order_value ?? 0),    icon: 'diamond-outline',      color: S.info,    bg: S.info    + '20', danger: false, route: '/(app)/orders' },
+              { label: 'Total Tax',      value: fmtMoney(st?.total_tax       ?? 0),    icon: 'receipt-outline',      color: S.warning, bg: S.warning + '20', danger: false, route: '/(app)/orders' },
+              { label: 'Reservations',   value: st?.reservations_count ?? reservCount, icon: 'calendar-outline',     color: S.success, bg: S.success + '20', danger: false, route: '/(app)/reservations' },
+              { label: 'Unpaid Orders',  value: st?.unpaid_count ?? 0,                 icon: 'alert-circle-outline', color: S.danger,  bg: S.danger  + '20',
                 danger: (st?.unpaid_count ?? 0) > 0,
-                sub: (st?.unpaid_count ?? 0) > 0 ? fmtMoney(st?.unpaid_total ?? 0) + ' pending' : undefined },
-            ].map((c, i) => (
-              <View key={i} style={{ width: `${100 / 5}%` as any, padding: 4 }}>
-                <SmallCard label={c.label} value={c.value} sub={(c as any).sub}
+                sub: (st?.unpaid_count ?? 0) > 0 ? fmtMoney(st?.unpaid_total ?? 0) + ' pending' : undefined,
+                route: '/(app)/orders' },
+            ] as { label: string; value: string | number; icon: string; color: string; bg: string; danger: boolean; sub?: string; route: string }[]).map((c, i) => (
+              <View key={i} style={{ width: `${100 / Math.min(5, cols6)}%` as any, padding: 4 }}>
+                <SmallCard label={c.label} value={c.value} sub={c.sub}
                   icon={c.icon} color={c.color} bg={c.bg} danger={c.danger}
-                  onPress={() => go(i === 3 ? '/(app)/reservations' : '/(app)/orders')} />
+                  onPress={() => go(c.route)} />
               </View>
             ))}
           </View>
         </View>
 
-        {/* ── Expense Summary (csPos: shows total expenses + net profit on dashboard) ── */}
+        {/* ── Tables Available ── */}
+        {tables.length > 0 && (
+          <View style={s.section}>
+            <SectionHeader title="Tables Available" action="Manage Tables" onAction={() => go('/(app)/tables')} />
+            {/* 3 status summary SmallCards */}
+            <View style={s.grid}>
+              {[
+                { label: 'Available', value: tables.filter(t => t.status === 'available').length, icon: 'checkmark-circle-outline', color: S.success, bg: S.success + '18', sub: 'tables free'   },
+                { label: 'Occupied',  value: tables.filter(t => t.status === 'occupied').length,  icon: 'people-outline',           color: S.danger,  bg: S.danger  + '18', sub: 'tables in use' },
+                { label: 'Reserved',  value: tables.filter(t => t.status === 'reserved').length,  icon: 'bookmark-outline',         color: S.warning, bg: S.warning + '18', sub: 'tables booked' },
+              ].map((c, i) => (
+                <View key={i} style={{ width: '33.33%', padding: 4 }}>
+                  <SmallCard label={c.label} value={c.value} sub={c.sub}
+                    icon={c.icon} color={c.color} bg={c.bg}
+                    onPress={() => go('/(app)/tables')} />
+                </View>
+              ))}
+            </View>
+            {/* Table card grid — 2-4 columns, matches CSPos web layout */}
+            <View style={[s.grid, { marginTop: 4 }]}>
+              {tables.map(tbl => (
+                <View key={tbl.id} style={{ width: `${100 / cols4}%` as any, padding: 4 }}>
+                  <TableChip table={tbl} />
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* ── Expense Summary ── */}
         <View style={s.section}>
           <SectionHeader title="Expense Summary" action="View Expenses" onAction={() => go('/(app)/expenses')} />
-          <View style={[s.grid, { gap: 8 }]}>
+          <View style={s.grid}>
             {[
               {
                 label: 'Total Expenses', value: fmtMoney(expenses.total),
                 sub: `${expenses.count} expense${expenses.count !== 1 ? 's' : ''}`,
-                icon: 'wallet-outline', color: C.danger, bg: C.danger + '18',
+                icon: 'wallet-outline', color: S.danger, bg: S.danger + '18',
               },
               {
                 label: 'Tax on Expenses', value: fmtMoney(expenses.tax_total),
                 sub: 'included in total',
-                icon: 'receipt-outline', color: C.warning, bg: C.warning + '18',
+                icon: 'receipt-outline', color: S.warning, bg: S.warning + '18',
               },
               {
                 label: 'Net Profit', value: fmtMoney(netProfit),
                 sub: 'sales − expenses',
                 icon: netProfit >= 0 ? 'trending-up-outline' : 'trending-down-outline',
-                color: netProfit >= 0 ? C.success : C.danger,
-                bg: (netProfit >= 0 ? C.success : C.danger) + '18',
+                color: netProfit >= 0 ? S.success : S.danger,
+                bg: (netProfit >= 0 ? S.success : S.danger) + '18',
               },
             ].map((c, i) => (
               <View key={i} style={{ width: `${100 / 3}%` as any, padding: 4 }}>
@@ -959,54 +1437,37 @@ export default function DashboardScreen() {
         {/* ── Sale Analysis + Payment Types ── */}
         <View style={s.section}>
           <View style={[s.row, { gap: 12, alignItems: 'flex-start' }]}>
-            {/* Bar chart — Last 7 days */}
+            {/* Line chart — Last 7 days, dual-axis (Revenue + Orders) */}
             <View style={[s.card, cardS, { flex: isWide ? 2 : 1 }]}>
               <View style={s.cardHeader}>
                 <View>
-                  <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Sale Analysis</Text>
-                  <Text style={[s.cardSub, { color: C.muted }]}>Last 7 days · Revenue & Orders</Text>
+                  <Text style={[s.cardTitle, { color: D.text }]}>Sale Analysis</Text>
+                  <Text style={[s.cardSub, { color: D.muted }]}>Last 7 Days</Text>
                 </View>
               </View>
-              <BarChart labels={chartDays} data={chartRev} orderCounts={chartOrders} />
+              <LineChart labels={chartDays} revData={chartRev} ordData={chartOrders} />
             </View>
 
-            {/* Payment types — right panel (desktop) */}
+            {/* Payment Type donut — right panel (desktop) */}
             {isWide && (
               <View style={[s.card, cardS, { flex: 1 }]}>
-                <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Payment Types</Text>
-                <Text style={[s.cardSub, { color: C.muted }]}>By payment method</Text>
-                <View style={{ marginTop: 12, gap: 8 }}>
-                  {payMethods.slice(0, 6).map((pm, i) => (
-                    <ProgressItem key={i}
-                      label={pm.label} sub={`${pm.count} orders`}
-                      value={fmtMoney(pm.total)} percent={pm.percent}
-                      color={pm.color} icon={pm.icon}
-                    />
-                  ))}
-                  {payMethods.length === 0 && (
-                    <Text style={{ color: C.muted, fontSize: 12, textAlign: 'center', paddingVertical: 16 }}>
-                      No paid orders yet
-                    </Text>
-                  )}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <Ionicons name="pie-chart-outline" size={14} color={D.muted} />
+                  <Text style={[s.cardTitle, { color: D.text }]}>Payment Type</Text>
                 </View>
+                <DonutChart methods={payMethods} totalRevenue={st?.total_sales ?? 0} />
               </View>
             )}
           </View>
 
-          {/* Payment types — below chart (mobile) */}
-          {!isWide && payMethods.length > 0 && (
+          {/* Payment Type donut — below chart (mobile) */}
+          {!isWide && (
             <View style={[s.card, cardS, { marginTop: 12 }]}>
-              <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Payment Types</Text>
-              <Text style={[s.cardSub, { color: C.muted }]}>By payment method</Text>
-              <View style={{ marginTop: 12, gap: 8 }}>
-                {payMethods.slice(0, 6).map((pm, i) => (
-                  <ProgressItem key={i}
-                    label={pm.label} sub={`${pm.count} orders`}
-                    value={fmtMoney(pm.total)} percent={pm.percent}
-                    color={pm.color} icon={pm.icon}
-                  />
-                ))}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <Ionicons name="pie-chart-outline" size={14} color={D.muted} />
+                <Text style={[s.cardTitle, { color: D.text }]}>Payment Type</Text>
               </View>
+              <DonutChart methods={payMethods} totalRevenue={st?.total_sales ?? 0} />
             </View>
           )}
         </View>
@@ -1018,14 +1479,14 @@ export default function DashboardScreen() {
             <View style={[s.card, cardS, { flex: isWide ? 2 : 1 }]}>
               <View style={s.cardHeader}>
                 <View>
-                  <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Bill Type Breakdown</Text>
-                  <Text style={[s.cardSub, { color: C.muted }]}>Orders by service type</Text>
+                  <Text style={[s.cardTitle, { color: D.text }]}>Bill Type Breakdown</Text>
+                  <Text style={[s.cardSub, { color: D.muted }]}>Orders by service type</Text>
                 </View>
                 <TouchableOpacity onPress={() => go('/(app)/orders')}>
-                  <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700' }}>View Orders</Text>
+                  <Text style={{ color: S.primary, fontSize: 12, fontWeight: '700' }}>View Orders</Text>
                 </TouchableOpacity>
               </View>
-              <View style={[s.grid, { gap: 8, marginTop: 8 }]}>
+              <View style={[s.grid, { marginTop: 8 }]}>
                 {Object.entries(BILL_TYPE_CFG).map(([key, cfg]) => {
                   const bt = st?.bill_types?.[key] ?? { count: 0, total: 0 };
                   return (
@@ -1040,19 +1501,19 @@ export default function DashboardScreen() {
 
             {/* Bill Status */}
             <View style={[s.card, cardS, { flex: 1 }]}>
-              <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Bill Status</Text>
-              <Text style={[s.cardSub, { color: C.muted }]}>Special bill types</Text>
+              <Text style={[s.cardTitle, { color: D.text }]}>Bill Status</Text>
+              <Text style={[s.cardSub, { color: D.muted }]}>Special bill types</Text>
               <View style={{ marginTop: 10 }}>
                 {[
-                  { label: 'Cancelled Bills', value: st?.cancelled_count ?? 0, icon: 'close-circle-outline', color: C.danger  },
-                  { label: 'Free Bills',       value: st?.free_bills     ?? 0, icon: 'gift-outline',          color: C.success },
-                  { label: 'Deleted Bills',    value: 0,                        icon: 'trash-outline',          color: C.muted   },
+                  { label: 'Cancelled Bills', value: st?.cancelled_count ?? 0, icon: 'close-circle-outline', color: S.danger  },
+                  { label: 'Free Bills',       value: st?.free_bills     ?? 0, icon: 'gift-outline',          color: S.success },
+                  { label: 'Deleted Bills',    value: st?.deleted_count  ?? 0, icon: 'trash-outline',          color: '#64748B' },
                 ].map((item, i, arr) => (
-                  <View key={i} style={[bsR.row, i < arr.length - 1 && bsR.rowBorder]}>
+                  <View key={i} style={[bsR.row, i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: dividerColor }]}>
                     <View style={[bsR.avatar, { backgroundColor: item.color + '18' }]}>
                       <Ionicons name={item.icon as any} size={14} color={item.color} />
                     </View>
-                    <Text style={bsR.label}>{item.label}</Text>
+                    <Text style={[bsR.label, { color: D.text }]}>{item.label}</Text>
                     <View style={[bsR.badge, { backgroundColor: item.color }]}>
                       <Text style={bsR.badgeText}>{item.value}</Text>
                     </View>
@@ -1067,11 +1528,25 @@ export default function DashboardScreen() {
         {payMethods.length > 0 && (
           <View style={s.section}>
             <SectionHeader title="Payment Methods" action="View Payments" onAction={() => go('/(app)/payments')} />
-            <View style={[s.grid, { gap: 8 }]}>
+            <View style={s.grid}>
               {payMethods.map((pm, i) => (
                 <View key={i} style={{ width: `${100 / Math.min(4, cols6)}%` as any, padding: 4 }}>
                   <PaymentCard label={pm.label} icon={pm.icon} color={pm.color}
                     count={pm.count} total={pm.total} percent={pm.percent} />
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* ── Trending Menus ── */}
+        {topItems.length > 0 && (
+          <View style={s.section}>
+            <SectionHeader title="Trending Menus" action="View Menu" onAction={() => go('/(app)/menu' as any)} />
+            <View style={s.grid}>
+              {topItems.map((item, i) => (
+                <View key={i} style={{ width: `${100 / Math.min(cols6, 6)}%` as any, padding: 4 }}>
+                  <TrendingMenuCard name={item.name} qty={item.qty} rank={i + 1} maxQty={topItems[0]?.qty ?? 1} />
                 </View>
               ))}
             </View>
@@ -1083,13 +1558,16 @@ export default function DashboardScreen() {
           <View style={[s.row, { gap: 12, alignItems: 'flex-start' }]}>
             {/* Top Items */}
             <View style={[s.card, cardS, { flex: isWide ? 2 : 1 }]}>
-              <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Top Selling Items</Text>
-              <Text style={[s.cardSub, { color: C.muted }]}>By quantity ordered</Text>
+              <Text style={[s.cardTitle, { color: D.text }]}>Top Selling Items</Text>
+              <Text style={[s.cardSub, { color: D.muted }]}>By quantity ordered</Text>
               {topItems.length > 0 ? (
                 <>
-                  <View style={moB.banner}>
+                  <View style={[moB.banner, {
+                    backgroundColor: isDark ? 'rgba(22,163,74,0.12)' : '#f0fdf4',
+                    borderColor: isDark ? 'rgba(22,163,74,0.2)' : '#bbf7d0',
+                  }]}>
                     <Ionicons name="star" size={13} color="#16a34a" />
-                    <Text style={moB.text}>
+                    <Text style={[moB.text, { color: isDark ? '#4ade80' : '#166534' }]}>
                       Most Ordered: <Text style={moB.name}>{topItems[0]?.name}</Text>
                     </Text>
                   </View>
@@ -1101,9 +1579,10 @@ export default function DashboardScreen() {
                   </View>
                 </>
               ) : (
-                <Text style={{ color: C.muted, fontSize: 12, textAlign: 'center', paddingVertical: 20 }}>
-                  No order items yet
-                </Text>
+                <View style={s.emptyBox}>
+                  <Ionicons name="restaurant-outline" size={32} color={D.muted + '60'} />
+                  <Text style={[s.emptyText, { color: D.muted }]}>No order items yet</Text>
+                </View>
               )}
             </View>
 
@@ -1111,11 +1590,11 @@ export default function DashboardScreen() {
             <View style={[s.card, cardS, { flex: 1 }]}>
               <View style={s.cardHeader}>
                 <View>
-                  <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Active Orders</Text>
-                  <Text style={[s.cardSub, { color: C.muted }]}>{activeOrders.length} in-flight</Text>
+                  <Text style={[s.cardTitle, { color: D.text }]}>Active Orders</Text>
+                  <Text style={[s.cardSub, { color: D.muted }]}>{activeOrders.length} in-flight</Text>
                 </View>
                 <TouchableOpacity onPress={() => go('/(app)/orders')}>
-                  <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700' }}>View All</Text>
+                  <Text style={{ color: S.primary, fontSize: 12, fontWeight: '700' }}>View All</Text>
                 </TouchableOpacity>
               </View>
               {activeOrders.length > 0 ? (
@@ -1124,57 +1603,46 @@ export default function DashboardScreen() {
                 </View>
               ) : (
                 <View style={s.emptyBox}>
-                  <Ionicons name="checkmark-circle-outline" size={32} color="#d1d5db" />
-                  <Text style={s.emptyText}>No active orders</Text>
+                  <Ionicons name="checkmark-circle-outline" size={32} color={D.muted + '60'} />
+                  <Text style={[s.emptyText, { color: D.muted }]}>No active orders</Text>
                 </View>
               )}
               {activeOrders.length > 0 && (
                 <TouchableOpacity
-                  style={[s.viewAllBtn, { marginTop: 10, borderColor: colors.dashboard.border }]}
+                  style={[s.viewAllBtn, { marginTop: 10, borderColor: D.border }]}
                   onPress={() => go('/(app)/orders')}
                 >
-                  <Text style={[s.viewAllText, { color: C.primary }]}>View All Orders</Text>
+                  <Text style={[s.viewAllText, { color: S.primary }]}>View All Orders</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
         </View>
 
-        {/* ── Recent Orders ── */}
-        <View style={s.section}>
-          <View style={[s.card, cardS]}>
-            <View style={s.cardHeader}>
-              <View>
-                <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Recent Orders</Text>
-                <Text style={[s.cardSub, { color: C.muted }]}>Latest orders</Text>
-              </View>
-              <TouchableOpacity onPress={() => go('/(app)/orders')}>
-                <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700' }}>See All</Text>
-              </TouchableOpacity>
+        {/* ── Notifications ── */}
+        {notifications.length > 0 && (
+          <View style={s.section}>
+            <SectionHeader title="Notifications"
+              action={`${notifications.filter(n => !n.read_at).length} unread`}
+              onAction={() => go('/(app)/notifications')} />
+            <View style={[s.card, cardS]}>
+              {notifications.map((n, i) => (
+                <NotificationRow key={n.id ?? i} notif={n} />
+              ))}
             </View>
-            {recentOrders.length > 0 ? (
-              <View style={{ gap: 1, marginTop: 8 }}>
-                {recentOrders.map(o => <RecentOrderRow key={o.id} order={o} />)}
-              </View>
-            ) : (
-              <View style={s.emptyBox}>
-                <Ionicons name="receipt-outline" size={32} color="#d1d5db" />
-                <Text style={s.emptyText}>No orders yet</Text>
-              </View>
-            )}
           </View>
-        </View>
+        )}
 
-        {/* ── Upcoming Reservations ── */}
+        {/* ── Upcoming Reservations (prominent position) ── */}
         <View style={s.section}>
           <View style={[s.card, cardS]}>
             <View style={s.cardHeader}>
               <View>
-                <Text style={[s.cardTitle, { color: colors.dashboard.text }]}>Upcoming Reservations</Text>
-                <Text style={[s.cardSub, { color: C.muted }]}>{reservCount} upcoming</Text>
+                <Text style={[s.cardTitle, { color: D.text }]}>Upcoming Reservations</Text>
+                <Text style={[s.cardSub, { color: D.muted }]}>{reservCount} upcoming</Text>
               </View>
               <TouchableOpacity onPress={() => go('/(app)/reservations')}>
-                <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700' }}>See All</Text>
+                <Text style={{ color: S.primary, fontSize: 12, fontWeight: '700' }}>See All</Text>
               </TouchableOpacity>
             </View>
             {reservations.length > 0 ? (
@@ -1183,8 +1651,39 @@ export default function DashboardScreen() {
               </View>
             ) : (
               <View style={s.emptyBox}>
-                <Ionicons name="calendar-outline" size={32} color="#d1d5db" />
-                <Text style={s.emptyText}>No upcoming reservations</Text>
+                <Ionicons name="calendar-outline" size={32} color={D.muted + '60'} />
+                <Text style={[s.emptyText, { color: D.muted }]}>No upcoming reservations</Text>
+              </View>
+            )}
+            {reservations.length > 0 && (
+              <TouchableOpacity style={[s.viewAllBtn, { marginTop: 10, borderColor: D.border }]}
+                onPress={() => go('/(app)/reservations')}>
+                <Text style={[s.viewAllText, { color: S.primary }]}>View All Reservations</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* ── Recent Orders ── */}
+        <View style={s.section}>
+          <View style={[s.card, cardS]}>
+            <View style={s.cardHeader}>
+              <View>
+                <Text style={[s.cardTitle, { color: D.text }]}>Recent Orders</Text>
+                <Text style={[s.cardSub, { color: D.muted }]}>Latest orders</Text>
+              </View>
+              <TouchableOpacity onPress={() => go('/(app)/orders')}>
+                <Text style={{ color: S.primary, fontSize: 12, fontWeight: '700' }}>See All</Text>
+              </TouchableOpacity>
+            </View>
+            {recentOrders.length > 0 ? (
+              <View style={{ gap: 1, marginTop: 8 }}>
+                {recentOrders.map(o => <RecentOrderRow key={o.id} order={o} />)}
+              </View>
+            ) : (
+              <View style={s.emptyBox}>
+                <Ionicons name="receipt-outline" size={32} color={D.muted + '60'} />
+                <Text style={[s.emptyText, { color: D.muted }]}>No orders yet</Text>
               </View>
             )}
           </View>
@@ -1193,14 +1692,14 @@ export default function DashboardScreen() {
         {/* ── Quick Access ── */}
         <View style={s.section}>
           <SectionHeader title="Quick Access" />
-          <View style={[s.grid, { gap: 8 }]}>
+          <View style={s.grid}>
             {QUICK_LINKS.map(ql => (
               <View key={ql.route} style={{ width: `${100 / cols4}%` as any, padding: 4 }}>
-                <TouchableOpacity style={[qlS.card, cardS]} onPress={() => go(ql.route)} activeOpacity={0.85}>
-                  <View style={[qlS.icon, { backgroundColor: ql.color + '15' }]}>
+                <TouchableOpacity style={[qlS.card, cardS]} onPress={() => go(ql.route)} activeOpacity={0.82}>
+                  <View style={[qlS.icon, { backgroundColor: ql.color + '12' }]}>
                     <Ionicons name={ql.icon as any} size={22} color={ql.color} />
                   </View>
-                  <Text style={qlS.label}>{ql.label}</Text>
+                  <Text style={[qlS.label, { color: D.text }]}>{ql.label}</Text>
                 </TouchableOpacity>
               </View>
             ))}
@@ -1208,31 +1707,31 @@ export default function DashboardScreen() {
         </View>
 
       </View>
-      <View style={{ height: 32 }} />
+      <View style={{ height: 48 }} />
     </ScrollView>
+    </View>
   );
 }
 
-// ── StyleSheets ───────────────────────────────────────────────────────────────
+// ── StyleSheets (layout-only; colours applied inline from theme) ──────────────
 const s = StyleSheet.create({
-  shell:    { flex: 1 },
-  body:     { padding: 12 },
-  row:      { flexDirection: 'row', flexWrap: 'wrap' },
+  body:     { padding: 18 },
+  row:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   grid:     { flexDirection: 'row', flexWrap: 'wrap', width: '100%' },
-  section:  { marginBottom: 6 },
+  section:  { marginBottom: 22 },
   card:     {
-    backgroundColor: C.white, borderRadius: 12, padding: 16,
-    borderWidth: 1, borderColor: C.border,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    borderRadius: 16, padding: 18,
+    borderWidth: 1,
+    shadowOpacity: 0.07, shadowRadius: 16, shadowOffset: { width: 0, height: 2 },
+    elevation: 2, marginBottom: 0,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
-  cardTitle:  { fontSize: 14, fontWeight: '800', color: C.text },
-  cardSub:    { fontSize: 11.5, color: C.muted, marginTop: 2 },
-  emptyBox:   { alignItems: 'center', gap: 8, paddingVertical: 24 },
-  emptyText:  { fontSize: 12.5, color: C.muted },
-  viewAllBtn: { borderWidth: 1, borderRadius: 8, paddingVertical: 9, alignItems: 'center' },
-  viewAllText:{ fontSize: 12.5, fontWeight: '700' },
+  cardTitle:  { fontSize: 14, fontWeight: '700' },
+  cardSub:    { fontSize: 12, marginTop: 2 },
+  emptyBox:   { alignItems: 'center', gap: 10, paddingVertical: 32 },
+  emptyText:  { fontSize: 13 },
+  viewAllBtn: { borderWidth: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  viewAllText:{ fontSize: 13, fontWeight: '700' },
 
   // Hero
   hero:       { paddingHorizontal: 20, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 },
@@ -1246,159 +1745,218 @@ const s = StyleSheet.create({
   onlineText: { fontSize: 12, fontWeight: '700' },
   refreshBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
 
-  // Date-range filter bar
-  filterBar:            { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, marginBottom: 12 },
-  filterChip:           { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  filterChipActive:     { backgroundColor: C.dark, borderColor: C.dark },
-  filterChipText:       { fontSize: 12.5, fontWeight: '600', color: '#374151' },
-  filterChipTextActive: { color: '#C9A52A' },
-  filterRefresh:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#e5e7eb', marginLeft: 4 },
-  filterRefreshText:    { fontSize: 12, color: C.muted, fontWeight: '600' },
+  // Date-range filter bar — segmented
+  filterBar:            { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  filterChip:           { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
+  filterChipText:       { fontSize: 12, fontWeight: '600' },
+  filterRefreshBtn:     { width: 34, height: 34, borderRadius: 9, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  // kept for compat (unused)
+  filterRefresh:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  filterRefreshText:    { fontSize: 12, fontWeight: '600' },
 });
 
 const sh = StyleSheet.create({
-  row:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  titleWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  accent:    { width: 3, height: 16, borderRadius: 2, backgroundColor: C.gold },
-  title:     { fontSize: 13, fontWeight: '800', color: '#374151', letterSpacing: 0.5, textTransform: 'uppercase' },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  actionText:{ fontSize: 12, fontWeight: '700', color: C.primary },
+  row:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  title:     { fontSize: 15, fontWeight: '700', letterSpacing: -0.3 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  actionText:{ fontSize: 12.5, fontWeight: '600', color: S.primary },
 });
 
 const bc = StyleSheet.create({
-  wrap:        { flex: 1, backgroundColor: C.white, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2, margin: 4, minWidth: 160 },
-  top:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  iconWrap:    { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  // Card: colored left accent (4px) + subtle tint bg + colored shadow = premium look
+  wrap:        { flex: 1, borderRadius: 18,
+                 paddingTop: 24, paddingBottom: 24, paddingLeft: 20, paddingRight: 20,
+                 borderWidth: 1, borderLeftWidth: 4,
+                 shadowOpacity: 0.12, shadowRadius: 20, shadowOffset: { width: 0, height: 4 },
+                 elevation: 5, minWidth: 160,
+                 overflow: 'hidden' },
+  // Rounded-square icon container (rendered inside absolute wrapper in JSX)
+  iconBox:     { width: 64, height: 64, borderRadius: 16,
+                 alignItems: 'center', justifyContent: 'center' },
   growthBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   growthText:  { fontSize: 11, fontWeight: '800' },
-  value:       { fontSize: 24, fontWeight: '900', color: C.text, marginBottom: 4 },
-  label:       { fontSize: 13, fontWeight: '700', color: C.text, marginBottom: 2 },
-  sub:         { fontSize: 11.5, color: C.muted },
+  value:       { fontSize: 30, fontWeight: '900', letterSpacing: -1, marginTop: 6, marginBottom: 0 },
+  label:       { fontSize: 10.5, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase' },
+  sub:         { fontSize: 12.5, fontWeight: '600' },
 });
 
 const smc = StyleSheet.create({
-  wrap:        { backgroundColor: C.white, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1, height: '100%' },
-  dangerBorder:{ borderColor: C.danger, borderWidth: 1.5 },
-  iconWrap:    { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  value:       { fontSize: 20, fontWeight: '800', color: C.text, marginBottom: 2 },
-  label:       { fontSize: 11.5, fontWeight: '600', color: '#374151' },
-  sub:         { fontSize: 10, color: C.muted, marginTop: 2 },
+  // Card: colored TOP accent (3px) + tint bg + colored shadow = premium small card
+  wrap:        { borderRadius: 16,
+                 paddingTop: 16, paddingBottom: 16, paddingLeft: 15, paddingRight: 15,
+                 borderWidth: 1, borderTopWidth: 3,
+                 shadowOpacity: 0.10, shadowRadius: 14, shadowOffset: { width: 0, height: 3 },
+                 elevation: 4,
+                 overflow: 'hidden' },
+  // Rounded-square icon container (rendered inside absolute wrapper in JSX)
+  iconBox:     { width: 42, height: 42, borderRadius: 11,
+                 alignItems: 'center', justifyContent: 'center' },
+  value:       { fontSize: 22, fontWeight: '900', letterSpacing: -0.5, marginTop: 4, marginBottom: 1 },
+  label:       { fontSize: 9.5, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
+  sub:         { fontSize: 11, fontWeight: '600', marginTop: 2 },
 });
 
 const ch = StyleSheet.create({
-  wrap:      { marginTop: 12 },
-  bars:      { flexDirection: 'row', alignItems: 'flex-end', height: 150, gap: 6, paddingHorizontal: 4 },
-  col:       { flex: 1, alignItems: 'center', gap: 2 },
-  topVal:    { fontSize: 9, fontWeight: '700', color: C.muted, textAlign: 'center' },
-  track:     { flex: 1, width: '100%', justifyContent: 'flex-end', backgroundColor: '#f1f5f9', borderRadius: 6, overflow: 'hidden' },
-  bar:       { width: '100%', borderRadius: 6, minHeight: 4 },
-  orderBadge:{ paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 },
-  orderText: { fontSize: 9, fontWeight: '700' },
-  dayLabel:  { fontSize: 10, fontWeight: '600', color: C.muted, textAlign: 'center', marginTop: 2 },
-  legend:    { flexDirection: 'row', gap: 14, marginTop: 8, paddingHorizontal: 4 },
+  wrap:      { marginTop: 8 },
+  dayLabel:  { fontSize: 10.5, fontWeight: '600', textAlign: 'center' },
+  yLabel:    { position: 'absolute', fontSize: 9.5, fontWeight: '600' },
+  legend:    { flexDirection: 'row', gap: 14, justifyContent: 'flex-end', marginBottom: 8 },
   legendItem:{ flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText:{ fontSize: 10.5, color: C.muted },
+  legendText:{ fontSize: 11 },
+});
+
+const donut = StyleSheet.create({
+  wrap:        { alignItems: 'center', paddingVertical: 8 },
+  ringWrap:    { width: 130, height: 130, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  ring:        { position: 'absolute' },
+  center:      { alignItems: 'center', justifyContent: 'center' },
+  totalLabel:  { fontSize: 11, fontWeight: '600', marginBottom: 2 },
+  totalValue:  { fontSize: 14, fontWeight: '800' },
+  noData:      { fontSize: 12, fontWeight: '600', marginTop: 4, marginBottom: 8 },
+  note:        { fontSize: 10.5, textAlign: 'center', paddingHorizontal: 8, marginTop: 4, lineHeight: 15 },
+  legend:      { width: '100%', marginTop: 4, gap: 8 },
+  legendRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  legendDot:   { width: 10, height: 10, borderRadius: 5, flexShrink: 0, marginTop: 2 },
+  legendLabel: { fontSize: 12, fontWeight: '600' },
+  legendSub:   { fontSize: 10.5, marginTop: 1 },
+  legendValue: { fontSize: 12, fontWeight: '700' },
+  legendPct:   { fontSize: 10.5, fontWeight: '700', marginTop: 1 },
 });
 
 const pi = StyleSheet.create({
-  wrap:     { gap: 5 },
+  wrap:     { gap: 6 },
   top:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  left:     { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 },
-  icon:     { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  label:    { fontSize: 12.5, fontWeight: '600', color: C.text },
-  sub:      { fontSize: 10.5, color: C.muted },
-  right:    { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
-  value:    { fontSize: 13, fontWeight: '800', color: C.text },
+  left:     { flexDirection: 'row', alignItems: 'center', gap: 9, flex: 1, minWidth: 0 },
+  icon:     { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  label:    { fontSize: 13, fontWeight: '600' },
+  sub:      { fontSize: 11 },
+  right:    { flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 0 },
+  value:    { fontSize: 13.5, fontWeight: '800' },
   pctBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20 },
-  pctText:  { fontSize: 10.5, fontWeight: '800' },
-  track:    { height: 6, backgroundColor: '#f1f5f9', borderRadius: 3, overflow: 'hidden' },
-  fill:     { height: '100%', borderRadius: 3 },
+  pctText:  { fontSize: 11, fontWeight: '800' },
+  track:    { height: 7, borderRadius: 4, overflow: 'hidden' },
+  fill:     { height: '100%', borderRadius: 4 },
 });
 
 const pmc = StyleSheet.create({
-  wrap:    { backgroundColor: C.white, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1, height: '100%' },
-  top:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-  iconWrap:{ width: 36, height: 36, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  label:   { fontSize: 13, fontWeight: '700', color: C.text },
-  sub:     { fontSize: 11, color: C.muted, marginTop: 1 },
-  amount:  { fontSize: 16, fontWeight: '800', color: C.text, marginBottom: 8 },
-  track:   { height: 6, backgroundColor: '#f1f5f9', borderRadius: 3, overflow: 'hidden', marginBottom: 4 },
-  fill:    { height: '100%', borderRadius: 3 },
-  pct:     { fontSize: 10.5, color: C.muted },
+  wrap:    { borderRadius: 14, padding: 14, borderWidth: 1, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
+  top:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  iconWrap:{ width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  label:   { fontSize: 13, fontWeight: '700' },
+  sub:     { fontSize: 11, marginTop: 1 },
+  amount:  { fontSize: 17, fontWeight: '800', marginBottom: 10 },
+  track:   { height: 7, borderRadius: 4, overflow: 'hidden', marginBottom: 5 },
+  fill:    { height: '100%', borderRadius: 4 },
+  pct:     { fontSize: 11 },
 });
 
 const btc = StyleSheet.create({
-  wrap:      { backgroundColor: C.white, borderRadius: 10, padding: 14, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1, height: '100%' },
+  wrap:      { borderRadius: 14, padding: 16, borderWidth: 1, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
   top:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  icon:      { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  icon:      { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   badgeText: { fontSize: 12, fontWeight: '800' },
-  label:     { fontSize: 12, fontWeight: '600', color: C.muted, marginBottom: 4 },
-  amount:    { fontSize: 16, fontWeight: '800' },
+  label:     { fontSize: 12.5, fontWeight: '600', marginBottom: 5 },
+  amount:    { fontSize: 17, fontWeight: '800' },
 });
 
 const bsR = StyleSheet.create({
-  row:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  avatar:    { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  label:     { flex: 1, fontSize: 13.5, fontWeight: '600', color: C.text },
-  badge:     { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  badgeText: { fontSize: 12, fontWeight: '800', color: '#fff' },
+  row:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13 },
+  avatar:    { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  label:     { flex: 1, fontSize: 13.5, fontWeight: '600' },
+  badge:     { paddingHorizontal: 11, paddingVertical: 4, borderRadius: 20 },
+  badgeText: { fontSize: 12.5, fontWeight: '800', color: '#fff' },
 });
 
 const moB = StyleSheet.create({
-  banner: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f0fdf4', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, marginTop: 10, borderWidth: 1, borderColor: '#bbf7d0' },
-  text:   { fontSize: 12.5, color: '#166534', fontWeight: '600', flex: 1 },
+  banner: { flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginTop: 10, borderWidth: 1 },
+  text:   { fontSize: 12.5, fontWeight: '600', flex: 1 },
   name:   { fontWeight: '800' },
 });
 
 const ti = StyleSheet.create({
-  wrap:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  rank:    { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  rankText:{ fontSize: 11, fontWeight: '800' },
+  wrap:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rank:    { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  rankText:{ fontSize: 12, fontWeight: '800' },
   nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  name:    { fontSize: 12.5, fontWeight: '600', color: C.text, flex: 1 },
-  qty:     { fontSize: 12, fontWeight: '800', marginLeft: 4 },
-  track:   { height: 6, backgroundColor: '#f1f5f9', borderRadius: 3, overflow: 'hidden' },
-  fill:    { height: '100%', borderRadius: 3 },
+  name:    { fontSize: 13, fontWeight: '600', flex: 1 },
+  qty:     { fontSize: 12.5, fontWeight: '800', marginLeft: 4 },
+  track:   { height: 8, borderRadius: 4, overflow: 'hidden' },
+  fill:    { height: '100%', borderRadius: 4 },
 });
 
 const ar = StyleSheet.create({
-  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
-  avatar:   { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  num:      { fontSize: 13, fontWeight: '700', color: C.text },
-  meta:     { fontSize: 11, color: C.muted, marginTop: 2 },
-  amount:   { fontSize: 13, fontWeight: '800', color: C.gold },
-  badge:    { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
-  badgeText:{ fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
+  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
+  avatar:   { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  num:      { fontSize: 13.5, fontWeight: '700' },
+  meta:     { fontSize: 11.5, marginTop: 2 },
+  amount:   { fontSize: 13.5, fontWeight: '800' },
+  badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  badgeText:{ fontSize: 10.5, fontWeight: '700', textTransform: 'capitalize' },
 });
 
 const rr = StyleSheet.create({
-  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
-  avatar:   { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  num:      { fontSize: 13, fontWeight: '700', color: C.text },
-  srcBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
+  avatar:   { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  num:      { fontSize: 13.5, fontWeight: '700' },
+  srcBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
   srcText:  { fontSize: 9.5, fontWeight: '800' },
-  meta:     { fontSize: 11, color: C.muted, marginTop: 2 },
-  time:     { fontSize: 10.5, color: '#9ca3af', marginTop: 2 },
-  amount:   { fontSize: 13, fontWeight: '800', color: C.gold },
-  badge:    { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
-  badgeText:{ fontSize: 9.5, fontWeight: '700', textTransform: 'capitalize' },
-});
-
-const resR = StyleSheet.create({
-  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
-  avatar:   { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  name:     { fontSize: 13, fontWeight: '700', color: C.text },
-  meta:     { fontSize: 11, color: C.muted, marginTop: 2 },
-  time:     { fontSize: 10.5, color: '#9ca3af', marginTop: 2 },
-  badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
+  meta:     { fontSize: 11.5, marginTop: 2 },
+  time:     { fontSize: 10.5, marginTop: 2 },
+  amount:   { fontSize: 13.5, fontWeight: '800' },
+  badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   badgeText:{ fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
 });
 
+const resR = StyleSheet.create({
+  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
+  avatar:   { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  name:     { fontSize: 13.5, fontWeight: '700' },
+  meta:     { fontSize: 11.5, marginTop: 2 },
+  time:     { fontSize: 10.5, marginTop: 2 },
+  badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
+  badgeText:{ fontSize: 10.5, fontWeight: '700', textTransform: 'capitalize' },
+});
+
 const qlS = StyleSheet.create({
-  card:  { backgroundColor: C.white, borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: C.border, gap: 8, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1, height: '100%' },
-  icon:  { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  label: { fontSize: 12, fontWeight: '700', color: '#374151', textAlign: 'center' },
+  card:  { borderRadius: 16, padding: 18, alignItems: 'center', borderWidth: 1, gap: 11, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, minHeight: 85 },
+  icon:  { width: 52, height: 52, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  label: { fontSize: 12.5, fontWeight: '700', textAlign: 'center' },
+});
+
+// ── Tables Available card (matches CSPos web design) ─────────────────────────
+const tablC = StyleSheet.create({
+  wrap:        { borderRadius: 14, borderWidth: 1.5, overflow: 'hidden',
+                 shadowOpacity: 0.10, shadowRadius: 10, elevation: 3 },
+  iconArea:    { alignItems: 'center', justifyContent: 'center',
+                 paddingTop: 22, paddingBottom: 18 },
+  info:        { paddingHorizontal: 12, paddingBottom: 16, alignItems: 'center', gap: 5 },
+  name:        { fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  cap:         { fontSize: 12, textAlign: 'center' },
+  statusLabel: { fontSize: 12.5, fontWeight: '700', marginTop: 2 },
+});
+
+// ── Trending Menus card ───────────────────────────────────────────────────────
+const tmc = StyleSheet.create({
+  wrap:       { borderRadius: 16, padding: 15, borderWidth: 1, borderTopWidth: 3,
+                shadowOpacity: 0.10, shadowRadius: 12, elevation: 3 },
+  rankBadge:  { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, alignSelf: 'flex-start' },
+  rankText:   { fontSize: 11, fontWeight: '800' },
+  trendBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20 },
+  trendText:  { fontSize: 10, fontWeight: '800' },
+  name:       { fontSize: 13, fontWeight: '700', lineHeight: 17.5, marginTop: 8, marginBottom: 4 },
+  qty:        { fontSize: 12.5, fontWeight: '800' },
+  track:      { height: 6, borderRadius: 3, overflow: 'hidden' },
+  fill:       { height: '100%', borderRadius: 3 },
+});
+
+// ── Notification row ──────────────────────────────────────────────────────────
+const nr = StyleSheet.create({
+  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 13, borderBottomWidth: 1 },
+  iconWrap: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
+  title:    { fontSize: 13, lineHeight: 18.5, fontWeight: '500' },
+  msg:      { fontSize: 12, marginTop: 2, lineHeight: 16.5 },
+  time:     { fontSize: 11 },
+  dot:      { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
 });

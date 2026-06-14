@@ -43,12 +43,17 @@ export async function initDatabase(): Promise<void> {
     );
 
     CREATE TABLE IF NOT EXISTS restaurant_tables (
-      id         INTEGER PRIMARY KEY,
-      name       TEXT    NOT NULL,
-      floor      TEXT,
-      capacity   INTEGER,
-      status     TEXT    DEFAULT 'available',
-      updated_at TEXT
+      id               INTEGER PRIMARY KEY,
+      name             TEXT    NOT NULL,
+      table_number     INTEGER,
+      slug             TEXT,
+      floor            TEXT,
+      capacity         INTEGER,
+      status           TEXT    DEFAULT 'available',
+      has_active_order INTEGER DEFAULT 0,
+      qr_url           TEXT,
+      qr_image_url     TEXT,
+      updated_at       TEXT
     );
 
     CREATE TABLE IF NOT EXISTS customers (
@@ -111,4 +116,18 @@ export async function initDatabase(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_orders_synced    ON orders(is_synced);
     CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
   `);
+
+  // Migrate existing restaurant_tables rows to include new columns
+  const tableInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(restaurant_tables)');
+  const existingCols = new Set(tableInfo.map(c => c.name));
+  if (!existingCols.has('table_number'))
+    await db.execAsync('ALTER TABLE restaurant_tables ADD COLUMN table_number INTEGER');
+  if (!existingCols.has('slug'))
+    await db.execAsync('ALTER TABLE restaurant_tables ADD COLUMN slug TEXT');
+  if (!existingCols.has('has_active_order'))
+    await db.execAsync('ALTER TABLE restaurant_tables ADD COLUMN has_active_order INTEGER DEFAULT 0');
+  if (!existingCols.has('qr_url'))
+    await db.execAsync('ALTER TABLE restaurant_tables ADD COLUMN qr_url TEXT');
+  if (!existingCols.has('qr_image_url'))
+    await db.execAsync('ALTER TABLE restaurant_tables ADD COLUMN qr_image_url TEXT');
 }
