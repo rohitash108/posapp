@@ -11,6 +11,4 @@ export const ordersApi = {
     client.patch(`/orders/${id}/status`, { status }),
   updatePayment: (id: number, payload: any) =>
     client.patch(`/orders/${id}/payment`, payload),
-  updatePaymentMethod: (id: number, method: string) =>
-    client.patch(`/orders/${id}/payment-method`, { payment_method: method }),
 };

@@ -35,7 +35,7 @@ export default function PaymentsScreen() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res  = await paymentsApi.list({ per_page: 1000 });
+      const res  = await paymentsApi.list({ per_page: 200 });
       const data = res.data?.data ?? res.data ?? [];
       setAllPayments(Array.isArray(data) ? data : []);
     } catch { /* offline */ }

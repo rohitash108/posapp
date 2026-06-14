@@ -14,6 +14,7 @@ import { useFocusEffect } from 'expo-router';
 import { format, isToday, isYesterday, startOfWeek, startOfMonth, subDays } from 'date-fns';
 import { ordersApi } from '@/api/orders';
 import { useAppStore } from '@/store/appStore';
+import { useOrderBadgeStore } from '@/store/orderBadgeStore';
 import type { Order, OrderStatus } from '@/types';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -797,6 +798,11 @@ export default function OrdersScreen() {
           : o
       );
       setOrders(data);
+
+      // Update shared badge counts so the sidebar doesn't need its own API poll
+      const pendingCount = data.filter(o => o.status === 'pending').length;
+      const kitchenCount = data.filter(o => ['preparing', 'confirmed'].includes(o.status)).length;
+      useOrderBadgeStore.getState().update(pendingCount, kitchenCount);
 
       // Detect new orders / status changes on background polls (skip first load)
       if (isFirstLoad.current) {

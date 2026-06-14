@@ -200,7 +200,7 @@ ${discAmt > 0 ? `<div class="tot-row"><span>Discount</span><span>-${currency}${d
 <div class="hrd"></div>
 ${order.payment_method ? `<div class="row"><span>Payment</span><span class="b">${(order.payment_method || '').toUpperCase()}</span></div>` : ''}
 ${receivedAmt > 0 ? `<div class="row"><span>Received</span><span>${currency}${receivedAmt.toFixed(2)}</span></div>${changeAmt > 0 ? `<div class="row"><span>Change</span><span>${currency}${changeAmt.toFixed(2)}</span></div>` : ''}` : ''}
-<div class="c sm" style="margin-top:4px">Thank you, visit again!<br>Powered by IT Softwar | softwar.in</div>
+<div class="c sm" style="margin-top:4px">Thank you, visit again!</div>
 <div class="print-actions no-print">
   <button type="button" class="btn-close" onclick="window.history.length>1?history.back():window.close()">Close</button>
   <button type="button" id="receipt-print-btn">Print</button>

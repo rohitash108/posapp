@@ -1,6 +1,14 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import uuid from 'react-native-uuid';
+import { setItem, getItem, deleteItem } from '../utils/storage';
 import type { Cart, CartItem, OrderType } from '../types';
+
+const crossPlatformStorage = {
+  getItem:    (key: string) => getItem(key),
+  setItem:    (key: string, value: string) => setItem(key, value),
+  removeItem: (key: string) => deleteItem(key),
+};
 
 interface CartState {
   cart: Cart;
@@ -57,7 +65,9 @@ const emptyCart = (): Cart => ({
   is_draft: false,
 });
 
-export const useCartStore = create<CartState>((set, get) => ({
+export const useCartStore = create<CartState>()(
+  persist(
+    (set, get) => ({
   cart: emptyCart(),
   tableCartMap: {},
 
@@ -158,4 +168,14 @@ export const useCartStore = create<CartState>((set, get) => ({
     const disc = (get().cart.discount_amount ?? 0) + (get().cart.coupon_discount ?? 0);
     return Math.max(0, sub + tax - disc);
   },
-}));
+    }),
+    {
+      name: 'cspos-cart-store',
+      storage: createJSONStorage(() => crossPlatformStorage),
+      partialize: (state) => ({
+        cart:         state.cart,
+        tableCartMap: state.tableCartMap,
+      }),
+    }
+  )
+);

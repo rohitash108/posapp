@@ -114,22 +114,26 @@ export default function KitchenScreen() {
     if (!silent) setLoading(true);
     if (!silent) setError('');
     try {
-      // No server-side status filter — client-side filter below.
-      // Passing comma-separated statuses can silently return 0 on some API versions.
-      const res = await ordersApi.list({ per_page: 300 });
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await ordersApi.list({
+        per_page: 100,
+        status: KDS_STATUSES.join(','),
+        from: today,
+        to: today,
+      });
       const raw = res.data?.data ?? res.data ?? [];
-      const all: Order[] = Array.isArray(raw) ? raw : [];
-      const kitchen = all
-        .filter(o => (KDS_STATUSES as string[]).includes(o.status))
-        // Latest orders first — matches CSPos KDS display order
-        .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime());
+      const orders: Order[] = Array.isArray(raw) ? raw : [];
+      // API already filters by status; sort newest first to match CSPos KDS order
+      const kitchen = orders.sort(
+        (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+      );
       setOrders(kitchen);
-      // Derive today's completed count from the full list (reliable across reloads)
+      // completed count: fetch separately so it's accurate even with status filter active
       const todayStr = new Date().toISOString().slice(0, 10);
-      const doneToday = all.filter(
-        o => o.status === 'completed' && (o.updated_at ?? o.created_at ?? '').startsWith(todayStr)
-      ).length;
-      setCompletedToday(doneToday);
+      try {
+        const doneRes = await ordersApi.list({ per_page: 1, status: 'completed', from: todayStr, to: todayStr });
+        setCompletedToday(doneRes.data?.total ?? 0);
+      } catch { /* non-critical — leave at previous value */ }
     } catch (e: any) {
       const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load kitchen orders';
       console.error('[Kitchen] load error:', e?.response?.status, msg);

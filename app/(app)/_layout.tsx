@@ -3,6 +3,7 @@ import { Tabs, usePathname, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Pressable, useWindowDimensions, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useAppStore } from '@/store/appStore';
+import { useOrderBadgeStore } from '@/store/orderBadgeStore';
 import { useTheme } from '@/store/themeStore';
 import { webSyncService } from '@/sync/WebSyncService';
 import { AppBrandLogo, APP_BRAND_NAME, APP_BRAND_TAGLINE } from '@/components/AppBrandLogo';
@@ -144,23 +145,13 @@ function Sidebar() {
   const sb = useMemo(() => createSidebarStyles(colors), [colors]);
   const pathname = usePathname();
 
-  // Live order counts for nav badges
-  const [navCounts, setNavCounts] = React.useState<Record<string, number>>({});
-  useEffect(() => {
-    async function fetchCounts() {
-      try {
-        const { ordersApi } = await import('@/api/orders');
-        const res = await ordersApi.list({ per_page: 200 });
-        const data: any[] = res.data?.data ?? res.data ?? [];
-        const pending  = data.filter((o: any) => o.status === 'pending').length;
-        const kitchen  = data.filter((o: any) => ['preparing', 'confirmed'].includes(o.status)).length;
-        setNavCounts({ 'orders/index': pending, 'kitchen/index': kitchen });
-      } catch { /* offline */ }
-    }
-    fetchCounts();
-    const t = setInterval(fetchCounts, 60_000);
-    return () => clearInterval(t);
-  }, []);
+  // Nav badge counts driven by orderBadgeStore (populated by the Orders screen on every poll).
+  // No independent API call needed — zero extra network traffic.
+  const { pendingCount, kitchenCount } = useOrderBadgeStore();
+  const navCounts: Record<string, number> = {
+    'orders/index':  pendingCount,
+    'kitchen/index': kitchenCount,
+  };
 
   function isActive(name: string) {
     const segment = name.replace('/index', '').split('/')[0];

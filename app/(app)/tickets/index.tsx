@@ -5,6 +5,7 @@
  * Mobile: list + modal detail sheet
  */
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View, Text, FlatList, Pressable, StyleSheet, ScrollView,
   TextInput, Modal, ActivityIndicator, RefreshControl, Alert, Platform,
@@ -743,6 +744,8 @@ export default function TicketsScreen() {
   }, []);
 
   useEffect(() => { load(); }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   function applyFilter() {
     setAppliedTab(tabFilter);

@@ -77,6 +77,18 @@ export async function initDatabase(): Promise<void> {
       customer_id         INTEGER,
       customer_name       TEXT,
       customer_phone      TEXT,
+      waiter_id           INTEGER,
+      waiter_name         TEXT,
+      source              TEXT    DEFAULT 'pos',
+      external_id         TEXT,
+      coupon_code         TEXT,
+      coupon_discount     REAL    DEFAULT 0,
+      kot_printed         INTEGER DEFAULT 0,
+      is_draft            INTEGER DEFAULT 0,
+      delivery_address    TEXT,
+      delivery_partner    TEXT,
+      rider_name          TEXT,
+      rider_phone         TEXT,
       subtotal            REAL    DEFAULT 0,
       tax_amount          REAL    DEFAULT 0,
       discount_amount     REAL    DEFAULT 0,
@@ -116,6 +128,22 @@ export async function initDatabase(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_orders_synced    ON orders(is_synced);
     CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
   `);
+
+  // Migrate existing orders table — add columns introduced after initial schema
+  const orderInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(orders)');
+  const orderCols = new Set(orderInfo.map(c => c.name));
+  if (!orderCols.has('waiter_id'))        await db.execAsync('ALTER TABLE orders ADD COLUMN waiter_id INTEGER');
+  if (!orderCols.has('waiter_name'))      await db.execAsync('ALTER TABLE orders ADD COLUMN waiter_name TEXT');
+  if (!orderCols.has('source'))           await db.execAsync("ALTER TABLE orders ADD COLUMN source TEXT DEFAULT 'pos'");
+  if (!orderCols.has('external_id'))      await db.execAsync('ALTER TABLE orders ADD COLUMN external_id TEXT');
+  if (!orderCols.has('coupon_code'))      await db.execAsync('ALTER TABLE orders ADD COLUMN coupon_code TEXT');
+  if (!orderCols.has('coupon_discount'))  await db.execAsync('ALTER TABLE orders ADD COLUMN coupon_discount REAL DEFAULT 0');
+  if (!orderCols.has('kot_printed'))      await db.execAsync('ALTER TABLE orders ADD COLUMN kot_printed INTEGER DEFAULT 0');
+  if (!orderCols.has('is_draft'))         await db.execAsync('ALTER TABLE orders ADD COLUMN is_draft INTEGER DEFAULT 0');
+  if (!orderCols.has('delivery_address')) await db.execAsync('ALTER TABLE orders ADD COLUMN delivery_address TEXT');
+  if (!orderCols.has('delivery_partner')) await db.execAsync('ALTER TABLE orders ADD COLUMN delivery_partner TEXT');
+  if (!orderCols.has('rider_name'))       await db.execAsync('ALTER TABLE orders ADD COLUMN rider_name TEXT');
+  if (!orderCols.has('rider_phone'))      await db.execAsync('ALTER TABLE orders ADD COLUMN rider_phone TEXT');
 
   // Migrate existing restaurant_tables rows to include new columns
   const tableInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(restaurant_tables)');

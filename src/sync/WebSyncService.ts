@@ -42,6 +42,9 @@ export const webSyncService = {
         } else if (item.action === 'update_status') {
           const { order_id, status } = JSON.parse(item.payload);
           await ordersApi.updateStatus(order_id, status);
+        } else if (item.action === 'update_payment') {
+          const { order_id, ...payload } = JSON.parse(item.payload);
+          await ordersApi.updatePayment(order_id, payload);
         }
         await webRemoveSyncQueue(item.id);
       } catch (e: any) {

@@ -192,7 +192,9 @@ export default function CategoriesScreen() {
         {/* ── Super-Admin notice ── */}
         <View style={s.notice}>
           <Ionicons name="information-circle-outline" size={16} color="#2563eb" />
-          <Text style={s.noticeTxt}>Categories are managed by Super Admin.</Text>
+          <Text style={s.noticeTxt}>
+            Categories are managed by Super Admin. To add, edit, or reorder categories contact your Super Admin via the web panel.
+          </Text>
         </View>
 
         {/* ── Stats row ── */}
