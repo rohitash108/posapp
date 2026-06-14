@@ -36,7 +36,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'CUSTOMERS',
     items: [
       { name: 'customers/index',    route: '/(app)/customers',    label: 'Customers',    icon: 'people-outline'       as const },
-      { name: 'wallet/index',       route: '/(app)/wallet',       label: 'Wallet',       icon: 'wallet-outline'       as const },
+      ...(Platform.OS !== 'web' ? [{ name: 'wallet/index' as const, route: '/(app)/wallet' as const, label: 'Wallet', icon: 'wallet-outline' as const }] : []),
       { name: 'reservations/index', route: '/(app)/reservations', label: 'Reservations', icon: 'calendar-outline'     as const },
       { name: 'invoices/index',     route: '/(app)/invoices',     label: 'Invoices',     icon: 'document-text-outline' as const },
       { name: 'payments/index',     route: '/(app)/payments',     label: 'Payments',     icon: 'card-outline'          as const },

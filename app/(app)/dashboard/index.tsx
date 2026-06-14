@@ -8,7 +8,7 @@
  *   /reports/payment-methods  → Payment Types panel + Payment Methods grid
  *   /reports/expenses         → Expense Summary widget
  *   /orders (active+recent)   → Active Orders list + Recent Orders list
- *   /reservations             → Upcoming Reservations
+ *   /reservations             → Reservations count (metric card only)
  *
  * Sections (same order as csPos):
  *  Header with date-range filter (Today / Yesterday / Week / Month / All Time)
@@ -23,13 +23,13 @@
  *  Top Selling Items (with Most-Ordered banner + rank bars)
  *  Active Orders list
  *  Recent Orders list
- *  Upcoming Reservations list
+ *  Tables Available grid (bottom, just above Quick Access)
  *  Quick Access grid
  */
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Pressable, StyleSheet,
-  RefreshControl, useWindowDimensions, ActivityIndicator,
+  RefreshControl, useWindowDimensions, ActivityIndicator, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -891,7 +891,7 @@ const QUICK_LINKS = [
   { label: 'Orders',       icon: 'receipt-outline',   route: '/(app)/orders',       color: S.primary },
   { label: 'Tables',       icon: 'grid-outline',      route: '/(app)/tables',       color: S.purple  },
   { label: 'Customers',    icon: 'people-outline',    route: '/(app)/customers',    color: S.success },
-  { label: 'Wallet',       icon: 'wallet-outline',    route: '/(app)/wallet',       color: '#d97706' },
+  ...(Platform.OS !== 'web' ? [{ label: 'Wallet', icon: 'wallet-outline' as const, route: '/(app)/wallet', color: '#d97706' }] : []),
   { label: 'Reservations', icon: 'calendar-outline',  route: '/(app)/reservations', color: S.danger  },
   { label: 'Invoices',     icon: 'document-text-outline', route: '/(app)/invoices', color: '#4f46e5' },
   { label: 'Payments',     icon: 'card-outline',      route: '/(app)/payments',     color: '#0284c7' },
@@ -962,7 +962,7 @@ export default function DashboardScreen() {
       const [summaryRes, salesRes, topItemsRes, payRes, expRes] = await Promise.allSettled([
         reportsApi.summary(reportParams),
         reportsApi.sales({ date_from: chart7From, date_to: today, group_by: 'day' }),
-        reportsApi.topItems({ ...reportParams, limit: 6 }),
+        reportsApi.topItems(reportParams),
         reportsApi.paymentMethods(reportParams),
         reportsApi.expenses(reportParams),
       ]);
@@ -1165,8 +1165,8 @@ export default function DashboardScreen() {
 
       // ── 10. Notifications ─────────────────────────────────────────────────
       try {
-        const notifRes = await client.get('/notifications', { params: { per_page: 10 } });
-        const notifs = notifRes.data?.data ?? notifRes.data ?? [];
+        const notifRes = await client.get('/orders/notifications/new');
+        const notifs = notifRes.data?.orders ?? notifRes.data?.data ?? notifRes.data ?? [];
         setNotifications(Array.isArray(notifs) ? notifs.slice(0, 10) : []);
       } catch { /* notifications optional */ }
 
@@ -1372,35 +1372,6 @@ export default function DashboardScreen() {
             ))}
           </View>
         </View>
-
-        {/* ── Tables Available ── */}
-        {tables.length > 0 && (
-          <View style={s.section}>
-            <SectionHeader title="Tables Available" action="Manage Tables" onAction={() => go('/(app)/tables')} />
-            {/* 3 status summary SmallCards */}
-            <View style={s.grid}>
-              {[
-                { label: 'Available', value: tables.filter(t => t.status === 'available').length, icon: 'checkmark-circle-outline', color: S.success, bg: S.success + '18', sub: 'tables free'   },
-                { label: 'Occupied',  value: tables.filter(t => t.status === 'occupied').length,  icon: 'people-outline',           color: S.danger,  bg: S.danger  + '18', sub: 'tables in use' },
-                { label: 'Reserved',  value: tables.filter(t => t.status === 'reserved').length,  icon: 'bookmark-outline',         color: S.warning, bg: S.warning + '18', sub: 'tables booked' },
-              ].map((c, i) => (
-                <View key={i} style={{ width: '33.33%', padding: 4 }}>
-                  <SmallCard label={c.label} value={c.value} sub={c.sub}
-                    icon={c.icon} color={c.color} bg={c.bg}
-                    onPress={() => go('/(app)/tables')} />
-                </View>
-              ))}
-            </View>
-            {/* Table card grid — 2-4 columns, matches CSPos web layout */}
-            <View style={[s.grid, { marginTop: 4 }]}>
-              {tables.map(tbl => (
-                <View key={tbl.id} style={{ width: `${100 / cols4}%` as any, padding: 4 }}>
-                  <TableChip table={tbl} />
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
 
         {/* ── Expense Summary ── */}
         <View style={s.section}>
@@ -1633,37 +1604,6 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* ── Upcoming Reservations (prominent position) ── */}
-        <View style={s.section}>
-          <View style={[s.card, cardS]}>
-            <View style={s.cardHeader}>
-              <View>
-                <Text style={[s.cardTitle, { color: D.text }]}>Upcoming Reservations</Text>
-                <Text style={[s.cardSub, { color: D.muted }]}>{reservCount} upcoming</Text>
-              </View>
-              <TouchableOpacity onPress={() => go('/(app)/reservations')}>
-                <Text style={{ color: S.primary, fontSize: 12, fontWeight: '700' }}>See All</Text>
-              </TouchableOpacity>
-            </View>
-            {reservations.length > 0 ? (
-              <View style={{ gap: 1, marginTop: 8 }}>
-                {reservations.map((r, i) => <ReservationRow key={i} res={r} />)}
-              </View>
-            ) : (
-              <View style={s.emptyBox}>
-                <Ionicons name="calendar-outline" size={32} color={D.muted + '60'} />
-                <Text style={[s.emptyText, { color: D.muted }]}>No upcoming reservations</Text>
-              </View>
-            )}
-            {reservations.length > 0 && (
-              <TouchableOpacity style={[s.viewAllBtn, { marginTop: 10, borderColor: D.border }]}
-                onPress={() => go('/(app)/reservations')}>
-                <Text style={[s.viewAllText, { color: S.primary }]}>View All Reservations</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
         {/* ── Recent Orders ── */}
         <View style={s.section}>
           <View style={[s.card, cardS]}>
@@ -1688,6 +1628,35 @@ export default function DashboardScreen() {
             )}
           </View>
         </View>
+
+        {/* ── Tables Available ── */}
+        {tables.length > 0 && (
+          <View style={s.section}>
+            <SectionHeader title="Tables Available" action="Manage Tables" onAction={() => go('/(app)/tables')} />
+            {/* 3 status summary SmallCards */}
+            <View style={s.grid}>
+              {[
+                { label: 'Available', value: tables.filter(t => t.status === 'available').length, icon: 'checkmark-circle-outline', color: S.success, bg: S.success + '18', sub: 'tables free'   },
+                { label: 'Occupied',  value: tables.filter(t => t.status === 'occupied').length,  icon: 'people-outline',           color: S.danger,  bg: S.danger  + '18', sub: 'tables in use' },
+                { label: 'Reserved',  value: tables.filter(t => t.status === 'reserved').length,  icon: 'bookmark-outline',         color: S.warning, bg: S.warning + '18', sub: 'tables booked' },
+              ].map((c, i) => (
+                <View key={i} style={{ width: '33.33%', padding: 4 }}>
+                  <SmallCard label={c.label} value={c.value} sub={c.sub}
+                    icon={c.icon} color={c.color} bg={c.bg}
+                    onPress={() => go('/(app)/tables')} />
+                </View>
+              ))}
+            </View>
+            {/* Table card grid — 2-4 columns, matches CSPos web layout */}
+            <View style={[s.grid, { marginTop: 4 }]}>
+              {tables.map(tbl => (
+                <View key={tbl.id} style={{ width: `${100 / cols4}%` as any, padding: 4 }}>
+                  <TableChip table={tbl} />
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* ── Quick Access ── */}
         <View style={s.section}>

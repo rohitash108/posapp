@@ -47,11 +47,12 @@ function fmtDate(d?: string) {
 }
 
 const PAYMENT_METHODS = [
-  { value: 'cash',         label: 'Cash',         icon: 'cash-outline'         },
-  { value: 'card',         label: 'Card',          icon: 'card-outline'         },
-  { value: 'upi',          label: 'UPI',           icon: 'phone-portrait-outline'},
-  { value: 'bank_transfer',label: 'Bank Transfer', icon: 'business-outline'     },
-  { value: 'other',        label: 'Other',         icon: 'ellipsis-horizontal-outline' },
+  { value: 'cash',         label: 'Cash',          icon: 'cash-outline'                },
+  { value: 'card',         label: 'Card',           icon: 'card-outline'                },
+  { value: 'upi',          label: 'UPI',            icon: 'phone-portrait-outline'      },
+  { value: 'bank_transfer',label: 'Bank Transfer',  icon: 'business-outline'            },
+  { value: 'cheque',       label: 'Cheque',         icon: 'document-text-outline'       },
+  { value: 'other',        label: 'Other',          icon: 'ellipsis-horizontal-outline' },
 ] as const;
 
 type FormState = {
@@ -229,7 +230,7 @@ function ExpenseForm({
           </View>
         </View>
 
-        {/* Row 2: Amount | Tax/GST | Payment Method */}
+        {/* Row 2: Amount | Tax/GST  — Payment Method moved to its own row to prevent dropdown overlap */}
         <View style={fm.row}>
           <View style={[fm.field, { flex: 1 }]}>
             <Text style={fm.label}>Amount <Text style={fm.req}>*</Text></Text>
@@ -264,71 +265,69 @@ function ExpenseForm({
               />
             </View>
           </View>
-          <View style={[fm.field, { flex: 1.2 }]}>
-            <Text style={fm.label}>Payment Method</Text>
-            <Pressable
-              style={[fm.inputWrap, { justifyContent: 'space-between' }]}
-              onPress={() => setPmOpen(p => !p)}>
-              <View style={fm.inputPrefix}>
-                <Ionicons name={PAYMENT_METHODS.find(m => m.value === form.payment_method)?.icon as any ?? 'cash-outline'} size={15} color="#9ca3af" />
-              </View>
-              <Text style={[fm.input, { paddingVertical: 13, color: '#111827' }]}>
-                {PAYMENT_METHODS.find(m => m.value === form.payment_method)?.label ?? 'Cash'}
-              </Text>
-              <View style={{ paddingRight: 12 }}>
-                <Ionicons name={pmOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#9ca3af" />
-              </View>
-            </Pressable>
-            {pmOpen && (
-              <View style={fm.dropdown}>
-                {PAYMENT_METHODS.map(m => (
-                  <Pressable
-                    key={m.value}
-                    style={[fm.dropItem, form.payment_method === m.value && fm.dropItemActive]}
-                    onPress={() => { field('payment_method')(m.value); setPmOpen(false); }}>
-                    <Ionicons name={m.icon as any} size={14} color={form.payment_method === m.value ? GOLD : '#6b7280'} />
-                    <Text style={[fm.dropItemTxt, form.payment_method === m.value && { color: GOLD, fontWeight: '700' }]}>{m.label}</Text>
-                    {form.payment_method === m.value && <Ionicons name="checkmark" size={13} color={GOLD} />}
-                  </Pressable>
-                ))}
-              </View>
-            )}
+        </View>
+
+        {/* Row 2b: Payment Method — full-width row so dropdown doesn't clip siblings */}
+        <View style={fm.field}>
+          <Text style={fm.label}>Payment Method</Text>
+          {/* Inline button-group — no absolute positioning, no z-index issues */}
+          <View style={fm.pmGrid}>
+            {PAYMENT_METHODS.map(m => {
+              const active = form.payment_method === m.value;
+              return (
+                <Pressable
+                  key={m.value}
+                  style={[fm.pmChip, active && fm.pmChipActive]}
+                  onPress={() => field('payment_method')(m.value)}>
+                  <Ionicons name={m.icon as any} size={14} color={active ? GOLD : '#6b7280'} />
+                  <Text style={[fm.pmChipTxt, active && fm.pmChipTxtActive]}>{m.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
-        {/* Row 3: Category | Vendor/Supplier */}
-        <View style={fm.row}>
-          <View style={[fm.field, { flex: 1 }]}>
-            <Text style={fm.label}>Category</Text>
-            <View style={fm.catGrid}>
-              <Pressable
-                style={[fm.catChip, !form.category_id && fm.catChipSelected]}
-                onPress={() => field('category_id')('')}>
-                <Ionicons name="grid-outline" size={12} color={!form.category_id ? '#fff' : '#6b7280'} />
-                <Text style={[fm.catChipTxt, !form.category_id && { color: '#fff', fontWeight: '700' }]}>None</Text>
-              </Pressable>
-              {categories.map((cat, idx) => {
-                const pal    = catPalette(idx);
-                const active = form.category_id === String(cat.id);
-                return (
-                  <Pressable
-                    key={cat.id}
-                    style={[
-                      fm.catChip,
-                      { backgroundColor: pal.bg, borderColor: pal.border },
-                      active && { backgroundColor: pal.dot, borderColor: pal.dot },
-                    ]}
-                    onPress={() => field('category_id')(active ? '' : String(cat.id))}>
-                    <View style={[fm.catDot, { backgroundColor: active ? '#fff' : pal.dot }]} />
-                    <Text style={[fm.catChipTxt, { color: active ? '#fff' : pal.text }, active && { fontWeight: '700' }]}>
-                      {cat.name}
-                    </Text>
-                    {active && <Ionicons name="checkmark" size={11} color="#fff" />}
-                  </Pressable>
-                );
-              })}
-            </View>
+        {/* Row 3: Category — full width so chips have room to wrap */}
+        <View style={fm.field}>
+          <Text style={fm.label}>Category</Text>
+          <View style={fm.catGrid}>
+            <Pressable
+              style={[fm.catChip, !form.category_id && fm.catChipSelected]}
+              onPress={() => field('category_id')('')}>
+              <Ionicons name="grid-outline" size={12} color={!form.category_id ? '#fff' : '#6b7280'} />
+              <Text style={[fm.catChipTxt, !form.category_id && { color: '#fff', fontWeight: '700' }]}>None</Text>
+            </Pressable>
+            {categories.length === 0 && (
+              <View style={fm.catEmptyHint}>
+                <Ionicons name="information-circle-outline" size={13} color="#9ca3af" />
+                <Text style={fm.catEmptyTxt}>No categories yet — add them from the Categories button</Text>
+              </View>
+            )}
+            {categories.map((cat, idx) => {
+              const pal    = catPalette(idx);
+              const active = form.category_id === String(cat.id);
+              return (
+                <Pressable
+                  key={cat.id}
+                  style={[
+                    fm.catChip,
+                    { backgroundColor: pal.bg, borderColor: pal.border },
+                    active && { backgroundColor: pal.dot, borderColor: pal.dot },
+                  ]}
+                  onPress={() => field('category_id')(active ? '' : String(cat.id))}>
+                  <View style={[fm.catDot, { backgroundColor: active ? '#fff' : pal.dot }]} />
+                  <Text style={[fm.catChipTxt, { color: active ? '#fff' : pal.text }, active && { fontWeight: '700' }]}>
+                    {cat.name}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={11} color="#fff" />}
+                </Pressable>
+              );
+            })}
           </View>
+        </View>
+
+        {/* Row 3b: Vendor / Supplier — now its own row */}
+        <View style={fm.row}>
           <View style={[fm.field, { flex: 1 }]}>
             <Text style={fm.label}>Vendor / Supplier</Text>
             <View style={fm.inputWrap}>
@@ -624,46 +623,76 @@ export default function ExpensesScreen() {
   const monthStr = format(subDays(new Date(), 30), 'yyyy-MM-dd');
   const [dateFrom,    setDateFrom]    = useState(monthStr);
   const [dateTo,      setDateTo]      = useState(todayStr);
-  const [catFilter,   setCatFilter]   = useState('');   // category_id or ''
-  const [pmFilter,    setPmFilter]    = useState('');   // payment_method or ''
+  const [search,      setSearch]      = useState('');       // keyword search
+  const [catFilter,   setCatFilter]   = useState('');       // category_id or ''
+  const [pmFilter,    setPmFilter]    = useState('');       // payment_method or ''
   // Applied filter (only changes when Filter button pressed)
-  const [appliedFrom, setAppliedFrom] = useState(monthStr);
-  const [appliedTo,   setAppliedTo]   = useState(todayStr);
-  const [appliedCat,  setAppliedCat]  = useState('');
-  const [appliedPm,   setAppliedPm]   = useState('');
+  const [appliedFrom,   setAppliedFrom]   = useState(monthStr);
+  const [appliedTo,     setAppliedTo]     = useState(todayStr);
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [appliedCat,    setAppliedCat]    = useState('');
+  const [appliedPm,     setAppliedPm]     = useState('');
   // Dropdown open states
   const [catOpen, setCatOpen] = useState(false);
   const [pmOpen2, setPmOpen2] = useState(false);
 
-  // ── Stats from server ─────────────────────────────────────────────────────────
+  // ── Stats — computed from returned list if server meta is absent ──────────────
   const [meta, setMeta] = useState({ period_total: 0, period_tax: 0, today_total: 0, month_total: 0, count: 0 });
 
+  // ── Fetch expense categories — try primary then fallback endpoint ─────────────
+  async function fetchCategories(): Promise<ExpenseCategory[]> {
+    const endpoints = ['/expense-categories', '/expenses/categories'];
+    for (const ep of endpoints) {
+      try {
+        const res = await client.get(ep);
+        const cats = res.data?.data ?? res.data ?? [];
+        if (Array.isArray(cats) && cats.length > 0) return cats;
+        if (Array.isArray(cats)) return cats; // empty list is still valid
+      } catch { /* try next */ }
+    }
+    return [];
+  }
+
   // ── Load ─────────────────────────────────────────────────────────────────────
-  const load = useCallback(async (opts?: { silent?: boolean; from?: string; to?: string; cat?: string; pm?: string }) => {
-    const from = opts?.from ?? appliedFrom;
-    const to   = opts?.to   ?? appliedTo;
-    const cat  = opts?.cat  !== undefined ? opts.cat  : appliedCat;
-    const pm   = opts?.pm   !== undefined ? opts.pm   : appliedPm;
+  const load = useCallback(async (opts?: { silent?: boolean; from?: string; to?: string; search?: string; cat?: string; pm?: string }) => {
+    const from = opts?.from   ?? appliedFrom;
+    const to   = opts?.to     ?? appliedTo;
+    const q    = opts?.search !== undefined ? opts.search : appliedSearch;
+    const cat  = opts?.cat    !== undefined ? opts.cat    : appliedCat;
+    const pm   = opts?.pm     !== undefined ? opts.pm     : appliedPm;
 
     if (!opts?.silent) setLoading(true);
     try {
       const params: Record<string, string> = { date_from: from, date_to: to };
+      if (q)   params.search         = q;
       if (cat) params.category_id    = cat;
       if (pm)  params.payment_method = pm;
 
-      const [expRes, catRes] = await Promise.all([
+      const [expRes, cats] = await Promise.all([
         client.get('/expenses', { params }),
-        client.get('/expense-categories'),
+        fetchCategories(),
       ]);
-      const exp  = expRes.data?.data  ?? expRes.data  ?? [];
-      const cats = catRes.data?.data  ?? catRes.data  ?? [];
-      if (expRes.data?.meta) setMeta(expRes.data.meta);
-      setExpenses(Array.isArray(exp)  ? exp  : []);
-      setCategories(Array.isArray(cats) ? cats : []);
+
+      const exp = expRes.data?.data ?? expRes.data ?? [];
+      const list: Expense[] = Array.isArray(exp) ? exp : [];
+      setExpenses(list);
+      setCategories(cats);
+
+      // Build stats — prefer server meta, fall back to computing from list
+      const serverMeta = expRes.data?.meta ?? expRes.data?.stats ?? null;
+      const todayIso = format(new Date(), 'yyyy-MM-dd');
+      const curMonth = todayIso.slice(0, 7);
+      setMeta({
+        period_total: Number(serverMeta?.period_total ?? serverMeta?.total         ?? list.reduce((s, e) => s + Number(e.amount ?? 0), 0)),
+        period_tax:   Number(serverMeta?.period_tax   ?? serverMeta?.total_tax     ?? list.reduce((s, e) => s + Number(e.tax_amount ?? 0), 0)),
+        today_total:  Number(serverMeta?.today_total  ?? list.filter(e => e.expense_date === todayIso).reduce((s, e) => s + Number(e.amount ?? 0), 0)),
+        month_total:  Number(serverMeta?.month_total  ?? list.filter(e => (e.expense_date ?? '').startsWith(curMonth)).reduce((s, e) => s + Number(e.amount ?? 0), 0)),
+        count:        Number(serverMeta?.count        ?? list.length),
+      });
     } catch { /* offline — keep stale data */ }
     finally { setLoading(false); setRefreshing(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appliedFrom, appliedTo, appliedCat, appliedPm]);
+  }, [appliedFrom, appliedTo, appliedSearch, appliedCat, appliedPm]);
 
   useEffect(() => { load(); }, []); // initial load with defaults
 
@@ -672,9 +701,10 @@ export default function ExpensesScreen() {
     setPmOpen2(false);
     setAppliedFrom(dateFrom);
     setAppliedTo(dateTo);
+    setAppliedSearch(search);
     setAppliedCat(catFilter);
     setAppliedPm(pmFilter);
-    load({ from: dateFrom, to: dateTo, cat: catFilter, pm: pmFilter });
+    load({ from: dateFrom, to: dateTo, search, cat: catFilter, pm: pmFilter });
   }
 
   function resetFilter() {
@@ -682,13 +712,15 @@ export default function ExpensesScreen() {
     setPmOpen2(false);
     setDateFrom(monthStr);
     setDateTo(todayStr);
+    setSearch('');
     setCatFilter('');
     setPmFilter('');
     setAppliedFrom(monthStr);
     setAppliedTo(todayStr);
+    setAppliedSearch('');
     setAppliedCat('');
     setAppliedPm('');
-    load({ from: monthStr, to: todayStr, cat: '', pm: '' });
+    load({ from: monthStr, to: todayStr, search: '', cat: '', pm: '' });
   }
 
   // ── Derived data (server already filtered; expenses = result set) ─────────────
@@ -768,6 +800,28 @@ export default function ExpensesScreen() {
 
       {/* ── Filter bar ── */}
       <View style={s.filterBar}>
+        {/* Keyword search */}
+        <View style={s.filterField}>
+          <Text style={s.filterLbl}>Search</Text>
+          <View style={s.searchBox}>
+            <Ionicons name="search-outline" size={14} color="#9ca3af" />
+            <TextInput
+              style={s.searchInput}
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Title, vendor…"
+              placeholderTextColor="#9ca3af"
+              returnKeyType="search"
+              onSubmitEditing={applyFilter}
+            />
+            {search.length > 0 && (
+              <Pressable onPress={() => setSearch('')}>
+                <Ionicons name="close-circle" size={14} color="#9ca3af" />
+              </Pressable>
+            )}
+          </View>
+        </View>
+
         <View style={s.filterField}>
           <Text style={s.filterLbl}>From</Text>
           {Platform.OS === 'web' ? (
@@ -934,6 +988,8 @@ const s = StyleSheet.create({
   filterInput:   { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, fontSize: 13, color: '#111827', minWidth: 120 },
   filterDropBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fff', minWidth: 130 },
   filterDropTxt: { flex: 1, fontSize: 13, color: '#374151' },
+  searchBox:     { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#fff', minWidth: 140 },
+  searchInput:   { flex: 1, fontSize: 13, color: '#111827', padding: 0 },
   filterBtn:     { backgroundColor: FOREST, borderRadius: 8, paddingHorizontal: 18, paddingVertical: 8, alignSelf: 'flex-end' },
   filterBtnTxt:  { color: '#fff', fontWeight: '700', fontSize: 13 },
   resetBtn:      { borderWidth: 1.5, borderColor: GOLD, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7, alignSelf: 'flex-end' },
@@ -1018,6 +1074,14 @@ const fm = StyleSheet.create({
   catChipSelected: { backgroundColor: FOREST, borderColor: FOREST },
   catDot:      { width: 7, height: 7, borderRadius: 3.5 },
   catChipTxt:  { fontSize: 12.5, fontWeight: '600', color: '#374151' },
+  catEmptyHint:{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 4 },
+  catEmptyTxt: { fontSize: 12, color: '#9ca3af', fontStyle: 'italic', flex: 1 },
+
+  pmGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
+  pmChip:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 10, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
+  pmChipActive:{ backgroundColor: 'rgba(201,165,42,0.08)', borderColor: GOLD },
+  pmChipTxt:   { fontSize: 12.5, fontWeight: '600', color: '#374151' },
+  pmChipTxtActive: { color: GOLD, fontWeight: '700' },
 
   preview:     { backgroundColor: '#f8fafc', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#e5e7eb' },
   previewLbl:  { fontSize: 10, fontWeight: '800', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },

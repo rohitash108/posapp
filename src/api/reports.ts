@@ -5,7 +5,7 @@ export const reportsApi = {
     client.get('/reports/summary', { params }),
   sales: (params?: { date_from?: string; date_to?: string; group_by?: 'day' | 'week' | 'month' }) =>
     client.get('/reports/sales', { params }),
-  topItems: (params?: { date_from?: string; date_to?: string; limit?: number }) =>
+  topItems: (params?: { date_from?: string; date_to?: string }) =>
     client.get('/reports/top-items', { params }),
   paymentMethods: (params?: { date_from?: string; date_to?: string }) =>
     client.get('/reports/payment-methods', { params }),

@@ -2,7 +2,7 @@
  * More — mobile hub for all admin modules not in the bottom tab bar.
  */
 import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/store/themeStore';
@@ -31,7 +31,7 @@ const SECTIONS: { title: string; links: Link[] }[] = [
     title: 'CUSTOMERS',
     links: [
       { label: 'Customers', route: '/(app)/customers', icon: 'people-outline', color: '#16a34a' },
-      { label: 'Wallet', route: '/(app)/wallet', icon: 'wallet-outline', color: '#d97706' },
+      ...(Platform.OS !== 'web' ? [{ label: 'Wallet', route: '/(app)/wallet', icon: 'wallet-outline', color: '#d97706' }] : []),
       { label: 'Reservations', route: '/(app)/reservations', icon: 'calendar-outline', color: '#dc2626' },
       { label: 'Invoices', route: '/(app)/invoices', icon: 'document-text-outline', color: '#4f46e5' },
       { label: 'Payments', route: '/(app)/payments', icon: 'card-outline', color: '#0284c7' },
