@@ -122,9 +122,9 @@ export const themes: Record<ThemeMode, ThemeColors> = {
     placeholder: '#CBD5E1',
     dashboard: {
       ...dashboardBase,
-      bg: '#f9f9fa',
+      bg: '#F5F0E8',
       white: '#FFFFFF',
-      border: '#E2E8F0',
+      border: '#E8E3DA',
       text: '#0F172A',
       muted: '#64748B',
       card: '#FFFFFF',

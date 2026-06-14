@@ -38,7 +38,6 @@ import { ordersApi } from '@/api/orders';
 import { reportsApi } from '@/api/reports';
 import client from '@/api/client';
 import { useAppStore } from '@/store/appStore';
-import { AppBrandLogo, APP_BRAND_NAME, APP_BRAND_TAGLINE } from '@/components/AppBrandLogo';
 import { useTheme } from '@/store/themeStore';
 import type { Order, Reservation, RestaurantTable } from '@/types';
 
@@ -259,33 +258,45 @@ function SectionHeader({ title, action, onAction }: { title: string; action?: st
   );
 }
 
+// Colorful circular blob icon matching web dashboard design
+function BlobIcon({ color, icon, size = 64 }: { color: string; icon: any; size?: number }) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ position: 'absolute', width: size,         height: size,         borderRadius: size / 2, backgroundColor: color + '18' }} />
+      <View style={{ position: 'absolute', width: size * 0.72, height: size * 0.72, borderRadius: size / 2, backgroundColor: color + '28', right: 1, bottom: 1 }} />
+      <View style={{ position: 'absolute', width: size * 0.50, height: size * 0.50, borderRadius: size / 2, backgroundColor: color + '40', left: 3,  top: 3  }} />
+      <Ionicons name={icon} size={size * 0.38} color={color} />
+    </View>
+  );
+}
+
 function BigCard({ label, value, sub, icon, color, bg, growthPct, subColor, onPress }: {
   label: string; value: string; sub: string; icon: any;
-  color: string; bg: string; growthPct?: number; subColor?: string; onPress?: () => void;
+  color: string; bg?: string; growthPct?: number; subColor?: string; onPress?: () => void;
 }) {
   const { colors, isDark } = useTheme();
   const D = colors.dashboard;
   return (
     <TouchableOpacity
       style={[bc.wrap, {
-        backgroundColor: isDark ? color + '12' : color + '08',
-        borderColor: isDark ? color + '35' : D.border,
-        borderLeftColor: color,
-        shadowColor: color,
+        backgroundColor: D.white,
+        borderColor: isDark ? D.border : '#EBEBEB',
+        shadowColor: '#000',
+        shadowOpacity: isDark ? 0.22 : 0.06,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 3,
       }]}
       onPress={onPress} activeOpacity={0.82}
     >
-      {/* Text — paddingRight clears the icon box on the right */}
-      <View style={{ paddingRight: 86 }}>
+      <View style={{ paddingRight: 82 }}>
         <Text style={[bc.label, { color: D.muted }]}>{label}</Text>
         <Text style={[bc.value, { color: D.text }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
-          <Text style={[bc.sub, { color: subColor ?? color }]}>{sub}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+          <Text style={[bc.sub, { color: subColor ?? S.warning }]}>{sub}</Text>
           {growthPct !== undefined && growthPct !== 0 && (
             <View style={[bc.growthBadge, {
-              backgroundColor: isDark
-                ? (growthPct > 0 ? 'rgba(20,181,29,0.18)' : 'rgba(255,54,54,0.18)')
-                : (growthPct > 0 ? '#f0fdf4' : '#fff1f2'),
+              backgroundColor: growthPct > 0 ? 'rgba(20,181,29,0.12)' : 'rgba(255,54,54,0.12)',
             }]}>
               <Ionicons name={growthPct > 0 ? 'trending-up' : 'trending-down'} size={10}
                 color={growthPct > 0 ? S.success : S.danger} />
@@ -296,11 +307,8 @@ function BigCard({ label, value, sub, icon, color, bg, growthPct, subColor, onPr
           )}
         </View>
       </View>
-      {/* Icon — rounded-square, vertically centered on right via absolute stretch wrapper */}
-      <View style={{ position: 'absolute', right: 18, top: 0, bottom: 0, width: 70, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={[bc.iconBox, { backgroundColor: color + '20' }]}>
-          <Ionicons name={icon} size={28} color={color} />
-        </View>
+      <View style={{ position: 'absolute', right: 14, top: 14 }}>
+        <BlobIcon color={color} icon={icon} size={64} />
       </View>
     </TouchableOpacity>
   );
@@ -308,33 +316,32 @@ function BigCard({ label, value, sub, icon, color, bg, growthPct, subColor, onPr
 
 function SmallCard({ label, value, sub, icon, color, bg, danger, onPress }: {
   label: string; value: string | number; sub?: string; icon: any;
-  color: string; bg: string; danger?: boolean; onPress?: () => void;
+  color: string; bg?: string; danger?: boolean; onPress?: () => void;
 }) {
   const { colors, isDark } = useTheme();
   const D = colors.dashboard;
   const c = danger ? S.danger : color;
-  const valueColor = danger ? S.danger : D.text;
   return (
     <TouchableOpacity
       style={[smc.wrap, {
-        backgroundColor: isDark ? c + '12' : c + '08',
-        borderColor: isDark ? c + '35' : D.border,
-        borderTopColor: c,
-        shadowColor: c,
+        backgroundColor: D.white,
+        borderColor: danger ? S.danger : (isDark ? D.border : '#EBEBEB'),
+        borderWidth: danger ? 1.5 : 1,
+        shadowColor: '#000',
+        shadowOpacity: isDark ? 0.18 : 0.05,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 2,
       }]}
       onPress={onPress} activeOpacity={0.82}
     >
-      {/* Text — paddingRight clears the icon box */}
-      <View style={{ paddingRight: 54 }}>
+      <View style={{ paddingRight: 52 }}>
         <Text style={[smc.label, { color: D.muted }]} numberOfLines={1}>{label}</Text>
-        <Text style={[smc.value, { color: valueColor }]} numberOfLines={1}>{String(value)}</Text>
+        <Text style={[smc.value, { color: danger ? S.danger : D.text }]} numberOfLines={1}>{String(value)}</Text>
         {sub ? <Text style={[smc.sub, { color: c }]} numberOfLines={1}>{sub}</Text> : null}
       </View>
-      {/* Icon — rounded-square, vertically centered on right */}
-      <View style={{ position: 'absolute', right: 12, top: 0, bottom: 0, width: 46, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={[smc.iconBox, { backgroundColor: c + '20' }]}>
-          <Ionicons name={icon} size={18} color={c} />
-        </View>
+      <View style={{ position: 'absolute', right: 10, top: 10 }}>
+        <BlobIcon color={c} icon={icon} size={46} />
       </View>
     </TouchableOpacity>
   );
@@ -1246,85 +1253,78 @@ export default function DashboardScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={S.gold} />}
       showsVerticalScrollIndicator={false}
     >
-      {/* ── Hero header ── */}
-      <View style={[s.hero, { backgroundColor: colors.sidebar }]}>
-        <View style={s.heroBrand}>
-          <AppBrandLogo size={48} />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[s.heroName, { color: colors.brandName }]}>{APP_BRAND_NAME}</Text>
-            <Text style={[s.heroTagline, { color: colors.brandTagline }]}>{APP_BRAND_TAGLINE}</Text>
-            {restaurant?.name
-              ? <Text style={s.heroSub} numberOfLines={1}>{restaurant.name}</Text>
-              : null}
-            <Text style={s.heroDate}>{format(new Date(), 'EEEE, dd MMMM yyyy')}</Text>
-          </View>
-        </View>
+      {/* ── Dashboard header — matches web design ── */}
+      <View style={[s.dashHeader, { backgroundColor: D.white, borderBottomColor: isDark ? D.border : '#E8E3DA' }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={[s.onlinePill, { backgroundColor: isOnline ? 'rgba(20,181,29,0.15)' : 'rgba(239,68,68,0.15)' }]}>
+          <Text style={[s.dashTitle, { color: D.text }]}>Dashboard</Text>
+          <TouchableOpacity onPress={() => load(true, preset)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="refresh-outline" size={18} color={D.muted} />
+          </TouchableOpacity>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={[s.dashDate, { color: D.muted }]}>{format(new Date(), 'dd/MM/yyyy')}</Text>
+          <View style={[s.onlinePill, { backgroundColor: isOnline ? 'rgba(20,181,29,0.12)' : 'rgba(255,54,54,0.12)' }]}>
             <View style={[s.onlineDot, { backgroundColor: isOnline ? S.success : S.danger }]} />
             <Text style={[s.onlineText, { color: isOnline ? S.success : S.danger }]}>
               {isOnline ? 'Online' : 'Offline'}
             </Text>
           </View>
-          <TouchableOpacity style={s.refreshBtn} onPress={() => load(true, preset)}>
-            <Ionicons name="refresh-outline" size={16} color="rgba(255,255,255,0.7)" />
-          </TouchableOpacity>
         </View>
       </View>
 
-      {/* ── Date-range filter — segmented chips ── */}
-      <View style={[s.filterBar, { backgroundColor: D.white, borderColor: D.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: 'center' }}>
+      {/* ── Date-range filter — segmented chips matching web "Today" button style ── */}
+      <View style={[s.filterBar, { backgroundColor: D.white, borderBottomColor: isDark ? D.border : '#E8E3DA' }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7, alignItems: 'center', paddingVertical: 2 }}>
           {PRESETS.map(p => (
             <TouchableOpacity
               key={p.key}
               style={[
                 s.filterChip,
                 preset === p.key
-                  ? { backgroundColor: S.primary, borderColor: S.primary }
-                  : { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f4f4f5', borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e4e4e7' },
+                  ? { backgroundColor: 'transparent', borderColor: S.warning }
+                  : { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F5F5F5', borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E0E0E0' },
               ]}
               onPress={() => changePreset(p.key)}
               activeOpacity={0.8}
             >
-              <Text style={[s.filterChipText, { color: preset === p.key ? '#fff' : D.muted }]}>
+              {preset === p.key && (
+                <Ionicons name="calendar-outline" size={12} color={S.warning} style={{ marginRight: 3 }} />
+              )}
+              <Text style={[s.filterChipText, { color: preset === p.key ? S.warning : D.muted, fontWeight: preset === p.key ? '700' : '600' }]}>
                 {p.label}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
         <TouchableOpacity
-          style={[s.filterRefreshBtn, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e4e4e7' }]}
+          style={[s.filterRefreshBtn, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0' }]}
           onPress={handleRefresh}
         >
           <Ionicons name="refresh-outline" size={14} color={D.muted} />
         </TouchableOpacity>
       </View>
 
-      <View style={[s.body, { paddingTop: 16 }]}>
+      <View style={s.body}>
 
         {/* ── ROW 1: 3 BigCards ── */}
-        <View style={s.row}>
+        <View style={[s.row, { marginBottom: 12 }]}>
           <BigCard
             label="Today's Sales"      value={fmtFull(st?.today_sales ?? 0)}
             sub={`${st?.today_orders ?? 0} orders today`}
-            icon="calendar-outline"        color={S.primary} bg={S.primary + '20'}
-            subColor={S.warning}
+            icon="time-outline"            color={S.primary}
             onPress={() => go('/(app)/orders')}
           />
           <BigCard
             label="This Month's Sales" value={fmtFull(st?.month_sales ?? 0)}
             sub={`${st?.month_orders ?? 0} orders this month`}
-            icon="calendar-number-outline" color={S.success} bg={S.success + '20'}
+            icon="calendar-number-outline" color={S.success}
             growthPct={st?.sales_growth_pct}
-            subColor={S.warning}
             onPress={() => go('/(app)/orders')}
           />
           <BigCard
             label="Total Sales"        value={fmtFull(st?.total_sales ?? 0)}
             sub={`${st?.total_orders ?? 0} total orders`}
-            icon="trending-up-outline"     color={S.purple} bg={S.purple + '20'}
-            subColor={S.warning}
+            icon="wallet-outline"          color={S.purple}
             onPress={() => go('/(app)/orders')}
           />
         </View>
@@ -1334,16 +1334,16 @@ export default function DashboardScreen() {
           <SectionHeader title="Sales Breakdown" />
           <View style={s.grid}>
             {[
-              { label: 'Offline Orders', value: st?.offline_orders ?? 0,         icon: 'desktop-outline',   color: S.success, bg: S.success + '20', sub: 'non-aggregator' },
-              { label: 'Online Orders',  value: st?.online_orders  ?? 0,         icon: 'bicycle-outline',   color: S.danger,  bg: S.danger  + '20', sub: 'Zomato & Swiggy' },
-              { label: 'Offline Sale',   value: fmtMoney(st?.offline_sales ?? 0),icon: 'cash-outline',      color: S.warning, bg: S.warning + '20', sub: 'excl. GST' },
-              { label: 'Online Sale',    value: fmtMoney(st?.online_sales  ?? 0),icon: 'globe-outline',     color: S.primary, bg: S.primary + '20', sub: 'aggregator paid' },
-              { label: 'Net Sale',       value: fmtMoney(st?.net_sales     ?? 0),icon: 'analytics-outline', color: S.orange,  bg: S.orange  + '20', sub: 'Excl. GST' },
-              { label: 'Total Sale',     value: fmtMoney(st?.total_sales   ?? 0),icon: 'wallet-outline',    color: S.purple,  bg: S.purple  + '20', sub: 'Incl. GST' },
+              { label: 'Offline Orders', value: st?.offline_orders ?? 0,          icon: 'desktop-outline',   color: S.success, sub: undefined },
+              { label: 'Online Orders',  value: st?.online_orders  ?? 0,          icon: 'bicycle-outline',   color: S.danger,  sub: undefined },
+              { label: 'Offline Sale',   value: fmtMoney(st?.offline_sales ?? 0), icon: 'cash-outline',      color: S.warning, sub: undefined },
+              { label: 'Online Sale',    value: fmtMoney(st?.online_sales  ?? 0), icon: 'globe-outline',     color: S.primary, sub: undefined },
+              { label: 'Net Sale',       value: fmtMoney(st?.net_sales     ?? 0), icon: 'analytics-outline', color: S.orange,  sub: 'Excl. GST' },
+              { label: 'Total Sale',     value: fmtMoney(st?.total_sales   ?? 0), icon: 'wallet-outline',    color: S.purple,  sub: 'Incl. GST' },
             ].map((c, i) => (
               <View key={i} style={{ width: `${100 / cols6}%` as any, padding: 4 }}>
                 <SmallCard label={c.label} value={c.value} sub={c.sub}
-                  icon={c.icon} color={c.color} bg={c.bg}
+                  icon={c.icon} color={c.color} bg=""
                   onPress={() => go('/(app)/orders')} />
               </View>
             ))}
@@ -1715,14 +1715,14 @@ export default function DashboardScreen() {
 
 // ── StyleSheets (layout-only; colours applied inline from theme) ──────────────
 const s = StyleSheet.create({
-  body:     { padding: 18 },
+  body:     { padding: 16 },
   row:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   grid:     { flexDirection: 'row', flexWrap: 'wrap', width: '100%' },
-  section:  { marginBottom: 22 },
+  section:  { marginBottom: 20 },
   card:     {
-    borderRadius: 16, padding: 18,
+    borderRadius: 14, padding: 18,
     borderWidth: 1,
-    shadowOpacity: 0.07, shadowRadius: 16, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 2 },
     elevation: 2, marginBottom: 0,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
@@ -1733,26 +1733,31 @@ const s = StyleSheet.create({
   viewAllBtn: { borderWidth: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
   viewAllText:{ fontSize: 13, fontWeight: '700' },
 
-  // Hero
+  // Dashboard header (replaces dark hero)
+  dashHeader:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                   paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1 },
+  dashTitle:    { fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
+  dashDate:     { fontSize: 12, fontWeight: '600' },
+  onlinePill:   { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  onlineDot:    { width: 6, height: 6, borderRadius: 3 },
+  onlineText:   { fontSize: 11.5, fontWeight: '700' },
+
+  // Date-range filter bar
+  filterBar:        { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1 },
+  filterChip:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5 },
+  filterChipText:   { fontSize: 12 },
+  filterRefreshBtn: { width: 34, height: 34, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  filterRefresh:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  filterRefreshText:    { fontSize: 12, fontWeight: '600' },
+
+  // legacy (unused but kept for compat)
   hero:       { paddingHorizontal: 20, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 },
   heroBrand:  { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
   heroName:   { fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
   heroTagline:{ fontSize: 12, fontWeight: '600', marginTop: 2, letterSpacing: 1 },
   heroSub:    { fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 2 },
   heroDate:   { fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 3 },
-  onlinePill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  onlineDot:  { width: 7, height: 7, borderRadius: 4 },
-  onlineText: { fontSize: 12, fontWeight: '700' },
   refreshBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
-
-  // Date-range filter bar — segmented
-  filterBar:            { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
-  filterChip:           { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
-  filterChipText:       { fontSize: 12, fontWeight: '600' },
-  filterRefreshBtn:     { width: 34, height: 34, borderRadius: 9, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  // kept for compat (unused)
-  filterRefresh:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
-  filterRefreshText:    { fontSize: 12, fontWeight: '600' },
 });
 
 const sh = StyleSheet.create({
@@ -1763,37 +1768,29 @@ const sh = StyleSheet.create({
 });
 
 const bc = StyleSheet.create({
-  // Card: colored left accent (4px) + subtle tint bg + colored shadow = premium look
-  wrap:        { flex: 1, borderRadius: 18,
-                 paddingTop: 24, paddingBottom: 24, paddingLeft: 20, paddingRight: 20,
-                 borderWidth: 1, borderLeftWidth: 4,
-                 shadowOpacity: 0.12, shadowRadius: 20, shadowOffset: { width: 0, height: 4 },
-                 elevation: 5, minWidth: 160,
+  // Clean white card — no border accent, blob icon in top-right
+  wrap:        { flex: 1, borderRadius: 16,
+                 paddingTop: 20, paddingBottom: 20, paddingLeft: 18, paddingRight: 18,
+                 borderWidth: 1,
+                 elevation: 3, minWidth: 150,
                  overflow: 'hidden' },
-  // Rounded-square icon container (rendered inside absolute wrapper in JSX)
-  iconBox:     { width: 64, height: 64, borderRadius: 16,
-                 alignItems: 'center', justifyContent: 'center' },
   growthBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   growthText:  { fontSize: 11, fontWeight: '800' },
-  value:       { fontSize: 30, fontWeight: '900', letterSpacing: -1, marginTop: 6, marginBottom: 0 },
-  label:       { fontSize: 10.5, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase' },
+  value:       { fontSize: 28, fontWeight: '900', letterSpacing: -0.8, marginTop: 5, marginBottom: 0 },
+  label:       { fontSize: 11, fontWeight: '600', letterSpacing: 0.2, color: '#64748B' },
   sub:         { fontSize: 12.5, fontWeight: '600' },
+  iconBox:     { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
 });
 
 const smc = StyleSheet.create({
-  // Card: colored TOP accent (3px) + tint bg + colored shadow = premium small card
-  wrap:        { borderRadius: 16,
-                 paddingTop: 16, paddingBottom: 16, paddingLeft: 15, paddingRight: 15,
-                 borderWidth: 1, borderTopWidth: 3,
-                 shadowOpacity: 0.10, shadowRadius: 14, shadowOffset: { width: 0, height: 3 },
-                 elevation: 4,
+  // Clean white small card — no top accent, blob icon in top-right
+  wrap:        { borderRadius: 14,
+                 paddingTop: 14, paddingBottom: 14, paddingLeft: 13, paddingRight: 13,
                  overflow: 'hidden' },
-  // Rounded-square icon container (rendered inside absolute wrapper in JSX)
-  iconBox:     { width: 42, height: 42, borderRadius: 11,
-                 alignItems: 'center', justifyContent: 'center' },
-  value:       { fontSize: 22, fontWeight: '900', letterSpacing: -0.5, marginTop: 4, marginBottom: 1 },
-  label:       { fontSize: 9.5, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
+  value:       { fontSize: 20, fontWeight: '900', letterSpacing: -0.4, marginTop: 3, marginBottom: 1 },
+  label:       { fontSize: 10, fontWeight: '600', letterSpacing: 0.2, color: '#64748B' },
   sub:         { fontSize: 11, fontWeight: '600', marginTop: 2 },
+  iconBox:     { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
 });
 
 const ch = StyleSheet.create({
