@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { format, isToday, isYesterday, startOfWeek, startOfMonth, subDays } from 'date-fns';
 import { ordersApi } from '@/api/orders';
 import { useAppStore } from '@/store/appStore';
@@ -757,8 +758,9 @@ export default function OrdersScreen() {
   const [qrAlert,    setQrAlert]    = useState<Order[]>([]);
   const aggAlertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qrAlertTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const knownOrderIds = useRef<Set<number>>(new Set());
-  const isFirstLoad   = useRef(true);
+  const knownOrderIds      = useRef<Set<number>>(new Set());
+  const knownOrderStatuses = useRef<Map<number, string>>(new Map());
+  const isFirstLoad        = useRef(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { restaurant } = useAppStore();
   const { width } = useWindowDimensions();
@@ -796,29 +798,49 @@ export default function OrdersScreen() {
       );
       setOrders(data);
 
-      // Detect new orders on background polls (skip first load)
+      // Detect new orders / status changes on background polls (skip first load)
       if (isFirstLoad.current) {
-        data.forEach(o => knownOrderIds.current.add(o.id));
+        data.forEach(o => {
+          knownOrderIds.current.add(o.id);
+          knownOrderStatuses.current.set(o.id, o.status);
+        });
         isFirstLoad.current = false;
       } else {
-        // Zomato / Swiggy detection
+        // Zomato / Swiggy — new order detection
         const newAgg = data.filter(o => isAgg(o) && !knownOrderIds.current.has(o.id));
         if (newAgg.length > 0) {
           const src = newAgg.filter(o => o.source === 'zomato').length >= newAgg.filter(o => o.source === 'swiggy').length
             ? 'zomato' : 'swiggy';
           showAggAlert(src, newAgg);
         }
+        // Zomato / Swiggy — status-change detection
+        const statusChangedAgg = data.filter(o =>
+          isAgg(o) &&
+          knownOrderStatuses.current.has(o.id) &&
+          knownOrderStatuses.current.get(o.id) !== o.status
+        );
+        if (statusChangedAgg.length > 0) {
+          const o0 = statusChangedAgg[0];
+          const msg = statusChangedAgg.length === 1
+            ? `Order #${o0.order_number}: ${sCfg(o0.status).label}`
+            : `${statusChangedAgg.length} orders updated`;
+          setToastMsg(msg);
+          setTimeout(() => setToastMsg(''), 3500);
+        }
         // QR order detection
         const newQR = data.filter(o => o.source === 'qr' && !knownOrderIds.current.has(o.id));
         if (newQR.length > 0) {
-          // Delay slightly if there's already an agg alert showing
           if (newAgg.length > 0) {
             setTimeout(() => showQRAlert(newQR), 9000);
           } else {
             showQRAlert(newQR);
           }
         }
-        data.forEach(o => knownOrderIds.current.add(o.id));
+        // Update known state
+        data.forEach(o => {
+          knownOrderIds.current.add(o.id);
+          knownOrderStatuses.current.set(o.id, o.status);
+        });
       }
     } catch (e) { console.warn('Orders load:', e); }
     finally { setLoading(false); setRefreshing(false); }
@@ -829,6 +851,10 @@ export default function OrdersScreen() {
     pollRef.current = setInterval(() => load(true), POLL_MS);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => { load(true); }, [load])
+  );
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
