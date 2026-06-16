@@ -15,6 +15,7 @@ export interface Restaurant {
   phone?: string;
   address?: string;
   gst_number?: string;
+  payment_qr?: string;
 }
 
 export interface Category {

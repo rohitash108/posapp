@@ -200,6 +200,7 @@ ${discAmt > 0 ? `<div class="tot-row"><span>Discount</span><span>-${currency}${d
 <div class="hrd"></div>
 ${order.payment_method ? `<div class="row"><span>Payment</span><span class="b">${(order.payment_method || '').toUpperCase()}</span></div>` : ''}
 ${receivedAmt > 0 ? `<div class="row"><span>Received</span><span>${currency}${receivedAmt.toFixed(2)}</span></div>${changeAmt > 0 ? `<div class="row"><span>Change</span><span>${currency}${changeAmt.toFixed(2)}</span></div>` : ''}` : ''}
+${restaurant?.payment_qr ? `<div class="hr"></div><div class="c" style="margin:4px 0"><div class="sm b" style="margin-bottom:3px;letter-spacing:0.3px;">&#x25A3; Scan &amp; Pay via UPI</div><img src="${String(restaurant.payment_qr).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" alt="Payment QR" style="width:40mm;height:40mm;object-fit:contain;display:block;margin:0 auto;"><div class="sm" style="margin-top:2px;color:#444;">Google Pay &bull; PhonePe &bull; Paytm</div></div><div class="hr"></div>` : ''}
 <div class="c sm" style="margin-top:4px">Thank you, visit again!</div>
 <div class="print-actions no-print">
   <button type="button" class="btn-close" onclick="window.history.length>1?history.back():window.close()">Close</button>
