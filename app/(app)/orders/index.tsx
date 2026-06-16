@@ -790,13 +790,20 @@ export default function OrdersScreen() {
     qrAlertTimer.current = setTimeout(() => setQrAlert([]), 8000);
   }, []);
 
+  // Generation counter: each new fetch increments this; stale responses are
+  // silently discarded when their generation no longer matches the latest.
+  const loadGenRef = useRef(0);
+
   const load = useCallback(async (silent = false) => {
+    const gen = ++loadGenRef.current;
     if (!silent) setLoading(true);
     try {
       const range  = getDateRange(dateRange);
       const params: any = { per_page: 300 };
       if (range) { params.from = range.from; params.to = range.to; }
       const res  = await ordersApi.list(params);
+      // Discard stale responses that arrived after a newer fetch started.
+      if (gen !== loadGenRef.current) return;
       const raw: Order[] = Array.isArray(res.data?.data ?? res.data) ? (res.data?.data ?? res.data) : [];
       // Zomato & Swiggy orders are always pre-paid — force payment_status = 'paid'
       const data = raw.map(o =>
@@ -859,11 +866,28 @@ export default function OrdersScreen() {
     finally { setLoading(false); setRefreshing(false); }
   }, [dateRange, showAggAlert]);
 
+  // Keep a stable ref to the latest `load` so the polling interval always
+  // calls the freshest closure without needing to restart the interval.
+  const loadRef = useRef(load);
+  useEffect(() => { loadRef.current = load; }, [load]);
+
+  // Mount-only effect: start the initial load + polling interval.
+  // The interval calls loadRef.current (always fresh) so it picks up filter
+  // changes without restarting — no spinner flash on dateRange changes.
   useEffect(() => {
     load();
-    pollRef.current = setInterval(() => load(true), POLL_MS);
+    pollRef.current = setInterval(() => loadRef.current(true), POLL_MS);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [load]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Filter-change effect: silently refetch when dateRange changes after mount.
+  // Runs AFTER mount (isMountedRef guard) so it doesn't double-fire on load.
+  const isMountedRef = useRef(false);
+  useEffect(() => {
+    if (!isMountedRef.current) { isMountedRef.current = true; return; }
+    load(true);  // silent — no spinner, orders stay visible
+  }, [dateRange, load]);
 
   useFocusEffect(
     useCallback(() => { load(true); }, [load])
