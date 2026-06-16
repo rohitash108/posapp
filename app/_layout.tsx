@@ -41,34 +41,46 @@ export default function RootLayout() {
         await initDatabase();
       }
 
-      // Restore saved auth
-      const token = await getItem('sanctum_token');
-      const userJson = await getItem('auth_user');
+      // ── Step 1: Restore auth IMMEDIATELY from local storage (offline-first) ──
+      // The UI is unblocked right away — no network call required to show the app.
+      const token          = await getItem('sanctum_token');
+      const userJson       = await getItem('auth_user');
       const restaurantJson = await getItem('auth_restaurant');
+
       if (token && userJson && restaurantJson) {
         setAuth(JSON.parse(userJson), JSON.parse(restaurantJson), token);
-        // Validate session with server when online
-        try {
-          const { authApi } = await import('@/api/auth');
-          const meRes = await authApi.me();
-          const me = meRes.data?.user ?? meRes.data;
-          const rest = meRes.data?.restaurant ?? JSON.parse(restaurantJson);
-          if (me) {
-            setAuth(me, rest, token);
-            await setItem('auth_user', JSON.stringify(me));
-            if (rest) await setItem('auth_restaurant', JSON.stringify(rest));
-          }
-        } catch (e: any) {
-          if (e?.response?.status === 401) {
-            await deleteItem('sanctum_token');
-            await deleteItem('auth_user');
-            await deleteItem('auth_restaurant');
-            useAppStore.getState().clearAuth();
-          }
-        }
       }
 
+      // Unblock the UI immediately — do not wait for server validation.
       setHydrated();
+
+      // ── Step 2: Validate with server in the background (non-blocking) ────────
+      // Runs only when a session exists. Never clears auth on network errors —
+      // only a confirmed 401 (handled by the interceptor + silentReauth) can
+      // invalidate the session. All other errors (timeouts, 5xx, offline) are
+      // silently ignored so the user stays logged in.
+      if (token && userJson && restaurantJson) {
+        (async () => {
+          try {
+            const { authApi } = await import('@/api/auth');
+            const meRes = await authApi.me();
+            const me   = meRes.data?.user ?? meRes.data;
+            const rest = meRes.data?.restaurant ?? JSON.parse(restaurantJson);
+            if (me) {
+              setAuth(me, rest, token);
+              await setItem('auth_user', JSON.stringify(me));
+              if (rest) await setItem('auth_restaurant', JSON.stringify(rest));
+            }
+          } catch (e: any) {
+            // A genuine 401 is already handled by the interceptor in client.ts
+            // (silentReauth → performLogout). No action needed here.
+            // Network errors, timeouts, 5xx → silently ignored; user stays logged in.
+            if (e?.response?.status === 401) {
+              console.warn('[Bootstrap] Token validation failed — interceptor handling re-auth');
+            }
+          }
+        })();
+      }
 
       if (Platform.OS === 'web') {
         // Register service worker for PWA offline support

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { Tabs, usePathname, router } from 'expo-router';
+import { useTokenRefresh } from '@/hooks/useTokenRefresh';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Pressable, useWindowDimensions, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useAppStore } from '@/store/appStore';
@@ -290,6 +291,10 @@ export default function AppLayout() {
   const { width } = useWindowDimensions();
   const isLarge = width >= 640;
   const token = useAppStore((s) => s.token);
+
+  // Proactively refresh the Sanctum token when the app returns to foreground
+  // after a long absence, preventing the first API call from hitting a 401.
+  useTokenRefresh();
   const store = useAppStore();
   const { colors } = useTheme();
   const pathname = usePathname();

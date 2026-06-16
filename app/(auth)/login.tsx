@@ -54,16 +54,25 @@ export default function LoginScreen() {
     try {
       const res = await authApi.login({ email: email.trim(), password });
       const { token, user, restaurant } = res.data;
+
+      // Write auth state ONLY through setAuth() — the Zustand persist middleware
+      // automatically saves to SecureStore (native) / localStorage (web).
+      // Keeping a single source of truth prevents split-brain state on restart.
+      setAuth(user, restaurant, token);
+
+      // Also mirror to individual keys so the _layout.tsx bootstrap can read them
+      // during the transition period before all paths move to the Zustand store.
       await setItem('sanctum_token', token);
       await setItem('auth_user', JSON.stringify(user));
       await setItem('auth_restaurant', JSON.stringify(restaurant));
-      // Save or clear remembered credentials
+
+      // Save or clear remembered credentials (used for silent re-auth in the
+      // 401 interceptor when a token expires — see src/api/client.ts silentReauth).
       if (rememberMe) {
         await setItem('remember_me_credentials', JSON.stringify({ email: email.trim(), password }));
       } else {
         await deleteItem('remember_me_credentials');
       }
-      setAuth(user, restaurant, token);
       // Web: sync data to IndexedDB for offline use
       // Native: sync to SQLite
       if (Platform.OS === 'web') {

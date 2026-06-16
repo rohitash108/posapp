@@ -757,7 +757,7 @@ export default function OrdersScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [tab,        setTab]        = useState<TabKey>('all');
   const [srcFilter,  setSrcFilter]  = useState('all');
-  const [dateRange,  setDateRange]  = useState('today');
+  const [dateRange,  setDateRange]  = useState('all');
   const [search,     setSearch]     = useState('');
   const [viewMode,   setViewMode]   = useState<'grid' | 'list'>('grid');
   const [isUpdating, setIsUpdating] = useState(false);
