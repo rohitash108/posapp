@@ -34,4 +34,10 @@ export const ticketsApi = {
 
   /** DELETE /tickets/:id — delete a ticket (Restaurant Admin only) */
   delete: (id: number) => client.delete(`/tickets/${id}`),
+
+  /** GET /tickets/notifications/unread — unread count + preview list */
+  notificationsUnread: () => client.get('/tickets/notifications/unread'),
+
+  /** POST /tickets/notifications/mark-read — stamp last_seen_tickets_at = now() */
+  notificationsMarkRead: () => client.post('/tickets/notifications/mark-read'),
 };

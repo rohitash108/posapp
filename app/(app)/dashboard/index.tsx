@@ -30,6 +30,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Pressable, StyleSheet,
   RefreshControl, useWindowDimensions, ActivityIndicator, Platform,
+  Modal, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -80,23 +81,95 @@ function playQRBeep() {
 }
 
 // ── Date-range presets ────────────────────────────────────────────────────────
-type Preset = 'today' | 'yesterday' | 'week' | 'month' | 'all';
+type Preset = 'today' | 'yesterday' | 'week' | 'month' | 'all' | 'custom';
 const PRESETS: { key: Preset; label: string }[] = [
   { key: 'today',     label: 'Today'      },
   { key: 'yesterday', label: 'Yesterday'  },
   { key: 'week',      label: 'This Week'  },
   { key: 'month',     label: 'This Month' },
   { key: 'all',       label: 'All Time'   },
+  { key: 'custom',    label: 'Custom'     },
 ];
 
-function presetDates(p: Preset): { from: string | null; to: string | null } {
+function presetDates(p: Preset, cFrom?: string, cTo?: string): { from: string | null; to: string | null } {
   const d     = (date: Date) => format(date, 'yyyy-MM-dd');
   const today = new Date();
   if (p === 'today')     return { from: d(today),                                           to: d(today) };
   if (p === 'yesterday') return { from: d(subDays(today, 1)),                               to: d(subDays(today, 1)) };
   if (p === 'week')      return { from: d(startOfWeek(today, { weekStartsOn: 1 })),         to: d(today) };
   if (p === 'month')     return { from: d(startOfMonth(today)),                              to: d(today) };
+  if (p === 'custom')    return { from: cFrom ?? d(today),                                   to: cTo ?? d(today) };
   return { from: null, to: null };
+}
+
+function presetLabel(p: Preset, cFrom?: string, cTo?: string): string {
+  if (p === 'today')     return "Today's Sales";
+  if (p === 'yesterday') return "Yesterday's Sales";
+  if (p === 'week')      return "This Week's Sales";
+  if (p === 'month')     return "This Month's Sales";
+  if (p === 'all')       return 'All Time Sales';
+  if (p === 'custom' && cFrom && cTo) {
+    try {
+      if (cFrom === cTo) return `${format(new Date(cFrom), 'MMM d')} Sales`;
+      return `${format(new Date(cFrom), 'MMM d')} – ${format(new Date(cTo), 'MMM d')} Sales`;
+    } catch { return 'Custom Sales'; }
+  }
+  return 'Period Sales';
+}
+
+function presetSub(p: Preset, count: number): string {
+  const sfx = count === 1 ? 'order' : 'orders';
+  if (p === 'today')     return `${count} ${sfx} today`;
+  if (p === 'yesterday') return `${count} ${sfx} yesterday`;
+  if (p === 'week')      return `${count} ${sfx} this week`;
+  if (p === 'month')     return `${count} ${sfx} this month`;
+  if (p === 'all')       return `${count} ${sfx} total`;
+  return `${count} ${sfx} in range`;
+}
+
+function chartParamsForPreset(p: Preset, cFrom?: string, cTo?: string): Record<string, string> {
+  const d = (date: Date) => format(date, 'yyyy-MM-dd');
+  const today = new Date();
+  if (p === 'today')     return { date_from: d(today), date_to: d(today), group_by: 'day' };
+  if (p === 'yesterday') { const y = subDays(today, 1); return { date_from: d(y), date_to: d(y), group_by: 'day' }; }
+  if (p === 'week')      return { date_from: d(startOfWeek(today, { weekStartsOn: 1 })), date_to: d(today), group_by: 'day' };
+  if (p === 'month')     return { date_from: d(startOfMonth(today)), date_to: d(today), group_by: 'day' };
+  if (p === 'custom' && cFrom && cTo) return { date_from: cFrom, date_to: cTo, group_by: 'day' };
+  // all time — last 12 months grouped by month
+  return { date_from: d(subDays(today, 364)), date_to: d(today), group_by: 'month' };
+}
+
+function chartSubtitleForPreset(p: Preset, cFrom?: string, cTo?: string): string {
+  if (p === 'today')     return 'Today';
+  if (p === 'yesterday') return 'Yesterday';
+  if (p === 'week')      return 'This Week';
+  if (p === 'month')     return 'This Month';
+  if (p === 'all')       return 'Last 12 Months';
+  if (p === 'custom' && cFrom && cTo) {
+    try {
+      if (cFrom === cTo) return format(new Date(cFrom), 'MMM d, yyyy');
+      return `${format(new Date(cFrom), 'MMM d')} – ${format(new Date(cTo), 'MMM d, yyyy')}`;
+    } catch { return 'Custom Range'; }
+  }
+  return 'Selected Period';
+}
+
+function displayDateRange(p: Preset, cFrom?: string, cTo?: string): string {
+  const d  = (date: Date) => format(date, 'dd MMM yyyy');
+  const ds = (date: Date) => format(date, 'dd MMM');
+  const today = new Date();
+  if (p === 'today')     return d(today);
+  if (p === 'yesterday') return d(subDays(today, 1));
+  if (p === 'week')      return `${ds(startOfWeek(today, { weekStartsOn: 1 }))} – ${d(today)}`;
+  if (p === 'month')     return `${ds(startOfMonth(today))} – ${d(today)}`;
+  if (p === 'custom' && cFrom && cTo) {
+    try {
+      return cFrom === cTo
+        ? format(new Date(cFrom), 'dd MMM yyyy')
+        : `${format(new Date(cFrom), 'dd MMM')} – ${format(new Date(cTo), 'dd MMM yyyy')}`;
+    } catch { return 'Custom Range'; }
+  }
+  return 'All Time';
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -907,6 +980,11 @@ const QUICK_LINKS = [
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function DashboardScreen() {
   const [preset,       setPreset]       = useState<Preset>('today');
+  const [customFrom,   setCustomFrom]   = useState('');
+  const [customTo,     setCustomTo]     = useState('');
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customFromInput, setCustomFromInput] = useState('');
+  const [customToInput,   setCustomToInput]   = useState('');
   const [summary,      setSummary]      = useState<Summary | null>(null);
   const [chartDays,    setChartDays]    = useState<string[]>([]);
   const [chartRev,     setChartRev]     = useState<number[]>([]);
@@ -945,23 +1023,23 @@ export default function DashboardScreen() {
     qrAlertTimer.current = setTimeout(() => setQrAlert([]), 8000);
   }, []);
 
-  const load = useCallback(async (silent = false, p: Preset = preset) => {
+  const load = useCallback(async (silent = false, p: Preset = preset, cFrom: string = customFrom, cTo: string = customTo) => {
     if (!silent) setLoading(true);
     try {
       const today  = todayStr();
       const mStart = mStartStr();
-      const { from, to } = presetDates(p);
+      const { from, to } = presetDates(p, cFrom, cTo);
 
       // ── 1. Reports API (server-side aggregation) ──────────────────────────
       const reportParams: { date_from?: string; date_to?: string } = {};
       if (from) reportParams.date_from = from;
       if (to)   reportParams.date_to   = to;
 
-      const chart7From = format(subDays(new Date(), 6), 'yyyy-MM-dd');
+      const cParams = chartParamsForPreset(p, cFrom, cTo);
 
       const [summaryRes, salesRes, topItemsRes, payRes, expRes] = await Promise.allSettled([
         reportsApi.summary(reportParams),
-        reportsApi.sales({ date_from: chart7From, date_to: today, group_by: 'day' }),
+        reportsApi.sales(cParams),
         reportsApi.topItems(reportParams),
         reportsApi.paymentMethods(reportParams),
         reportsApi.expenses(reportParams),
@@ -1064,23 +1142,32 @@ export default function DashboardScreen() {
         }
       }
 
-      // ── 3. Sales chart (7-day) ────────────────────────────────────────────
+      // ── 3. Sales chart — period-specific ─────────────────────────────────
       if (salesRes.status === 'fulfilled') {
         const raw  = salesRes.value.data ?? {};
-        // API returns { data: [...entries], meta: {...} }
         const rows: SalesDay[] = Array.isArray(raw.data) ? raw.data
           : Array.isArray(raw.data?.entries) ? raw.data.entries
           : Array.isArray(raw) ? raw : [];
-        const days = last7Labels();
-        setChartDays(days.map(d => d.label));
-        setChartRev(days.map(d => {
-          const row = rows.find(r => r.date === d.date) as any;
-          return Number(row?.total_sales ?? row?.revenue ?? row?.sales ?? 0);
-        }));
-        setChartOrders(days.map(d => {
-          const row = rows.find(r => r.date === d.date) as any;
-          return Number(row?.total_orders ?? row?.orders ?? 0);
-        }));
+        const isMonthGroup = cParams.group_by === 'month';
+        if (rows.length > 0) {
+          setChartDays(rows.map(r => {
+            const ds = String((r as any).date ?? '');
+            try {
+              if (isMonthGroup) return format(new Date(ds + '-01'), 'MMM');
+              if (p === 'month') return format(new Date(ds), 'd');
+              if (p === 'today' || p === 'yesterday') return format(new Date(ds), 'MMM d');
+              return format(new Date(ds), 'EEE');
+            } catch { return ds.slice(5) || ds; }
+          }));
+          setChartRev(rows.map(r => Number((r as any).total_sales ?? (r as any).revenue ?? (r as any).sales ?? 0)));
+          setChartOrders(rows.map(r => Number((r as any).total_orders ?? (r as any).orders ?? 0)));
+        } else {
+          // No data for period — show last-7 scaffold with zeros
+          const days = last7Labels();
+          setChartDays(days.map(d => d.label));
+          setChartRev(days.map(() => 0));
+          setChartOrders(days.map(() => 0));
+        }
       }
 
       // ── 4. Top items ──────────────────────────────────────────────────────
@@ -1175,25 +1262,41 @@ export default function DashboardScreen() {
     } finally {
       setLoading(false);
     }
-  }, [preset]);
+  }, [preset, customFrom, customTo]);
 
   useEffect(() => {
-    load(false, preset);
-    pollRef.current = setInterval(() => load(true, preset), POLL_MS);
+    load(false, preset, customFrom, customTo);
+    pollRef.current = setInterval(() => load(true, preset, customFrom, customTo), POLL_MS);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [preset]);
+  }, [preset, customFrom, customTo]);
 
   async function handleRefresh() {
     setRefreshing(true);
-    await load(true, preset);
+    await load(true, preset, customFrom, customTo);
     setRefreshing(false);
   }
 
-  // Only update state — the useEffect [preset] dependency triggers load automatically.
-  // Calling load() here AND relying on useEffect was causing every filter tap to
-  // fire two back-to-back API bursts (the direct call + the effect re-run).
   function changePreset(p: Preset) {
-    setPreset(p);
+    if (p === 'custom') {
+      setCustomFromInput(customFrom || format(subDays(new Date(), 7), 'yyyy-MM-dd'));
+      setCustomToInput(customTo || format(new Date(), 'yyyy-MM-dd'));
+      setShowCustomModal(true);
+    } else {
+      setPreset(p);
+    }
+  }
+
+  function applyCustomDates() {
+    try {
+      const from = format(new Date(customFromInput), 'yyyy-MM-dd');
+      const to   = format(new Date(customToInput),   'yyyy-MM-dd');
+      setCustomFrom(from);
+      setCustomTo(to);
+      setPreset('custom');
+      setShowCustomModal(false);
+    } catch {
+      setShowCustomModal(false);
+    }
   }
 
   const go = (route: string) => router.push(route as any);
@@ -1247,6 +1350,51 @@ export default function DashboardScreen() {
         </Pressable>
       )}
 
+      {/* ── Custom date range modal ── */}
+      <Modal visible={showCustomModal} transparent animationType="fade" onRequestClose={() => setShowCustomModal(false)}>
+        <Pressable style={cdm.backdrop} onPress={() => setShowCustomModal(false)}>
+          <Pressable style={[cdm.box, { backgroundColor: D.white }]} onPress={e => e.stopPropagation()}>
+            <View style={cdm.header}>
+              <Ionicons name="calendar-outline" size={18} color={S.warning} />
+              <Text style={[cdm.title, { color: D.text }]}>Custom Date Range</Text>
+            </View>
+
+            <Text style={[cdm.label, { color: D.muted }]}>From Date</Text>
+            <TextInput
+              style={[cdm.input, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f8f9fb', color: D.text, borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#e0e0e0' }]}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={D.muted}
+              value={customFromInput}
+              onChangeText={setCustomFromInput}
+              keyboardType="numeric"
+              maxLength={10}
+            />
+
+            <Text style={[cdm.label, { color: D.muted }]}>To Date</Text>
+            <TextInput
+              style={[cdm.input, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f8f9fb', color: D.text, borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#e0e0e0' }]}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={D.muted}
+              value={customToInput}
+              onChangeText={setCustomToInput}
+              keyboardType="numeric"
+              maxLength={10}
+            />
+
+            <Text style={[cdm.hint, { color: D.muted }]}>Enter dates in YYYY-MM-DD format (e.g. 2025-06-01)</Text>
+
+            <View style={cdm.actions}>
+              <TouchableOpacity style={[cdm.btn, cdm.cancelBtn, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#e0e0e0' }]} onPress={() => setShowCustomModal(false)}>
+                <Text style={[cdm.btnText, { color: D.muted }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[cdm.btn, cdm.applyBtn]} onPress={applyCustomDates}>
+                <Text style={cdm.applyText}>Apply</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
     <ScrollView
       style={{ flex: 1, backgroundColor: D.bg }}
       contentContainerStyle={{ flexGrow: 1 }}
@@ -1262,7 +1410,7 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={[s.dashDate, { color: D.muted }]}>{format(new Date(), 'dd/MM/yyyy')}</Text>
+          <Text style={[s.dashDate, { color: D.muted }]}>{displayDateRange(preset, customFrom, customTo)}</Text>
           <View style={[s.onlinePill, { backgroundColor: isOnline ? 'rgba(20,181,29,0.12)' : 'rgba(255,54,54,0.12)' }]}>
             <View style={[s.onlineDot, { backgroundColor: isOnline ? S.success : S.danger }]} />
             <Text style={[s.onlineText, { color: isOnline ? S.success : S.danger }]}>
@@ -1275,26 +1423,37 @@ export default function DashboardScreen() {
       {/* ── Date-range filter — segmented chips matching web "Today" button style ── */}
       <View style={[s.filterBar, { backgroundColor: D.white, borderBottomColor: isDark ? D.border : '#E8E3DA' }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7, alignItems: 'center', paddingVertical: 2 }}>
-          {PRESETS.map(p => (
-            <TouchableOpacity
-              key={p.key}
-              style={[
-                s.filterChip,
-                preset === p.key
-                  ? { backgroundColor: 'transparent', borderColor: S.warning }
-                  : { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F5F5F5', borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E0E0E0' },
-              ]}
-              onPress={() => changePreset(p.key)}
-              activeOpacity={0.8}
-            >
-              {preset === p.key && (
-                <Ionicons name="calendar-outline" size={12} color={S.warning} style={{ marginRight: 3 }} />
-              )}
-              <Text style={[s.filterChipText, { color: preset === p.key ? S.warning : D.muted, fontWeight: preset === p.key ? '700' : '600' }]}>
-                {p.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {PRESETS.map(p => {
+            const isActive = preset === p.key;
+            const chipLabel = p.key === 'custom' && preset === 'custom' && customFrom && customTo
+              ? `${format(new Date(customFrom), 'dd/MM')}–${format(new Date(customTo), 'dd/MM')}`
+              : p.label;
+            return (
+              <TouchableOpacity
+                key={p.key}
+                style={[
+                  s.filterChip,
+                  isActive
+                    ? { backgroundColor: 'transparent', borderColor: S.warning }
+                    : { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F5F5F5', borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E0E0E0' },
+                ]}
+                onPress={() => changePreset(p.key)}
+                activeOpacity={0.8}
+              >
+                {(isActive || p.key === 'custom') && (
+                  <Ionicons
+                    name="calendar-outline"
+                    size={12}
+                    color={isActive ? S.warning : D.muted}
+                    style={{ marginRight: 3 }}
+                  />
+                )}
+                <Text style={[s.filterChipText, { color: isActive ? S.warning : D.muted, fontWeight: isActive ? '700' : '600' }]}>
+                  {chipLabel}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
         <TouchableOpacity
           style={[s.filterRefreshBtn, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0' }]}
@@ -1306,25 +1465,34 @@ export default function DashboardScreen() {
 
       <View style={s.body}>
 
-        {/* ── ROW 1: 3 BigCards ── */}
+        {/* ── ROW 1: 3 BigCards — Card 1 updates with the selected date range ── */}
         <View style={[s.row, { marginBottom: 12 }]}>
           <BigCard
-            label="Today's Sales"      value={fmtFull(st?.today_sales ?? 0)}
-            sub={`${st?.today_orders ?? 0} orders today`}
-            icon="time-outline"            color={S.primary}
+            label={presetLabel(preset, customFrom, customTo)}
+            value={fmtFull(st?.total_sales ?? 0)}
+            sub={presetSub(preset, st?.total_orders ?? 0)}
+            icon={preset === 'all' ? 'wallet-outline' : preset === 'today' ? 'time-outline' : 'calendar-outline'}
+            color={S.primary}
             onPress={() => go('/(app)/orders')}
           />
           <BigCard
-            label="This Month's Sales" value={fmtFull(st?.month_sales ?? 0)}
+            label="This Month's Sales"
+            value={fmtFull(st?.month_sales ?? 0)}
             sub={`${st?.month_orders ?? 0} orders this month`}
-            icon="calendar-number-outline" color={S.success}
+            icon="calendar-number-outline"
+            color={S.success}
             growthPct={st?.sales_growth_pct}
             onPress={() => go('/(app)/orders')}
           />
           <BigCard
-            label="Total Sales"        value={fmtFull(st?.total_sales ?? 0)}
-            sub={`${st?.total_orders ?? 0} total orders`}
-            icon="wallet-outline"          color={S.purple}
+            label={preset === 'today' ? 'Net Sales (Today)' : "Today's Sales"}
+            value={fmtFull(preset === 'today' ? (st?.net_sales ?? 0) : (st?.today_sales ?? 0))}
+            sub={preset === 'today'
+              ? 'excl. tax'
+              : `${st?.today_orders ?? 0} orders today`}
+            subColor={preset === 'today' ? S.info : S.warning}
+            icon={preset === 'today' ? 'analytics-outline' : 'time-outline'}
+            color={S.purple}
             onPress={() => go('/(app)/orders')}
           />
         </View>
@@ -1413,7 +1581,7 @@ export default function DashboardScreen() {
               <View style={s.cardHeader}>
                 <View>
                   <Text style={[s.cardTitle, { color: D.text }]}>Sale Analysis</Text>
-                  <Text style={[s.cardSub, { color: D.muted }]}>Last 7 Days</Text>
+                  <Text style={[s.cardSub, { color: D.muted }]}>{chartSubtitleForPreset(preset, customFrom, customTo)}</Text>
                 </View>
               </View>
               <LineChart labels={chartDays} revData={chartRev} ordData={chartOrders} />
@@ -1925,4 +2093,21 @@ const nr = StyleSheet.create({
   msg:      { fontSize: 12, marginTop: 2, lineHeight: 16.5 },
   time:     { fontSize: 11 },
   dot:      { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
+});
+
+// ── Custom date modal ─────────────────────────────────────────────────────────
+const cdm = StyleSheet.create({
+  backdrop:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  box:        { width: '100%', maxWidth: 380, borderRadius: 20, padding: 24, shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
+  header:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
+  title:      { fontSize: 17, fontWeight: '800', letterSpacing: -0.3 },
+  label:      { fontSize: 12, fontWeight: '700', letterSpacing: 0.3, marginBottom: 6 },
+  input:      { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, fontWeight: '600', marginBottom: 14 },
+  hint:       { fontSize: 11.5, marginBottom: 20, lineHeight: 16, textAlign: 'center' },
+  actions:    { flexDirection: 'row', gap: 10 },
+  btn:        { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
+  cancelBtn:  { borderWidth: 1.5 },
+  applyBtn:   { backgroundColor: '#1A2B1A' },
+  btnText:    { fontSize: 14, fontWeight: '700' },
+  applyText:  { fontSize: 14, fontWeight: '800', color: '#C9A52A' },
 });

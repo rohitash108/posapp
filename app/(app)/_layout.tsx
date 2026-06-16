@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { Tabs, usePathname, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Pressable, useWindowDimensions, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useAppStore } from '@/store/appStore';
 import { useOrderBadgeStore } from '@/store/orderBadgeStore';
+import { useTicketBadgeStore } from '@/store/ticketBadgeStore';
+import { ticketsApi } from '@/api/tickets';
 import { useTheme } from '@/store/themeStore';
 import { webSyncService } from '@/sync/WebSyncService';
 import { AppBrandLogo, APP_BRAND_NAME, APP_BRAND_TAGLINE } from '@/components/AppBrandLogo';
@@ -11,69 +13,53 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import type { ThemeColors } from '@/theme/tokens';
 
 type NavItem = { name: string; route: string; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] };
-type NavSection = { label: string; items: NavItem[] };
+type NavSection = { label?: string; items: NavItem[] };
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: 'OPERATIONS',
+    // No section label — main operations visible at the top
     items: [
-      { name: 'dashboard/index', route: '/(app)/dashboard', label: 'Dashboard',    icon: 'home-outline'         as const },
-      { name: 'pos/index',       route: '/(app)/pos',       label: 'POS',          icon: 'cart-outline'         as const },
-      { name: 'kitchen/index',   route: '/(app)/kitchen',   label: 'Kitchen',      icon: 'flame-outline'        as const },
-      { name: 'orders/index',    route: '/(app)/orders',    label: 'Orders',       icon: 'receipt-outline'      as const },
-      { name: 'tables/index',    route: '/(app)/tables',    label: 'Tables',       icon: 'grid-outline'         as const },
+      { name: 'dashboard/index',    route: '/(app)/dashboard',    label: 'Dashboard',     icon: 'apps-outline'          as const },
+      { name: 'pos/index',          route: '/(app)/pos',          label: 'POS 2',         icon: 'grid-outline'          as const },
+      { name: 'orders/index',       route: '/(app)/orders',       label: 'Orders',        icon: 'reorder-four-outline'  as const },
+      { name: 'kitchen/index',      route: '/(app)/kitchen',      label: 'Kitchen (KDS)', icon: 'key-outline'           as const },
+      { name: 'reservations/index', route: '/(app)/reservations', label: 'Reservations',  icon: 'lock-closed-outline'   as const },
     ],
   },
   {
-    label: 'MENU & STOCK',
+    label: 'MENU',
     items: [
-      { name: 'menu/index',        route: '/(app)/menu',        label: 'Menu Items',  icon: 'restaurant-outline'   as const },
-      { name: 'categories/index',  route: '/(app)/categories',  label: 'Categories',  icon: 'folder-outline'       as const },
-      { name: 'items/index',       route: '/(app)/items',       label: 'Items',       icon: 'fast-food-outline'    as const },
-      { name: 'inventory/index',   route: '/(app)/inventory',   label: 'Inventory',   icon: 'cube-outline'         as const },
+      { name: 'categories/index', route: '/(app)/categories', label: 'Categories', icon: 'layers-outline'        as const },
+      { name: 'items/index',      route: '/(app)/items',      label: 'Items',      icon: 'list-outline'          as const },
+      { name: 'inventory/index',  route: '/(app)/inventory',  label: 'Inventory',  icon: 'document-text-outline' as const },
+      { name: 'coupons/index',    route: '/(app)/coupons',    label: 'Coupons',    icon: 'pricetag-outline'      as const },
     ],
   },
   {
     label: 'CUSTOMERS',
     items: [
-      { name: 'customers/index',    route: '/(app)/customers',    label: 'Customers',    icon: 'people-outline'       as const },
-      ...(Platform.OS !== 'web' ? [{ name: 'wallet/index' as const, route: '/(app)/wallet' as const, label: 'Wallet', icon: 'wallet-outline' as const }] : []),
-      { name: 'reservations/index', route: '/(app)/reservations', label: 'Reservations', icon: 'calendar-outline'     as const },
-      { name: 'invoices/index',     route: '/(app)/invoices',     label: 'Invoices',     icon: 'document-text-outline' as const },
-      { name: 'payments/index',     route: '/(app)/payments',     label: 'Payments',     icon: 'card-outline'          as const },
-    ],
-  },
-  {
-    label: 'PROMOTIONS',
-    items: [
-      { name: 'coupons/index', route: '/(app)/coupons', label: 'Coupons', icon: 'pricetag-outline' as const },
+      { name: 'customers/index', route: '/(app)/customers', label: 'Customers', icon: 'person-outline'        as const },
+      { name: 'invoices/index',  route: '/(app)/invoices',  label: 'Invoices',  icon: 'document-text-outline' as const },
+      { name: 'payments/index',  route: '/(app)/payments',  label: 'Payments',  icon: 'cash-outline'          as const },
     ],
   },
   {
     label: 'FINANCE',
     items: [
-      { name: 'expenses/index',       route: '/(app)/expenses',       label: 'Expenses',       icon: 'wallet-outline'      as const },
-      { name: 'expense-report/index', route: '/(app)/expense-report', label: 'Expense Report', icon: 'stats-chart-outline' as const },
+      { name: 'expenses/index',       route: '/(app)/expenses',       label: 'Expenses',       icon: 'wallet-outline'    as const },
+      { name: 'expense-report/index', route: '/(app)/expense-report', label: 'Expense Report', icon: 'pie-chart-outline' as const },
+    ],
+  },
+  {
+    label: 'REPORTS',
+    items: [
+      { name: 'reports/index', route: '/(app)/reports', label: 'Sales Reports', icon: 'bar-chart-outline' as const },
     ],
   },
   {
     label: 'SUPPORT',
     items: [
-      { name: 'tickets/index', route: '/(app)/tickets', label: 'Tickets', icon: 'headset-outline' as const },
-      { name: 'notifications/index', route: '/(app)/notifications', label: 'Notifications', icon: 'notifications-outline' as const },
-    ],
-  },
-  {
-    label: 'ANALYTICS',
-    items: [
-      { name: 'reports/index', route: '/(app)/reports', label: 'Reports', icon: 'bar-chart-outline' as const },
-    ],
-  },
-  {
-    label: 'SYSTEM',
-    items: [
-      { name: 'staff/index', route: '/(app)/staff', label: 'Staff', icon: 'people-circle-outline' as const },
-      { name: 'more/index', route: '/(app)/more', label: 'All Modules', icon: 'apps-outline' as const },
-      { name: 'settings/index', route: '/(app)/settings', label: 'Settings', icon: 'settings-outline' as const },
+      { name: 'tickets/index', route: '/(app)/tickets', label: 'Tickets',    icon: 'briefcase-outline'  as const },
+      { name: 'tickets-new',   route: '/(app)/tickets', label: 'New Ticket', icon: 'add-circle-outline' as const },
     ],
   },
 ];
@@ -91,6 +77,40 @@ const TAB_ITEMS = [
 ];
 
 const SOURCE_BADGE_ROUTES = ['kitchen/index'];
+
+// Triple-beep alert matching CSPos order-bell (square wave, 5-note rising pattern × 3)
+let ticketBeepLockedUntil = 0;
+function playTicketBeep() {
+  if (Platform.OS !== 'web') return;
+  const wallNow = Date.now();
+  if (wallNow < ticketBeepLockedUntil) return; // already playing
+  ticketBeepLockedUntil = wallNow + 2700;       // 3 passes × 0.85s + margin
+  try {
+    const Ctx = (window as any).AudioContext ?? (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const t        = ctx.currentTime;
+    const FREQS    = [1046, 1318, 1568, 1318, 1046];
+    const PASS_GAP = 0.85;
+    for (let pass = 0; pass < 3; pass++) {
+      FREQS.forEach((freq: number, i: number) => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        const t0 = t + pass * PASS_GAP + i * 0.13;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.65, t0 + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+        osc.start(t0);
+        osc.stop(t0 + 0.25);
+      });
+    }
+  } catch { /* ignore — AudioContext unavailable */ }
+}
 
 function SyncDot() {
   const { isSyncing, isOnline } = useAppStore();
@@ -145,12 +165,13 @@ function Sidebar() {
   const sb = useMemo(() => createSidebarStyles(colors), [colors]);
   const pathname = usePathname();
 
-  // Nav badge counts driven by orderBadgeStore (populated by the Orders screen on every poll).
-  // No independent API call needed — zero extra network traffic.
+  // Nav badge counts — orders from orderBadgeStore, tickets from ticketBadgeStore.
   const { pendingCount, kitchenCount } = useOrderBadgeStore();
+  const { unreadCount: ticketUnread } = useTicketBadgeStore();
   const navCounts: Record<string, number> = {
     'orders/index':  pendingCount,
     'kitchen/index': kitchenCount,
+    'tickets/index': ticketUnread,
   };
 
   function isActive(name: string) {
@@ -187,9 +208,9 @@ function Sidebar() {
 
       {/* Navigation sections */}
       <ScrollView style={sb.navScroll} showsVerticalScrollIndicator={false}>
-        {NAV_SECTIONS.map(section => (
-          <View key={section.label}>
-            <Text style={sb.navSection}>{section.label}</Text>
+        {NAV_SECTIONS.map((section, sIdx) => (
+          <View key={section.label || sIdx}>
+            {section.label ? <Text style={sb.navSection}>{section.label}</Text> : null}
             {section.items.map((item) => {
               const active = isActive(item.name);
               return (
@@ -263,6 +284,8 @@ function RestaurantHeader() {
   );
 }
 
+const TICKET_POLL_MS = 20_000;
+
 export default function AppLayout() {
   const { width } = useWindowDimensions();
   const isLarge = width >= 640;
@@ -271,6 +294,32 @@ export default function AppLayout() {
   const { colors } = useTheme();
   const pathname = usePathname();
   const isPOS = pathname.includes('/pos');
+
+  // Ticket notification polling — matches CSPos 20-second interval.
+  // lastKnownCount ref prevents beeping on the very first poll (page load/resume).
+  const lastKnownTicketCount = useRef<number | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+
+    async function pollTickets() {
+      if (cancelled) return;
+      try {
+        const res = await ticketsApi.notificationsUnread();
+        const count: number = res.data?.count ?? 0;
+        useTicketBadgeStore.getState().setUnreadCount(count);
+        // Beep only when count increases from a previously-known value
+        if (lastKnownTicketCount.current !== null && count > lastKnownTicketCount.current) {
+          playTicketBeep();
+        }
+        lastKnownTicketCount.current = count;
+      } catch { /* ignore network errors */ }
+    }
+
+    pollTickets();
+    const timer = setInterval(pollTickets, TICKET_POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [token]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;

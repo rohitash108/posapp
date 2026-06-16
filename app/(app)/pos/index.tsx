@@ -225,6 +225,7 @@ export default function POSScreen() {
   const [search, setSearch]               = useState('');
   const [foodFilter, setFoodFilter]       = useState<Record<string, boolean>>({ veg: true, non_veg: true, egg: true });
   const [variationItem, setVariationItem] = useState<Item | null>(null);
+  const [showTableAlert, setShowTableAlert] = useState(false);
   const [showCart, setShowCart]           = useState(false);
   const [showCustPicker, setShowCustPicker] = useState(false);
   const custFieldRef = React.useRef<View>(null);
@@ -410,17 +411,7 @@ export default function POSScreen() {
     }
   }, [activeCatId]);
 
-  // Auto-refresh recent orders every 30s
-  useEffect(() => {
-    loadData();
-    const t = setInterval(() => {
-      ordersApi.list({ per_page: 8 }).then(r => {
-        const d = r.data?.data ?? r.data ?? [];
-        setRecentOrders(Array.isArray(d) ? d.slice(0, 8) : []);
-      }).catch(() => {});
-    }, 30_000);
-    return () => clearInterval(t);
-  }, []);
+  useEffect(() => { loadData(); }, []);
   useEffect(() => { loadItems(); }, [activeCatId]);
 
   // Sync discount/notes from inputs to cart store
@@ -459,7 +450,7 @@ export default function POSScreen() {
 
   function handleAdd(item: Item) {
     if (cart.order_type === 'dine_in' && !cart.table_id) {
-      Alert.alert('Table Required', 'Please select a table before adding items to the cart.');
+      setShowTableAlert(true);
       return;
     }
     if (item.variations?.length) setVariationItem(item);
@@ -520,7 +511,7 @@ export default function POSScreen() {
   // ── Add custom item ────────────────────────────────────────────────────────
   function handleAddCustomItem() {
     if (cart.order_type === 'dine_in' && !cart.table_id) {
-      Alert.alert('Table Required', 'Please select a table before adding items to the cart.');
+      setShowTableAlert(true);
       return;
     }
     const name  = customItemName.trim();
@@ -1256,6 +1247,36 @@ export default function POSScreen() {
   }
 
   // ── Modals ─────────────────────────────────────────────────────────────────
+
+  // SweetAlert-style table-required warning — replaces Alert.alert (which is
+  // silently suppressed by Electron/browsers in some contexts).
+  const tableAlertModal = (
+    <Modal visible={showTableAlert} transparent animationType="fade" onRequestClose={() => setShowTableAlert(false)}>
+      <View style={tam.overlay}>
+        <View style={tam.card}>
+          <View style={tam.iconWrap}>
+            <Ionicons name="warning" size={36} color="#f97316" />
+          </View>
+          <Text style={tam.title}>Table Selection Required</Text>
+          <Text style={tam.msg}>Please select a table before adding items to the cart.</Text>
+          <Pressable
+            style={({ pressed }) => [tam.primaryBtn, pressed && { opacity: 0.85 }]}
+            onPress={() => { setShowTableAlert(false); openTablePicker(); }}
+          >
+            <Ionicons name="grid-outline" size={16} color="#fff" />
+            <Text style={tam.primaryBtnTxt}>Select Table</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [tam.ghostBtn, pressed && { opacity: 0.7 }]}
+            onPress={() => setShowTableAlert(false)}
+          >
+            <Text style={tam.ghostBtnTxt}>Cancel</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const variationModal = (
     <Modal visible={!!variationItem} transparent animationType="fade" onRequestClose={() => setVariationItem(null)}>
       <View style={vm.overlay}>
@@ -1670,6 +1691,7 @@ export default function POSScreen() {
   if (isDesktop) {
     return (
       <View style={[sh.shell, t.shell]}>
+        {tableAlertModal}
         {successModal}
         {variationModal}
         {custPickerModal}
@@ -1749,26 +1771,6 @@ export default function POSScreen() {
               <Text style={sh.navBtnText}>Settings</Text>
             </Pressable>
           </View>
-          {/* Recent orders strip */}
-          {recentOrders.length > 0 && (
-            <View style={sh.recentStrip}>
-              <Text style={sh.recentLabel}>Recent Orders</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
-                {recentOrders.map(o => {
-                  const scfg: Record<string, string> = { pending: '#f59e0b', confirmed: '#3b82f6', preparing: '#7c3aed', ready: '#0891b2', completed: '#16a34a', cancelled: '#dc2626' };
-                  const clr = scfg[o.status] ?? '#6b7280';
-                  return (
-                    <View key={o.id} style={[sh.recentCard, { borderTopColor: clr }]}>
-                      <Text style={sh.recentNum}>#{o.order_number}</Text>
-                      <Text style={sh.recentCust} numberOfLines={1}>{o.customer_name || 'Walk-in'}</Text>
-                      <Text style={[sh.recentStatus, { color: clr }]}>{o.status}</Text>
-                      <Text style={sh.recentAmt}>₹{Number(o.total).toFixed(0)}</Text>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          )}
           {/* Toolbar */}
           <View style={sh.toolbar}>
             <View style={sh.searchBox}>
@@ -1837,6 +1839,7 @@ export default function POSScreen() {
   // ── Mobile layout ──────────────────────────────────────────────────────────
   return (
     <View style={[mb.shell, t.shell]}>
+      {tableAlertModal}
       {successModal}
       {variationModal}
       {custPickerModal}
@@ -2235,6 +2238,19 @@ const mb = StyleSheet.create({
 });
 
 // Order placed success modal — csPos style
+// SweetAlert-style table-required modal styles
+const tam = StyleSheet.create({
+  overlay:       { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  card:          { backgroundColor: '#fff', borderRadius: 18, padding: 28, width: '100%', maxWidth: 380, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 8 }, elevation: 18 },
+  iconWrap:      { width: 72, height: 72, borderRadius: 36, backgroundColor: '#fff7ed', alignItems: 'center', justifyContent: 'center', marginBottom: 16, borderWidth: 2, borderColor: '#fed7aa' },
+  title:         { fontSize: 19, fontWeight: '800', color: '#111827', textAlign: 'center', marginBottom: 10 },
+  msg:           { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 21, marginBottom: 22 },
+  primaryBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#f97316', borderRadius: 10, paddingVertical: 13, paddingHorizontal: 28, width: '100%', marginBottom: 10 },
+  primaryBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  ghostBtn:      { paddingVertical: 10, paddingHorizontal: 20 },
+  ghostBtnTxt:   { color: '#9ca3af', fontSize: 14, fontWeight: '600' },
+});
+
 const su = StyleSheet.create({
   overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   card:        { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 420, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 6 }, elevation: 16 },
