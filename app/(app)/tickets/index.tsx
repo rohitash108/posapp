@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ticketsApi } from '@/api/tickets';
+import { useTicketBadgeStore } from '@/store/ticketBadgeStore';
 import { useAppStore } from '@/store/appStore';
 import type { Ticket, TicketReply, TicketStatus, TicketPriority } from '@/types';
 import { useThemedScreen } from '@/theme/useThemedScreen';
@@ -745,7 +746,13 @@ export default function TicketsScreen() {
 
   useEffect(() => { load(); }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    load();
+    // Mark all ticket notifications as read when the user navigates to this screen
+    ticketsApi.notificationsMarkRead()
+      .then(() => useTicketBadgeStore.getState().setUnreadCount(0))
+      .catch(() => {});
+  }, [load]));
 
   function applyFilter() {
     setAppliedTab(tabFilter);

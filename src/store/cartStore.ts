@@ -53,8 +53,8 @@ interface CartState {
    */
   clearCart: () => void;
   getSubtotal: () => number;
-  getTaxAmount: (rate: number) => number;
-  getTotal: (taxRate?: number) => number;
+  getTaxAmount: (rate: number, type?: 'inclusive' | 'exclusive') => number;
+  getTotal: (taxRate?: number, taxType?: 'inclusive' | 'exclusive') => number;
 }
 
 const emptyCart = (): Cart => ({
@@ -159,14 +159,22 @@ export const useCartStore = create<CartState>()(
 
   getSubtotal: () => get().cart.items.reduce((sum, i) => sum + i.total_price, 0),
 
-  getTaxAmount: (rate) =>
-    parseFloat(((get().getSubtotal() * rate) / 100).toFixed(2)),
+  getTaxAmount: (rate, type = 'exclusive') => {
+    const sub = get().getSubtotal();
+    if (type === 'inclusive') {
+      // Tax is already embedded in item prices: extract it
+      return parseFloat((sub * rate / (100 + rate)).toFixed(2));
+    }
+    return parseFloat((sub * rate / 100).toFixed(2));
+  },
 
-  getTotal: (taxRate = 0) => {
+  getTotal: (taxRate = 0, taxType = 'exclusive') => {
     const sub  = get().getSubtotal();
-    const tax  = get().getTaxAmount(taxRate);
+    const tax  = get().getTaxAmount(taxRate, taxType);
     const disc = (get().cart.discount_amount ?? 0) + (get().cart.coupon_discount ?? 0);
-    return Math.max(0, sub + tax - disc);
+    // Inclusive: tax is already in sub, so don't add it again
+    const base = taxType === 'inclusive' ? sub : sub + tax;
+    return Math.max(0, base - disc);
   },
     }),
     {

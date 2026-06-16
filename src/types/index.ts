@@ -132,6 +132,7 @@ export interface Tax {
   id: number;
   name: string;
   rate: number;
+  type: 'inclusive' | 'exclusive';
 }
 
 export type OrderSource = 'pos' | 'zomato' | 'swiggy' | 'qr';
@@ -145,6 +146,7 @@ export interface OrderItem {
   item_id?: number;
   item_name?: string;   // DB column name from API responses
   name?: string;        // used locally in cart/POS
+  food_type?: 'veg' | 'non_veg' | 'egg';
   variation?: string;
   addons?: Addon[];
   quantity: number;
@@ -194,6 +196,7 @@ export interface CartItem {
   uuid: string;
   item_id: number;
   name: string;
+  food_type?: 'veg' | 'non_veg' | 'egg';
   variation?: string;
   variation_id?: number;
   addons: Addon[];

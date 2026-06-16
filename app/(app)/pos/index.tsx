@@ -270,7 +270,7 @@ export default function POSScreen() {
   const [quickPct, setQuickPct]           = useState<number | null>(null);
 
   const {
-    cart, addItem, updateQuantity, clearCart, getSubtotal, getTotal,
+    cart, addItem, updateQuantity, clearCart, getSubtotal, getTotal, getTaxAmount,
     setOrderType, setTable, switchTable, setCustomer, setWaiter, setDiscount, setNotes,
     setCoupon, setKotPrinted,
   } = useCartStore();
@@ -353,6 +353,7 @@ export default function POSScreen() {
   }, []);
   const { isOnline, taxes, restaurant } = useAppStore();
   const taxRate = taxes[0]?.rate ?? 0;
+  const taxType: 'inclusive' | 'exclusive' = taxes[0]?.type ?? 'exclusive';
   const { width } = useWindowDimensions();
   const isDesktop = width >= 900;
   const cols = width >= 1500 ? 5 : width >= 1200 ? 4 : width >= 900 ? 3 : 2;
@@ -444,7 +445,7 @@ export default function POSScreen() {
     if (existing) {
       updateQuantity(existing.uuid, existing.quantity + 1);
     } else {
-      addItem({ item_id: item.id, name: item.name, variation: varName, addons: [], quantity: 1, unit_price: price, total_price: price });
+      addItem({ item_id: item.id, name: item.name, food_type: item.food_type, variation: varName, addons: [], quantity: 1, unit_price: price, total_price: price });
     }
   }
 
@@ -543,9 +544,9 @@ export default function POSScreen() {
     try {
       const localUuid  = uuid.v4() as string;
       const subtotal   = getSubtotal();
-      const taxAmount  = parseFloat(((subtotal * taxRate) / 100).toFixed(2));
+      const taxAmount  = getTaxAmount(taxRate, taxType);
       const discount   = (cart.discount_amount ?? 0) + (cart.coupon_discount ?? 0);
-      const total      = getTotal(taxRate);
+      const total      = getTotal(taxRate, taxType);
       const custName   = walkInName.trim() || cart.customer_name || 'Walk-in';
       const received   = parseFloat(receivedInput) || 0;
 
@@ -575,6 +576,7 @@ export default function POSScreen() {
           item_id:     i.item_id || null,
           item_name:   i.name,
           name:        i.name,
+          food_type:   i.food_type ?? 'veg',
           variation:   i.variation ?? null,
           quantity:    i.quantity,
           unit_price:  i.unit_price,
@@ -675,9 +677,9 @@ export default function POSScreen() {
   // ── Computed ───────────────────────────────────────────────────────────────
   const cartCount = cart.items.reduce((s, i) => s + i.quantity, 0);
   const subtotal  = getSubtotal();
-  const taxAmount = parseFloat(((subtotal * taxRate) / 100).toFixed(2));
+  const taxAmount = getTaxAmount(taxRate, taxType);
   const discount  = (cart.discount_amount ?? 0) + (cart.coupon_discount ?? 0);
-  const total     = getTotal(taxRate);
+  const total     = getTotal(taxRate, taxType);
   const received  = parseFloat(receivedInput) || 0;
   const change    = received > 0 ? Math.max(0, received - total) : 0;
 

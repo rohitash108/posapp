@@ -48,6 +48,13 @@ function playNewOrderBeep() {
   } catch { /* ignore — audio permission denied or unsupported */ }
 }
 
+// ── Food-type dot colors (veg=green, non_veg=red, egg=amber) ─────────────────
+const FOOD_DOT_COLOR: Record<string, string> = {
+  veg:     '#16a34a',
+  non_veg: '#dc2626',
+  egg:     '#d97706',
+};
+
 // ── Status / source config ────────────────────────────────────────────────────
 const STATUS_CFG = {
   pending:   { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe', dot: '#3b82f6', label: 'Pending',   next: 'confirmed', nextLabel: 'Confirm'       },
@@ -472,7 +479,7 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
           <Text style={cd.noItems}>{agg ? 'Items not synced' : 'No items'}</Text>
         ) : shown.map((i, idx) => (
           <View key={idx} style={cd.itemRow}>
-            <View style={cd.itemDot} />
+            <View style={[cd.itemDot, { backgroundColor: FOOD_DOT_COLOR[i.food_type ?? 'veg'] ?? '#16a34a' }]} />
             <Text style={cd.itemName} numberOfLines={1}>
               {i.item_name ?? i.name ?? ''}{i.variation ? ` · ${i.variation}` : ''}
             </Text>
@@ -1311,7 +1318,7 @@ const cd = StyleSheet.create({
   extId:       { fontSize: 11, color: '#9ca3af' },
   itemsWrap:   { paddingHorizontal: 14, paddingTop: 7, paddingBottom: 11, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   itemRow:     { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 3.5 },
-  itemDot:     { width: 5, height: 5, borderRadius: 3, backgroundColor: '#cbd5e1', flexShrink: 0 },
+  itemDot:     { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
   itemName:    { flex: 1, fontSize: 12.5, color: '#374151', lineHeight: 17.5 },
   itemQty:     { fontSize: 12, fontWeight: '700', color: '#64748b' },
   itemPrice:   { fontSize: 12, color: '#374151', fontWeight: '600' },
