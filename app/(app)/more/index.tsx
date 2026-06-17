@@ -14,50 +14,47 @@ const SECTIONS: { title: string; links: Link[] }[] = [
   {
     title: 'OPERATIONS',
     links: [
-      { label: 'Dashboard', route: '/(app)/dashboard', icon: 'home-outline', color: '#1A2B1A' },
-      { label: 'Tables', route: '/(app)/tables', icon: 'grid-outline', color: '#7c3aed' },
+      { label: 'Dashboard',     route: '/(app)/dashboard',    icon: 'apps-outline',      color: '#1A2B1A' },
+      { label: 'Kitchen (KDS)', route: '/(app)/kitchen',      icon: 'flame-outline',     color: '#ea580c' },
+      { label: 'Reservations',  route: '/(app)/reservations', icon: 'calendar-outline',  color: '#dc2626' },
     ],
   },
   {
-    title: 'MENU & STOCK',
+    title: 'MENU',
     links: [
-      { label: 'Menu Items', route: '/(app)/menu', icon: 'restaurant-outline', color: '#2563eb' },
-      { label: 'Categories', route: '/(app)/categories', icon: 'folder-outline', color: '#0891b2' },
-      { label: 'Items', route: '/(app)/items', icon: 'fast-food-outline', color: '#ea580c' },
-      { label: 'Inventory', route: '/(app)/inventory', icon: 'cube-outline', color: '#64748b' },
+      { label: 'Categories', route: '/(app)/categories', icon: 'layers-outline',        color: '#0891b2' },
+      { label: 'Items',      route: '/(app)/items',      icon: 'list-outline',          color: '#ea580c' },
+      { label: 'Inventory',  route: '/(app)/inventory',  icon: 'cube-outline',          color: '#64748b' },
+      { label: 'Coupons',    route: '/(app)/coupons',    icon: 'pricetag-outline',      color: '#db2777' },
     ],
   },
   {
     title: 'CUSTOMERS',
     links: [
-      { label: 'Customers', route: '/(app)/customers', icon: 'people-outline', color: '#16a34a' },
-      ...(Platform.OS !== 'web' ? [{ label: 'Wallet', route: '/(app)/wallet', icon: 'wallet-outline', color: '#d97706' }] : []),
-      { label: 'Reservations', route: '/(app)/reservations', icon: 'calendar-outline', color: '#dc2626' },
-      { label: 'Invoices', route: '/(app)/invoices', icon: 'document-text-outline', color: '#4f46e5' },
-      { label: 'Payments', route: '/(app)/payments', icon: 'card-outline', color: '#0284c7' },
+      { label: 'Customers',  route: '/(app)/customers', icon: 'people-outline',        color: '#16a34a' },
+      { label: 'Invoices',   route: '/(app)/invoices',  icon: 'document-text-outline', color: '#4f46e5' },
+      { label: 'Payments',   route: '/(app)/payments',  icon: 'card-outline',          color: '#0284c7' },
+      ...(Platform.OS !== 'web' ? [{ label: 'Wallet', route: '/(app)/wallet', icon: 'wallet-outline', color: '#d97706' }] : [] as Link[]),
     ],
   },
   {
-    title: 'PROMOTIONS & FINANCE',
+    title: 'FINANCE',
     links: [
-      { label: 'Coupons', route: '/(app)/coupons', icon: 'pricetag-outline', color: '#db2777' },
-      { label: 'Expenses', route: '/(app)/expenses', icon: 'wallet-outline', color: '#ca8a04' },
+      { label: 'Expenses',       route: '/(app)/expenses',       icon: 'wallet-outline',      color: '#ca8a04' },
       { label: 'Expense Report', route: '/(app)/expense-report', icon: 'stats-chart-outline', color: '#059669' },
     ],
   },
   {
-    title: 'SUPPORT & ANALYTICS',
+    title: 'REPORTS',
     links: [
-      { label: 'Tickets', route: '/(app)/tickets', icon: 'headset-outline', color: '#9333ea' },
-      { label: 'Reports', route: '/(app)/reports', icon: 'bar-chart-outline', color: '#2563eb' },
-      { label: 'Notifications', route: '/(app)/notifications', icon: 'notifications-outline', color: '#f59e0b' },
+      { label: 'Sales Reports', route: '/(app)/reports', icon: 'bar-chart-outline', color: '#2563eb' },
     ],
   },
   {
-    title: 'SYSTEM',
+    title: 'SUPPORT',
     links: [
-      { label: 'Staff', route: '/(app)/staff', icon: 'people-circle-outline', color: '#1A2B1A' },
-      { label: 'Settings', route: '/(app)/settings', icon: 'settings-outline', color: '#64748b' },
+      { label: 'Tickets',       route: '/(app)/tickets',       icon: 'headset-outline',       color: '#9333ea' },
+      { label: 'Notifications', route: '/(app)/notifications', icon: 'notifications-outline', color: '#f59e0b' },
     ],
   },
 ];

@@ -17,13 +17,13 @@ type NavItem = { name: string; route: string; label: string; icon: React.Compone
 type NavSection = { label?: string; items: NavItem[] };
 const NAV_SECTIONS: NavSection[] = [
   {
-    // No section label — main operations visible at the top
+    // No section label — top-level operations (matches csPos web order)
     items: [
       { name: 'dashboard/index',    route: '/(app)/dashboard',    label: 'Dashboard',     icon: 'apps-outline'          as const },
       { name: 'pos/index',          route: '/(app)/pos',          label: 'POS 2',         icon: 'grid-outline'          as const },
       { name: 'orders/index',       route: '/(app)/orders',       label: 'Orders',        icon: 'reorder-four-outline'  as const },
-      { name: 'kitchen/index',      route: '/(app)/kitchen',      label: 'Kitchen (KDS)', icon: 'key-outline'           as const },
-      { name: 'reservations/index', route: '/(app)/reservations', label: 'Reservations',  icon: 'lock-closed-outline'   as const },
+      { name: 'kitchen/index',      route: '/(app)/kitchen',      label: 'Kitchen (KDS)', icon: 'flame-outline'         as const },
+      { name: 'reservations/index', route: '/(app)/reservations', label: 'Reservations',  icon: 'calendar-outline'      as const },
     ],
   },
   {
@@ -65,19 +65,6 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-// Flat list for tab registration
-const ALL_SCREENS = NAV_SECTIONS.flatMap(s => s.items);
-
-// Bottom tab items (mobile — keep concise)
-const TAB_ITEMS = [
-  { name: 'pos/index',     route: '/(app)/pos',     label: 'POS',     icon: 'cart-outline'     as const },
-  { name: 'kitchen/index', route: '/(app)/kitchen', label: 'Kitchen', icon: 'flame-outline'    as const },
-  { name: 'orders/index',  route: '/(app)/orders',  label: 'Orders',  icon: 'receipt-outline'  as const },
-  // Tables hidden from bottom tab bar
-  { name: 'settings/index',route: '/(app)/settings',label: 'More',    icon: 'ellipsis-horizontal-outline' as const },
-];
-
-const SOURCE_BADGE_ROUTES = ['kitchen/index'];
 
 // Triple-beep alert matching CSPos order-bell (square wave, 5-note rising pattern × 3)
 let ticketBeepLockedUntil = 0;
@@ -417,7 +404,7 @@ export default function AppLayout() {
     }}>
       <Tabs.Screen name="dashboard/index" options={{ title: 'Dashboard', tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} />, tabBarLabel: 'Home', headerShown: false }} />
       <Tabs.Screen name="pos/index" options={{ headerTitle: () => <RestaurantHeader />, tabBarIcon: ({ color, size }) => <Ionicons name="cart-outline" color={color} size={size} />, tabBarLabel: 'POS', headerRight: () => <HeaderActions /> }} />
-      <Tabs.Screen name="kitchen/index" options={{ title: 'Kitchen', tabBarIcon: ({ color, size }) => <Ionicons name="flame-outline" color={color} size={size} /> }} />
+      <Tabs.Screen name="kitchen/index" options={{ title: 'Kitchen', tabBarButton: () => null }} />
       <Tabs.Screen name="orders/index" options={{ title: 'Orders', tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="more/index" options={{ title: 'More', tabBarIcon: ({ color, size }) => <Ionicons name="ellipsis-horizontal-outline" color={color} size={size} />, tabBarLabel: 'More', headerShown: false }} />
       <Tabs.Screen name="tables/index" options={{ title: 'Tables', href: null, tabBarButton: () => null }} />

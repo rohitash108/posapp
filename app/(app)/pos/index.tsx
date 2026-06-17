@@ -82,8 +82,8 @@ function printKOT(items: any[], orderType: string, tableId?: number, tables?: Re
 html{-webkit-text-size-adjust:100%}
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;padding:0;width:100%}
-body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:600;line-height:1.3;color:#000;background:#fff;padding:0 2mm 70px;max-width:320px;margin:0 auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-@media print{body{padding:0 1mm 0;max-width:100%}.no-print{display:none!important}.item{page-break-inside:avoid;break-inside:avoid}}
+body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:600;line-height:1.3;color:#000;background:#fff;padding:0 2mm 4mm;max-width:320px;margin:0 auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+@media print{body{padding:0 1mm 0;max-width:100%}.item{page-break-inside:avoid;break-inside:avoid}}
 .c{text-align:center}.b{font-weight:800}.sm{font-size:9px}
 .hr{border:none;border-top:1px dashed #000;margin:4px 0}
 .hrd{border:none;border-top:2px solid #000;margin:4px 0}
@@ -93,9 +93,6 @@ body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;font-size:11px;
 .item{display:flex;justify-content:space-between;gap:6px;margin:3px 0;font-size:12px;font-weight:700}
 .item .nm{flex:1;min-width:0;word-break:break-word}
 .item .qty{flex-shrink:0;font-size:13px;font-weight:900;min-width:28px;text-align:right}
-.print-actions{position:fixed;left:0;right:0;bottom:0;padding:10px 16px;background:rgba(255,255,255,.97);border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:center;z-index:10}
-.print-actions button{flex:1;max-width:260px;padding:10px 14px;font-size:15px;font-weight:600;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer}
-.print-actions .btn-close{flex:0;background:#f3f4f6;color:#111}
 </style></head><body>
 <div class="c">
   <div class="shop-name">${restaurantName || 'Restaurant'}</div>
@@ -113,11 +110,7 @@ ${rows}
 ${notes ? `<div class="hr"></div><div style="font-size:10px;margin:3px 0"><span class="b">Note:</span> <span style="font-weight:400;font-style:italic">${notes}</span></div>` : ''}
 <div class="hrd"></div>
 <div class="c sm" style="margin-top:3px">Total Items: ${totalQty}</div>
-<div class="print-actions no-print">
-  <button type="button" class="btn-close" onclick="window.close()">Close</button>
-  <button type="button" onclick="window.print()">Print KOT</button>
-</div>
-<script>(function(){if(window.self===window.top){if(document.readyState==='complete'){setTimeout(function(){window.print()},400)}else{window.addEventListener('load',function(){setTimeout(function(){window.print()},400)})}}})();</script>
+<script>(function(){function doPrint(){window.print();window.onafterprint=function(){window.close();};}if(document.readyState==='complete'){setTimeout(doPrint,300)}else{window.addEventListener('load',function(){setTimeout(doPrint,300)})}})();</script>
 </body></html>`;
   const w = window.open('', '_blank', 'width=380,height=600');
   if (w) { w.document.write(html); w.document.close(); }
@@ -155,8 +148,8 @@ function printOrderReceipt(order: any, restaurant: any, taxRate = 0) {
 html{-webkit-text-size-adjust:100%}
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;padding:0;width:100%}
-body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:600;line-height:1.25;color:#000;background:#fff;padding:0 2mm 70px;max-width:320px;margin:0 auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-@media print{body{padding:0 1mm 0;max-width:100%;font-size:10px}.no-print{display:none!important}}
+body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:600;line-height:1.25;color:#000;background:#fff;padding:0 2mm 4mm;max-width:320px;margin:0 auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+@media print{body{padding:0 1mm 0;max-width:100%;font-size:10px}}
 .c{text-align:center}.b{font-weight:700}.sm{font-size:9px}
 .hr{border:none;border-top:1px dashed #000;margin:3px 0}
 .hrd{border:none;border-top:2px solid #000;margin:3px 0}
@@ -170,9 +163,6 @@ body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;font-size:10px;
 .item .pr{flex-shrink:0}
 .tot-row{display:flex;justify-content:space-between;gap:4px;margin:1px 0}
 .grand{font-size:12px;font-weight:800}
-.print-actions{position:fixed;left:0;right:0;bottom:0;padding:10px 16px;background:rgba(255,255,255,.97);border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:center;z-index:10}
-.print-actions button{flex:1;max-width:260px;padding:10px 14px;font-size:15px;font-weight:600;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer}
-.print-actions .btn-close{flex:0;background:#f3f4f6;color:#111}
 </style></head><body>
 <div class="c">
   <div class="logo"><img src="${logoUrl}" alt="${restaurant?.name ?? ''}" onerror="this.style.display='none'"></div>
@@ -202,11 +192,7 @@ ${order.payment_method ? `<div class="row"><span>Payment</span><span class="b">$
 ${receivedAmt > 0 ? `<div class="row"><span>Received</span><span>${currency}${receivedAmt.toFixed(2)}</span></div>${changeAmt > 0 ? `<div class="row"><span>Change</span><span>${currency}${changeAmt.toFixed(2)}</span></div>` : ''}` : ''}
 ${restaurant?.payment_qr ? `<div class="hr"></div><div class="c" style="margin:4px 0"><div class="sm b" style="margin-bottom:3px;letter-spacing:0.3px;">&#x25A3; Scan &amp; Pay via UPI</div><img src="${String(restaurant.payment_qr).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" alt="Payment QR" style="width:40mm;height:40mm;object-fit:contain;display:block;margin:0 auto;"><div class="sm" style="margin-top:2px;color:#444;">Google Pay &bull; PhonePe &bull; Paytm</div></div><div class="hr"></div>` : ''}
 <div class="c sm" style="margin-top:4px">Thank you, visit again!</div>
-<div class="print-actions no-print">
-  <button type="button" class="btn-close" onclick="window.history.length>1?history.back():window.close()">Close</button>
-  <button type="button" id="receipt-print-btn">Print</button>
-</div>
-<script>(function(){var btn=document.getElementById('receipt-print-btn');function doPrint(){try{window.print()}catch(e){}}if(btn)btn.addEventListener('click',doPrint);function afterReady(){setTimeout(doPrint,400)}if(document.readyState==='complete'){afterReady()}else{window.addEventListener('load',afterReady)}})();</script>
+<script>(function(){function doPrint(){window.print();window.onafterprint=function(){window.close();};}if(document.readyState==='complete'){setTimeout(doPrint,300)}else{window.addEventListener('load',function(){setTimeout(doPrint,300)})}})();</script>
 </body></html>`;
   const w = window.open('', '_blank', 'width=400,height=620');
   if (w) { w.document.write(html); w.document.close(); }
@@ -361,6 +347,7 @@ export default function POSScreen() {
 
   // ── Load data ──────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
+    // ── Phase 1: Load menu/sync data (critical — needed immediately) ──────────
     if (Platform.OS === 'web') {
       try {
         const res = await client.get('/sync/pull');
@@ -389,21 +376,25 @@ export default function POSScreen() {
       const cats = await getCategories();
       setCategories(cats);
     }
-    try {
-      const res = await client.get('/customers');
-      const data = res.data?.data ?? res.data ?? [];
+
+    // ── Phase 2: Load secondary data in parallel (non-blocking) ──────────────
+    const [custRes, staffRes, ordersRes] = await Promise.allSettled([
+      client.get('/customers'),
+      client.get('/staff'),
+      ordersApi.list({ per_page: 10 }),
+    ]);
+    if (custRes.status === 'fulfilled') {
+      const data = custRes.value.data?.data ?? custRes.value.data ?? [];
       setCustomers(Array.isArray(data) ? data : []);
-    } catch { /* offline */ }
-    try {
-      const res = await client.get('/staff');
-      const data = res.data?.data ?? res.data ?? [];
+    }
+    if (staffRes.status === 'fulfilled') {
+      const data = staffRes.value.data?.data ?? staffRes.value.data ?? [];
       setStaff(Array.isArray(data) ? data : []);
-    } catch { /* offline */ }
-    try {
-      const res = await ordersApi.list({ per_page: 10 });
-      const data = res.data?.data ?? res.data ?? [];
+    }
+    if (ordersRes.status === 'fulfilled') {
+      const data = ordersRes.value.data?.data ?? ordersRes.value.data ?? [];
       setRecentOrders(Array.isArray(data) ? data.slice(0, 8) : []);
-    } catch { /* offline */ }
+    }
   }, []);
 
   const loadItems = useCallback(async () => {
@@ -536,7 +527,7 @@ export default function POSScreen() {
   }
 
   // ── Place order ────────────────────────────────────────────────────────────
-  async function handlePlaceOrder(asDraft = false) {
+  async function handlePlaceOrder(asDraft = false, autoPrint = false) {
     if (cart.items.length === 0) {
       Alert.alert('Empty Cart', 'Add items before placing an order.');
       return;
@@ -593,9 +584,12 @@ export default function POSScreen() {
           const orderNum   = res.data?.order_number ?? res.data?.data?.order_number ?? localUuid.slice(0, 8);
           const orderId    = res.data?.id ?? res.data?.data?.id ?? null;
           const tableName  = tables.find(t => t.id === cart.table_id)?.name ?? null;
+          const orderData  = { ...payload, order_number: orderNum, table_name: tableName };
+          // Auto-print receipt immediately if requested (skips the success modal prompt)
+          if (autoPrint) printOrderReceipt(orderData, restaurant, taxRate);
           setLastOrderNum(orderNum);
           setLastOrderId(orderId);
-          setLastOrderData({ ...payload, order_number: orderNum, table_name: tableName });
+          setLastOrderData(orderData);
           clearCart();
           setWalkInName('');
           setDiscountInput('');
@@ -643,8 +637,10 @@ export default function POSScreen() {
         await addToSyncQueue({ id: localUuid, action: 'create_order', payload: JSON.stringify(payload), created_at: new Date().toISOString() });
       }
       const tableNameOffline = tables.find(t => t.id === cart.table_id)?.name ?? null;
+      const offlineOrderData = { ...payload, order_number: localUuid.slice(0, 8), table_name: tableNameOffline };
+      if (autoPrint) printOrderReceipt(offlineOrderData, restaurant, taxRate);
       setLastOrderNum(localUuid.slice(0, 8));
-      setLastOrderData({ ...payload, order_number: localUuid.slice(0, 8), table_name: tableNameOffline });
+      setLastOrderData(offlineOrderData);
       clearCart();
       setWalkInName('');
       setDiscountInput('');
@@ -1163,7 +1159,7 @@ export default function POSScreen() {
 
         {/* Row 1: Print | Invoice | Draft */}
         <View style={cp.btnRow3}>
-          <Pressable style={cp.btn3} onPress={() => handlePlaceOrder(false)}>
+          <Pressable style={cp.btn3} onPress={() => handlePlaceOrder(false, true)} disabled={placing || cartCount === 0}>
             <Ionicons name="print-outline" size={14} color="#374151" />
             <Text style={cp.btn3Text}>Print</Text>
           </Pressable>
@@ -1756,22 +1752,6 @@ export default function POSScreen() {
             <Pressable style={sh.navBtn} onPress={() => router.push('/(app)/orders' as any)}>
               <Ionicons name="receipt-outline" size={16} color="#5A7A5A" />
               <Text style={sh.navBtnText}>Orders</Text>
-            </Pressable>
-            <Pressable style={sh.navBtn} onPress={() => router.push('/(app)/kitchen' as any)}>
-              <Ionicons name="flame-outline" size={16} color="#5A7A5A" />
-              <Text style={sh.navBtnText}>Kitchen</Text>
-            </Pressable>
-            <Pressable style={sh.navBtn} onPress={() => router.push('/(app)/tables' as any)}>
-              <Ionicons name="grid-outline" size={16} color="#5A7A5A" />
-              <Text style={sh.navBtnText}>Tables</Text>
-            </Pressable>
-            <Pressable style={sh.navBtn} onPress={() => router.push('/(app)/reports' as any)}>
-              <Ionicons name="bar-chart-outline" size={16} color="#5A7A5A" />
-              <Text style={sh.navBtnText}>Reports</Text>
-            </Pressable>
-            <Pressable style={sh.navBtn} onPress={() => router.push('/(app)/settings' as any)}>
-              <Ionicons name="settings-outline" size={16} color="#5A7A5A" />
-              <Text style={sh.navBtnText}>Settings</Text>
             </Pressable>
           </View>
           {/* Toolbar */}
