@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { Tabs, usePathname, router } from 'expo-router';
 import { useTokenRefresh } from '@/hooks/useTokenRefresh';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text, Pressable, useWindowDimensions, ScrollView, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, useWindowDimensions, ScrollView, StyleSheet, Platform, Modal, Animated, TouchableWithoutFeedback } from 'react-native';
 import { useAppStore } from '@/store/appStore';
 import { useOrderBadgeStore } from '@/store/orderBadgeStore';
 import { useTicketBadgeStore } from '@/store/ticketBadgeStore';
@@ -23,14 +23,11 @@ const NAV_SECTIONS: NavSection[] = [
       { name: 'pos/index',          route: '/(app)/pos',          label: 'POS 2',         icon: 'grid-outline'          as const },
       { name: 'orders/index',       route: '/(app)/orders',       label: 'Orders',        icon: 'reorder-four-outline'  as const },
       { name: 'kitchen/index',      route: '/(app)/kitchen',      label: 'Kitchen (KDS)', icon: 'flame-outline'         as const },
-      { name: 'reservations/index', route: '/(app)/reservations', label: 'Reservations',  icon: 'calendar-outline'      as const },
     ],
   },
   {
     label: 'MENU',
     items: [
-      { name: 'categories/index', route: '/(app)/categories', label: 'Categories', icon: 'layers-outline'        as const },
-      { name: 'items/index',      route: '/(app)/items',      label: 'Items',      icon: 'list-outline'          as const },
       { name: 'inventory/index',  route: '/(app)/inventory',  label: 'Inventory',  icon: 'document-text-outline' as const },
       { name: 'coupons/index',    route: '/(app)/coupons',    label: 'Coupons',    icon: 'pricetag-outline'      as const },
     ],
@@ -274,10 +271,147 @@ function RestaurantHeader() {
 
 const TICKET_POLL_MS = 20_000;
 
+// ── More Bottom Sheet ─────────────────────────────────────────────────────────
+type MoreLink = { label: string; route: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string };
+const MORE_SECTIONS: { title: string; links: MoreLink[] }[] = [
+  {
+    title: 'OPERATIONS',
+    links: [
+      { label: 'Dashboard',   route: '/(app)/dashboard',    icon: 'apps-outline',      color: '#1A2B1A' },
+      { label: 'Kitchen',     route: '/(app)/kitchen',      icon: 'flame-outline',     color: '#ea580c' },
+      { label: 'Tables',      route: '/(app)/tables',       icon: 'grid-outline',      color: '#7c3aed' },
+    ],
+  },
+  {
+    title: 'MENU',
+    links: [
+      { label: 'Inventory',  route: '/(app)/inventory',  icon: 'cube-outline',          color: '#64748b' },
+      { label: 'Coupons',    route: '/(app)/coupons',    icon: 'pricetag-outline',      color: '#db2777' },
+    ],
+  },
+  {
+    title: 'CUSTOMERS',
+    links: [
+      { label: 'Customers',  route: '/(app)/customers', icon: 'people-outline',        color: '#16a34a' },
+      { label: 'Invoices',   route: '/(app)/invoices',  icon: 'document-text-outline', color: '#4f46e5' },
+      { label: 'Payments',   route: '/(app)/payments',  icon: 'card-outline',          color: '#0284c7' },
+      ...(Platform.OS !== 'web' ? [{ label: 'Wallet', route: '/(app)/wallet', icon: 'wallet-outline', color: '#d97706' } as MoreLink] : []),
+    ],
+  },
+  {
+    title: 'FINANCE',
+    links: [
+      { label: 'Expenses',   route: '/(app)/expenses',       icon: 'wallet-outline',      color: '#ca8a04' },
+      { label: 'Exp. Report',route: '/(app)/expense-report', icon: 'stats-chart-outline', color: '#059669' },
+      { label: 'Reports',    route: '/(app)/reports',        icon: 'bar-chart-outline',   color: '#2563eb' },
+    ],
+  },
+  {
+    title: 'ADMIN',
+    links: [
+      { label: 'Tickets',       route: '/(app)/tickets',       icon: 'headset-outline',       color: '#9333ea' },
+      { label: 'Notifications', route: '/(app)/notifications', icon: 'notifications-outline', color: '#f59e0b' },
+      { label: 'Staff',         route: '/(app)/staff',         icon: 'people-circle-outline', color: '#0f766e' },
+      { label: 'Settings',      route: '/(app)/settings',      icon: 'settings-outline',      color: '#475569' },
+    ],
+  },
+];
+
+function MoreBottomSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { colors, isDark } = useTheme();
+  const slideY = useRef(new Animated.Value(700)).current;
+  const backdropOp = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(slideY, { toValue: 0, useNativeDriver: true, tension: 60, friction: 12 }),
+        Animated.timing(backdropOp, { toValue: 1, duration: 220, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideY, { toValue: 700, duration: 240, useNativeDriver: true }),
+        Animated.timing(backdropOp, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [visible]);
+
+  function navigate(route: string) {
+    onClose();
+    setTimeout(() => router.push(route as any), 50);
+  }
+
+  return (
+    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      {/* Backdrop */}
+      <TouchableWithoutFeedback onPress={onClose}>
+        <Animated.View style={[ms.backdrop, { opacity: backdropOp }]} />
+      </TouchableWithoutFeedback>
+
+      {/* Sheet */}
+      <Animated.View style={[ms.sheet, { backgroundColor: colors.background, transform: [{ translateY: slideY }] }]}>
+        {/* Handle */}
+        <View style={ms.handleWrap}>
+          <View style={[ms.handle, { backgroundColor: colors.border }]} />
+        </View>
+
+        {/* Header */}
+        <View style={[ms.sheetHeader, { borderBottomColor: colors.border }]}>
+          <Text style={[ms.sheetTitle, { color: colors.text }]}>All Modules</Text>
+          <Pressable onPress={onClose} style={ms.closeBtn}>
+            <Ionicons name="close" size={20} color={colors.textMuted} />
+          </Pressable>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={ms.scrollContent}>
+          {MORE_SECTIONS.map(section => (
+            <View key={section.title} style={ms.section}>
+              <Text style={[ms.sectionTitle, { color: colors.textMuted }]}>{section.title}</Text>
+              <View style={[ms.grid, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                {section.links.map(link => (
+                  <Pressable
+                    key={link.route}
+                    style={({ pressed }) => [ms.tile, pressed && { opacity: 0.65, transform: [{ scale: 0.95 }] }]}
+                    onPress={() => navigate(link.route)}
+                  >
+                    <View style={[ms.iconWrap, { backgroundColor: link.color + '1a' }]}>
+                      <Ionicons name={link.icon} size={17} color={link.color} />
+                    </View>
+                    <Text style={[ms.tileLabel, { color: colors.text }]} numberOfLines={2}>{link.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ))}
+          <View style={{ height: 24 }} />
+        </ScrollView>
+      </Animated.View>
+    </Modal>
+  );
+}
+
+const ms = StyleSheet.create({
+  backdrop:     { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet:        { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '88%', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: -4 }, elevation: 24 },
+  handleWrap:   { alignItems: 'center', paddingTop: 10, paddingBottom: 4 },
+  handle:       { width: 36, height: 4, borderRadius: 2 },
+  sheetHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 12, borderBottomWidth: 1 },
+  sheetTitle:   { fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
+  closeBtn:     { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  scrollContent:{ paddingHorizontal: 14, paddingTop: 10 },
+  section:      { marginBottom: 14 },
+  sectionTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 6, paddingLeft: 2 },
+  grid:         { flexDirection: 'row', flexWrap: 'wrap', borderRadius: 12, borderWidth: 1, padding: 4 },
+  tile:         { width: '25%', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 2 },
+  iconWrap:     { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
+  tileLabel:    { fontSize: 10, fontWeight: '600', textAlign: 'center', lineHeight: 13 },
+});
+
 export default function AppLayout() {
   const { width } = useWindowDimensions();
   const isLarge = width >= 640;
   const token = useAppStore((s) => s.token);
+  const [moreSheetOpen, setMoreSheetOpen] = useState(false);
 
   // Proactively refresh the Sanctum token when the app returns to foreground
   // after a long absence, preventing the first API call from hitting a 401.
@@ -385,6 +519,8 @@ export default function AppLayout() {
   }
 
   return (
+    <>
+    <MoreBottomSheet visible={moreSheetOpen} onClose={() => setMoreSheetOpen(false)} />
     <Tabs screenOptions={{
       headerStyle: { backgroundColor: colors.header },
       headerTintColor: colors.headerText,
@@ -403,28 +539,29 @@ export default function AppLayout() {
       sceneStyle: { backgroundColor: colors.background },
     }}>
       <Tabs.Screen name="dashboard/index" options={{ title: 'Dashboard', tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} />, tabBarLabel: 'Home', headerShown: false }} />
-      <Tabs.Screen name="pos/index" options={{ headerTitle: () => <RestaurantHeader />, tabBarIcon: ({ color, size }) => <Ionicons name="cart-outline" color={color} size={size} />, tabBarLabel: 'POS', headerRight: () => <HeaderActions /> }} />
-      <Tabs.Screen name="kitchen/index" options={{ title: 'Kitchen', tabBarButton: () => null }} />
-      <Tabs.Screen name="orders/index" options={{ title: 'Orders', tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" color={color} size={size} /> }} />
-      <Tabs.Screen name="more/index" options={{ title: 'More', tabBarIcon: ({ color, size }) => <Ionicons name="ellipsis-horizontal-outline" color={color} size={size} />, tabBarLabel: 'More', headerShown: false }} />
-      <Tabs.Screen name="tables/index" options={{ title: 'Tables', href: null, tabBarButton: () => null }} />
-      <Tabs.Screen name="customers/index"       options={{ title: 'Customers',      tabBarButton: () => null }} />
-      <Tabs.Screen name="wallet/index"         options={{ title: 'Wallet',         tabBarButton: () => null }} />
-      <Tabs.Screen name="reservations/index"   options={{ headerShown: false, tabBarButton: () => null }} />
-      <Tabs.Screen name="menu/index"           options={{ headerShown: false, tabBarButton: () => null }} />
-      <Tabs.Screen name="categories/index"     options={{ headerShown: false, tabBarButton: () => null }} />
-      <Tabs.Screen name="items/index"          options={{ headerShown: false, tabBarButton: () => null }} />
-      <Tabs.Screen name="inventory/index"      options={{ headerShown: false, tabBarButton: () => null }} />
-      <Tabs.Screen name="invoices/index"       options={{ headerShown: false, tabBarButton: () => null }} />
-      <Tabs.Screen name="payments/index"       options={{ headerShown: false, tabBarButton: () => null }} />
-      <Tabs.Screen name="coupons/index"        options={{ headerShown: false, tabBarButton: () => null }} />
-      <Tabs.Screen name="expenses/index"       options={{ headerShown: false, tabBarButton: () => null }} />
-      <Tabs.Screen name="expense-report/index" options={{ headerShown: false, tabBarButton: () => null }} />
-      <Tabs.Screen name="tickets/index"        options={{ title: 'Support Tickets',    tabBarButton: () => null }} />
-      <Tabs.Screen name="reports/index"        options={{ title: 'Reports',        tabBarButton: () => null }} />
-      <Tabs.Screen name="staff/index"          options={{ title: 'Staff',          tabBarButton: () => null }} />
-      <Tabs.Screen name="notifications/index"  options={{ title: 'Notifications',  tabBarButton: () => null }} />
-      <Tabs.Screen name="settings/index"       options={{ title: 'Settings',       tabBarButton: () => null }} />
+      <Tabs.Screen name="pos/index" options={{ headerShown: false, tabBarIcon: ({ color, size }) => <Ionicons name="cart-outline" color={color} size={size} />, tabBarLabel: 'POS' }} />
+      <Tabs.Screen name="kitchen/index" options={{ title: 'Kitchen', headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="orders/index" options={{ title: 'Orders', tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" color={color} size={size} />, tabBarLabel: 'Orders' }} />
+      <Tabs.Screen name="more/index" options={{ title: 'More', tabBarLabel: 'More', headerShown: false, tabBarIcon: ({ color }) => <Ionicons name="ellipsis-horizontal-circle-outline" color={color} size={24} />, tabBarButton: (props) => <Pressable {...(props as any)} onPress={() => setMoreSheetOpen(true)} /> }} />
+      <Tabs.Screen name="tables/index" options={{ title: 'Tables', headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="customers/index"       options={{ title: 'Customers',      headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="wallet/index"         options={{ title: 'Wallet',         headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="reservations/index"   options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="menu/index"           options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="categories/index"     options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="items/index"          options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="inventory/index"      options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="invoices/index"       options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="payments/index"       options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="coupons/index"        options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="expenses/index"       options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="expense-report/index" options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="tickets/index"        options={{ title: 'Support Tickets',    headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="reports/index"        options={{ title: 'Reports',        tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="staff/index"          options={{ title: 'Staff',          headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="notifications/index"  options={{ title: 'Notifications',  headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="settings/index"       options={{ title: 'Settings',       headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
     </Tabs>
+    </>
   );
 }
