@@ -1009,6 +1009,7 @@ export default function DashboardScreen() {
   const isWide   = contentW >= 900;
   const cols4    = contentW >= 1200 ? 4 : contentW >= 800 ? 3 : contentW >= 500 ? 2 : 2;
   const cols6    = contentW >= 1200 ? 6 : contentW >= 800 ? 4 : contentW >= 500 ? 3 : 2;
+  const isMobile = contentW < 640;
 
   const pollRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const [qrAlert, setQrAlert]         = useState<Order[]>([]);
@@ -1037,12 +1038,17 @@ export default function DashboardScreen() {
 
       const cParams = chartParamsForPreset(p, cFrom, cTo);
 
-      const [summaryRes, salesRes, topItemsRes, payRes, expRes] = await Promise.allSettled([
+      const [summaryRes, salesRes, topItemsRes, payRes, expRes, aoRes, rrRes, rRes, tblRes, notifRes] = await Promise.allSettled([
         reportsApi.summary(reportParams),
         reportsApi.sales(cParams),
         reportsApi.topItems(reportParams),
         reportsApi.paymentMethods(reportParams),
         reportsApi.expenses(reportParams),
+        ordersApi.list({ status: 'pending,confirmed,preparing,ready,served', per_page: 10 }),
+        ordersApi.list({ per_page: 8 }),
+        client.get('/reservations', { params: { from: today, status: 'confirmed,pending,seated', per_page: 20 } }),
+        client.get('/tables'),
+        client.get('/orders/notifications/new'),
       ]);
 
       // ── 2. Summary ────────────────────────────────────────────────────────
@@ -1204,17 +1210,11 @@ export default function DashboardScreen() {
         });
       }
 
-      // ── 7. Active + Recent orders (always fresh) ──────────────────────────
-      try {
-        const aoRes = await ordersApi.list({
-          status: 'pending,confirmed,preparing,ready,served',
-          per_page: 10,
-        });
-        const aoArr: Order[] = Array.isArray(aoRes.data?.data) ? aoRes.data.data
-          : (Array.isArray(aoRes.data) ? aoRes.data : []);
+      // ── 7. Active orders ─────────────────────────────────────────────────
+      if (aoRes.status === 'fulfilled') {
+        const aoArr: Order[] = Array.isArray(aoRes.value.data?.data) ? aoRes.value.data.data
+          : (Array.isArray(aoRes.value.data) ? aoRes.value.data : []);
         setActiveOrders(aoArr.slice(0, 10));
-
-        // QR order detection on background polls
         if (dashFirstLoad.current) {
           aoArr.forEach(o => dashKnownIds.current.add(o.id));
           dashFirstLoad.current = false;
@@ -1223,39 +1223,34 @@ export default function DashboardScreen() {
           if (newQR.length > 0) showDashQRAlert(newQR);
           aoArr.forEach(o => dashKnownIds.current.add(o.id));
         }
+      }
 
-        const rrRes = await ordersApi.list({ per_page: 8 });
-        const rrArr: Order[] = Array.isArray(rrRes.data?.data) ? rrRes.data.data
-          : (Array.isArray(rrRes.data) ? rrRes.data : []);
+      // ── 8. Recent orders ──────────────────────────────────────────────────
+      if (rrRes.status === 'fulfilled') {
+        const rrArr: Order[] = Array.isArray(rrRes.value.data?.data) ? rrRes.value.data.data
+          : (Array.isArray(rrRes.value.data) ? rrRes.value.data : []);
         setRecentOrders(rrArr.slice(0, 5));
-      } catch { /* orders optional */ }
+      }
 
-      // ── 8. Reservations ───────────────────────────────────────────────────
-      try {
-        const rRes = await client.get('/reservations', {
-          params: { from: today, status: 'confirmed,pending,seated', per_page: 20 },
-        });
-        const rData = rRes.data?.data ?? rRes.data ?? [];
+      // ── 9. Reservations ───────────────────────────────────────────────────
+      if (rRes.status === 'fulfilled') {
+        const rData = rRes.value.data?.data ?? rRes.value.data ?? [];
         const rArr: Reservation[] = Array.isArray(rData) ? rData : [];
         setReservations(rArr.slice(0, 5));
-        // Prefer the summary count (filtered by preset) over the raw list count.
-        // Only fall back to the reservation list total when the summary didn't load.
-        setReservCount(prev => prev || (rRes.data?.total ?? rArr.length));
-      } catch { /* reservations optional */ }
+        setReservCount(prev => prev || (rRes.value.data?.total ?? rArr.length));
+      }
 
-      // ── 9. Tables ─────────────────────────────────────────────────────────
-      try {
-        const tblRes = await client.get('/tables');
-        const tbls: RestaurantTable[] = tblRes.data?.data ?? tblRes.data ?? [];
+      // ── 10. Tables ────────────────────────────────────────────────────────
+      if (tblRes.status === 'fulfilled') {
+        const tbls: RestaurantTable[] = tblRes.value.data?.data ?? tblRes.value.data ?? [];
         setTables(Array.isArray(tbls) ? tbls : []);
-      } catch { /* tables optional */ }
+      }
 
-      // ── 10. Notifications ─────────────────────────────────────────────────
-      try {
-        const notifRes = await client.get('/orders/notifications/new');
-        const notifs = notifRes.data?.orders ?? notifRes.data?.data ?? notifRes.data ?? [];
+      // ── 11. Notifications ─────────────────────────────────────────────────
+      if (notifRes.status === 'fulfilled') {
+        const notifs = notifRes.value.data?.orders ?? notifRes.value.data?.data ?? notifRes.value.data ?? [];
         setNotifications(Array.isArray(notifs) ? notifs.slice(0, 10) : []);
-      } catch { /* notifications optional */ }
+      }
 
     } catch (e) {
       console.warn('Dashboard load:', e);
@@ -1463,39 +1458,75 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={s.body}>
+      <View style={[s.body, isMobile && { padding: 12 }]}>
 
-        {/* ── ROW 1: 3 BigCards — Card 1 updates with the selected date range ── */}
-        <View style={[s.row, { marginBottom: 12 }]}>
-          <BigCard
-            label={presetLabel(preset, customFrom, customTo)}
-            value={fmtFull(st?.total_sales ?? 0)}
-            sub={presetSub(preset, st?.total_orders ?? 0)}
-            icon={preset === 'all' ? 'wallet-outline' : preset === 'today' ? 'time-outline' : 'calendar-outline'}
-            color={S.primary}
-            onPress={() => go('/(app)/orders')}
-          />
-          <BigCard
-            label="This Month's Sales"
-            value={fmtFull(st?.month_sales ?? 0)}
-            sub={`${st?.month_orders ?? 0} orders this month`}
-            icon="calendar-number-outline"
-            color={S.success}
-            growthPct={st?.sales_growth_pct}
-            onPress={() => go('/(app)/orders')}
-          />
-          <BigCard
-            label={preset === 'today' ? 'Net Sales (Today)' : "Today's Sales"}
-            value={fmtFull(preset === 'today' ? (st?.net_sales ?? 0) : (st?.today_sales ?? 0))}
-            sub={preset === 'today'
-              ? 'excl. tax'
-              : `${st?.today_orders ?? 0} orders today`}
-            subColor={preset === 'today' ? S.info : S.warning}
-            icon={preset === 'today' ? 'analytics-outline' : 'time-outline'}
-            color={S.purple}
-            onPress={() => go('/(app)/orders')}
-          />
-        </View>
+        {/* ── ROW 1: 3 BigCards — swipeable horizontal scroll on mobile ── */}
+        {isMobile ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}
+            style={{ marginBottom: 12, marginHorizontal: -12 }}
+            contentContainerStyle={{ gap: 10, paddingHorizontal: 12 }}>
+            {([
+              {
+                label: presetLabel(preset, customFrom, customTo),
+                value: fmtFull(st?.total_sales ?? 0),
+                sub: presetSub(preset, st?.total_orders ?? 0),
+                icon: preset === 'all' ? 'wallet-outline' : preset === 'today' ? 'time-outline' : 'calendar-outline',
+                color: S.primary,
+              },
+              {
+                label: "This Month's Sales",
+                value: fmtFull(st?.month_sales ?? 0),
+                sub: `${st?.month_orders ?? 0} orders this month`,
+                icon: 'calendar-number-outline',
+                color: S.success,
+                growthPct: st?.sales_growth_pct,
+              },
+              {
+                label: preset === 'today' ? 'Net Sales (Today)' : "Today's Sales",
+                value: fmtFull(preset === 'today' ? (st?.net_sales ?? 0) : (st?.today_sales ?? 0)),
+                sub: preset === 'today' ? 'excl. tax' : `${st?.today_orders ?? 0} orders today`,
+                subColor: preset === 'today' ? S.info : S.warning,
+                icon: preset === 'today' ? 'analytics-outline' : 'time-outline',
+                color: S.purple,
+              },
+            ] as any[]).map((card, i) => (
+              <View key={i} style={{ width: contentW * 0.76 }}>
+                <BigCard {...card} onPress={() => go('/(app)/orders')} />
+              </View>
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={[s.row, { marginBottom: 12 }]}>
+            <BigCard
+              label={presetLabel(preset, customFrom, customTo)}
+              value={fmtFull(st?.total_sales ?? 0)}
+              sub={presetSub(preset, st?.total_orders ?? 0)}
+              icon={preset === 'all' ? 'wallet-outline' : preset === 'today' ? 'time-outline' : 'calendar-outline'}
+              color={S.primary}
+              onPress={() => go('/(app)/orders')}
+            />
+            <BigCard
+              label="This Month's Sales"
+              value={fmtFull(st?.month_sales ?? 0)}
+              sub={`${st?.month_orders ?? 0} orders this month`}
+              icon="calendar-number-outline"
+              color={S.success}
+              growthPct={st?.sales_growth_pct}
+              onPress={() => go('/(app)/orders')}
+            />
+            <BigCard
+              label={preset === 'today' ? 'Net Sales (Today)' : "Today's Sales"}
+              value={fmtFull(preset === 'today' ? (st?.net_sales ?? 0) : (st?.today_sales ?? 0))}
+              sub={preset === 'today'
+                ? 'excl. tax'
+                : `${st?.today_orders ?? 0} orders today`}
+              subColor={preset === 'today' ? S.info : S.warning}
+              icon={preset === 'today' ? 'analytics-outline' : 'time-outline'}
+              color={S.purple}
+              onPress={() => go('/(app)/orders')}
+            />
+          </View>
+        )}
 
         {/* ── ROW 1b: 6 Sales Breakdown SmallCards ── */}
         <View style={s.section}>
@@ -1564,7 +1595,7 @@ export default function DashboardScreen() {
                 bg: (netProfit >= 0 ? S.success : S.danger) + '18',
               },
             ].map((c, i) => (
-              <View key={i} style={{ width: `${100 / 3}%` as any, padding: 4 }}>
+              <View key={i} style={{ width: `${100 / (isMobile ? 2 : 3)}%` as any, padding: 4 }}>
                 <SmallCard label={c.label} value={c.value} sub={c.sub}
                   icon={c.icon} color={c.color} bg={c.bg}
                   onPress={() => go('/(app)/expenses')} />
@@ -1613,54 +1644,101 @@ export default function DashboardScreen() {
 
         {/* ── Bill Type Breakdown + Bill Status ── */}
         <View style={s.section}>
-          <View style={[s.row, { gap: 12, alignItems: 'flex-start' }]}>
-            {/* Bill Type grid */}
-            <View style={[s.card, cardS, { flex: isWide ? 2 : 1 }]}>
-              <View style={s.cardHeader}>
-                <View>
-                  <Text style={[s.cardTitle, { color: D.text }]}>Bill Type Breakdown</Text>
-                  <Text style={[s.cardSub, { color: D.muted }]}>Orders by service type</Text>
-                </View>
-                <TouchableOpacity onPress={() => go('/(app)/orders')}>
-                  <Text style={{ color: S.primary, fontSize: 12, fontWeight: '700' }}>View Orders</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={[s.grid, { marginTop: 8 }]}>
-                {Object.entries(BILL_TYPE_CFG).map(([key, cfg]) => {
-                  const bt = st?.bill_types?.[key] ?? { count: 0, total: 0 };
-                  return (
-                    <View key={key} style={{ width: `${100 / Math.min(3, cols6)}%` as any, padding: 4 }}>
-                      <BillTypeCard label={cfg.label} icon={cfg.icon} color={cfg.color}
-                        count={bt.count} total={bt.total} />
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Bill Status */}
-            <View style={[s.card, cardS, { flex: 1 }]}>
-              <Text style={[s.cardTitle, { color: D.text }]}>Bill Status</Text>
-              <Text style={[s.cardSub, { color: D.muted }]}>Special bill types</Text>
-              <View style={{ marginTop: 10 }}>
-                {[
-                  { label: 'Cancelled Bills', value: st?.cancelled_count ?? 0, icon: 'close-circle-outline', color: S.danger  },
-                  { label: 'Free Bills',       value: st?.free_bills     ?? 0, icon: 'gift-outline',          color: S.success },
-                  { label: 'Deleted Bills',    value: st?.deleted_count  ?? 0, icon: 'trash-outline',          color: '#64748B' },
-                ].map((item, i, arr) => (
-                  <View key={i} style={[bsR.row, i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: dividerColor }]}>
-                    <View style={[bsR.avatar, { backgroundColor: item.color + '18' }]}>
-                      <Ionicons name={item.icon as any} size={14} color={item.color} />
-                    </View>
-                    <Text style={[bsR.label, { color: D.text }]}>{item.label}</Text>
-                    <View style={[bsR.badge, { backgroundColor: item.color }]}>
-                      <Text style={bsR.badgeText}>{item.value}</Text>
-                    </View>
+          {isWide ? (
+            /* Desktop: side by side */
+            <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+              <View style={[s.card, cardS, { flex: 2 }]}>
+                <View style={s.cardHeader}>
+                  <View>
+                    <Text style={[s.cardTitle, { color: D.text }]}>Bill Type Breakdown</Text>
+                    <Text style={[s.cardSub, { color: D.muted }]}>Orders by service type</Text>
                   </View>
-                ))}
+                  <TouchableOpacity onPress={() => go('/(app)/orders')}>
+                    <Text style={{ color: S.primary, fontSize: 12, fontWeight: '700' }}>View Orders</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[s.grid, { marginTop: 8 }]}>
+                  {Object.entries(BILL_TYPE_CFG).map(([key, cfg]) => {
+                    const bt = st?.bill_types?.[key] ?? { count: 0, total: 0 };
+                    return (
+                      <View key={key} style={{ width: `${100 / Math.min(3, cols6)}%` as any, padding: 4 }}>
+                        <BillTypeCard label={cfg.label} icon={cfg.icon} color={cfg.color}
+                          count={bt.count} total={bt.total} />
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+              <View style={[s.card, cardS, { flex: 1 }]}>
+                <Text style={[s.cardTitle, { color: D.text }]}>Bill Status</Text>
+                <Text style={[s.cardSub, { color: D.muted }]}>Special bill types</Text>
+                <View style={{ marginTop: 10 }}>
+                  {[
+                    { label: 'Cancelled Bills', value: st?.cancelled_count ?? 0, icon: 'close-circle-outline', color: S.danger  },
+                    { label: 'Free Bills',       value: st?.free_bills     ?? 0, icon: 'gift-outline',          color: S.success },
+                    { label: 'Deleted Bills',    value: st?.deleted_count  ?? 0, icon: 'trash-outline',          color: '#64748B' },
+                  ].map((item, i, arr) => (
+                    <View key={i} style={[bsR.row, i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: dividerColor }]}>
+                      <View style={[bsR.avatar, { backgroundColor: item.color + '18' }]}>
+                        <Ionicons name={item.icon as any} size={14} color={item.color} />
+                      </View>
+                      <Text style={[bsR.label, { color: D.text }]}>{item.label}</Text>
+                      <View style={[bsR.badge, { backgroundColor: item.color }]}>
+                        <Text style={bsR.badgeText}>{item.value}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
               </View>
             </View>
-          </View>
+          ) : (
+            /* Mobile: stacked full-width cards */
+            <View style={{ gap: 12 }}>
+              <View style={[s.card, cardS]}>
+                <View style={s.cardHeader}>
+                  <View>
+                    <Text style={[s.cardTitle, { color: D.text }]}>Bill Type Breakdown</Text>
+                    <Text style={[s.cardSub, { color: D.muted }]}>Orders by service type</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => go('/(app)/orders')}>
+                    <Text style={{ color: S.primary, fontSize: 12, fontWeight: '700' }}>View Orders</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[s.grid, { marginTop: 8 }]}>
+                  {Object.entries(BILL_TYPE_CFG).map(([key, cfg]) => {
+                    const bt = st?.bill_types?.[key] ?? { count: 0, total: 0 };
+                    return (
+                      <View key={key} style={{ width: '33.33%', padding: 4 }}>
+                        <BillTypeCard label={cfg.label} icon={cfg.icon} color={cfg.color}
+                          count={bt.count} total={bt.total} />
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+              <View style={[s.card, cardS]}>
+                <Text style={[s.cardTitle, { color: D.text }]}>Bill Status</Text>
+                <Text style={[s.cardSub, { color: D.muted }]}>Special bill types</Text>
+                <View style={{ marginTop: 10 }}>
+                  {[
+                    { label: 'Cancelled Bills', value: st?.cancelled_count ?? 0, icon: 'close-circle-outline', color: S.danger  },
+                    { label: 'Free Bills',       value: st?.free_bills     ?? 0, icon: 'gift-outline',          color: S.success },
+                    { label: 'Deleted Bills',    value: st?.deleted_count  ?? 0, icon: 'trash-outline',          color: '#64748B' },
+                  ].map((item, i, arr) => (
+                    <View key={i} style={[bsR.row, i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: dividerColor }]}>
+                      <View style={[bsR.avatar, { backgroundColor: item.color + '18' }]}>
+                        <Ionicons name={item.icon as any} size={14} color={item.color} />
+                      </View>
+                      <Text style={[bsR.label, { color: D.text }]}>{item.label}</Text>
+                      <View style={[bsR.badge, { backgroundColor: item.color }]}>
+                        <Text style={bsR.badgeText}>{item.value}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* ── Payment Methods grid cards ── */}
@@ -1694,68 +1772,129 @@ export default function DashboardScreen() {
 
         {/* ── Top Selling Items + Active Orders ── */}
         <View style={s.section}>
-          <View style={[s.row, { gap: 12, alignItems: 'flex-start' }]}>
-            {/* Top Items */}
-            <View style={[s.card, cardS, { flex: isWide ? 2 : 1 }]}>
-              <Text style={[s.cardTitle, { color: D.text }]}>Top Selling Items</Text>
-              <Text style={[s.cardSub, { color: D.muted }]}>By quantity ordered</Text>
-              {topItems.length > 0 ? (
-                <>
-                  <View style={[moB.banner, {
-                    backgroundColor: isDark ? 'rgba(22,163,74,0.12)' : '#f0fdf4',
-                    borderColor: isDark ? 'rgba(22,163,74,0.2)' : '#bbf7d0',
-                  }]}>
-                    <Ionicons name="star" size={13} color="#16a34a" />
-                    <Text style={[moB.text, { color: isDark ? '#4ade80' : '#166534' }]}>
-                      Most Ordered: <Text style={moB.name}>{topItems[0]?.name}</Text>
-                    </Text>
+          {isWide ? (
+            /* Desktop: side by side */
+            <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+              <View style={[s.card, cardS, { flex: 2 }]}>
+                <Text style={[s.cardTitle, { color: D.text }]}>Top Selling Items</Text>
+                <Text style={[s.cardSub, { color: D.muted }]}>By quantity ordered</Text>
+                {topItems.length > 0 ? (
+                  <>
+                    <View style={[moB.banner, {
+                      backgroundColor: isDark ? 'rgba(22,163,74,0.12)' : '#f0fdf4',
+                      borderColor: isDark ? 'rgba(22,163,74,0.2)' : '#bbf7d0',
+                    }]}>
+                      <Ionicons name="star" size={13} color="#16a34a" />
+                      <Text style={[moB.text, { color: isDark ? '#4ade80' : '#166534' }]}>
+                        Most Ordered: <Text style={moB.name}>{topItems[0]?.name}</Text>
+                      </Text>
+                    </View>
+                    <View style={{ marginTop: 8, gap: 10 }}>
+                      {topItems.map((item, i) => (
+                        <TopItemRow key={i} name={item.name} qty={item.qty}
+                          maxQty={topItems[0]?.qty ?? 1} rank={i + 1} />
+                      ))}
+                    </View>
+                  </>
+                ) : (
+                  <View style={s.emptyBox}>
+                    <Ionicons name="restaurant-outline" size={32} color={D.muted + '60'} />
+                    <Text style={[s.emptyText, { color: D.muted }]}>No order items yet</Text>
                   </View>
-                  <View style={{ marginTop: 8, gap: 10 }}>
-                    {topItems.map((item, i) => (
-                      <TopItemRow key={i} name={item.name} qty={item.qty}
-                        maxQty={topItems[0]?.qty ?? 1} rank={i + 1} />
-                    ))}
-                  </View>
-                </>
-              ) : (
-                <View style={s.emptyBox}>
-                  <Ionicons name="restaurant-outline" size={32} color={D.muted + '60'} />
-                  <Text style={[s.emptyText, { color: D.muted }]}>No order items yet</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Active Orders */}
-            <View style={[s.card, cardS, { flex: 1 }]}>
-              <View style={s.cardHeader}>
-                <View>
-                  <Text style={[s.cardTitle, { color: D.text }]}>Active Orders</Text>
-                  <Text style={[s.cardSub, { color: D.muted }]}>{activeOrders.length} in-flight</Text>
-                </View>
-                <TouchableOpacity onPress={() => go('/(app)/orders')}>
-                  <Text style={{ color: S.primary, fontSize: 12, fontWeight: '700' }}>View All</Text>
-                </TouchableOpacity>
+                )}
               </View>
-              {activeOrders.length > 0 ? (
-                <View style={{ gap: 1, marginTop: 8 }}>
-                  {activeOrders.map(o => <ActiveOrderRow key={o.id} order={o} />)}
+              <View style={[s.card, cardS, { flex: 1 }]}>
+                <View style={s.cardHeader}>
+                  <View>
+                    <Text style={[s.cardTitle, { color: D.text }]}>Active Orders</Text>
+                    <Text style={[s.cardSub, { color: D.muted }]}>{activeOrders.length} in-flight</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => go('/(app)/orders')}>
+                    <Text style={{ color: S.primary, fontSize: 12, fontWeight: '700' }}>View All</Text>
+                  </TouchableOpacity>
                 </View>
-              ) : (
-                <View style={s.emptyBox}>
-                  <Ionicons name="checkmark-circle-outline" size={32} color={D.muted + '60'} />
-                  <Text style={[s.emptyText, { color: D.muted }]}>No active orders</Text>
-                </View>
-              )}
-              {activeOrders.length > 0 && (
-                <TouchableOpacity
-                  style={[s.viewAllBtn, { marginTop: 10, borderColor: D.border }]}
-                  onPress={() => go('/(app)/orders')}
-                >
-                  <Text style={[s.viewAllText, { color: S.primary }]}>View All Orders</Text>
-                </TouchableOpacity>
-              )}
+                {activeOrders.length > 0 ? (
+                  <View style={{ gap: 1, marginTop: 8 }}>
+                    {activeOrders.map(o => <ActiveOrderRow key={o.id} order={o} />)}
+                  </View>
+                ) : (
+                  <View style={s.emptyBox}>
+                    <Ionicons name="checkmark-circle-outline" size={32} color={D.muted + '60'} />
+                    <Text style={[s.emptyText, { color: D.muted }]}>No active orders</Text>
+                  </View>
+                )}
+                {activeOrders.length > 0 && (
+                  <TouchableOpacity
+                    style={[s.viewAllBtn, { marginTop: 10, borderColor: D.border }]}
+                    onPress={() => go('/(app)/orders')}
+                  >
+                    <Text style={[s.viewAllText, { color: S.primary }]}>View All Orders</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </View>
+          ) : (
+            /* Mobile: stacked full-width cards */
+            <View style={{ gap: 12 }}>
+              <View style={[s.card, cardS]}>
+                <Text style={[s.cardTitle, { color: D.text }]}>Top Selling Items</Text>
+                <Text style={[s.cardSub, { color: D.muted }]}>By quantity ordered</Text>
+                {topItems.length > 0 ? (
+                  <>
+                    <View style={[moB.banner, {
+                      backgroundColor: isDark ? 'rgba(22,163,74,0.12)' : '#f0fdf4',
+                      borderColor: isDark ? 'rgba(22,163,74,0.2)' : '#bbf7d0',
+                    }]}>
+                      <Ionicons name="star" size={13} color="#16a34a" />
+                      <Text style={[moB.text, { color: isDark ? '#4ade80' : '#166534' }]}>
+                        Most Ordered: <Text style={moB.name}>{topItems[0]?.name}</Text>
+                      </Text>
+                    </View>
+                    <View style={{ marginTop: 8, gap: 10 }}>
+                      {topItems.map((item, i) => (
+                        <TopItemRow key={i} name={item.name} qty={item.qty}
+                          maxQty={topItems[0]?.qty ?? 1} rank={i + 1} />
+                      ))}
+                    </View>
+                  </>
+                ) : (
+                  <View style={s.emptyBox}>
+                    <Ionicons name="restaurant-outline" size={32} color={D.muted + '60'} />
+                    <Text style={[s.emptyText, { color: D.muted }]}>No order items yet</Text>
+                  </View>
+                )}
+              </View>
+              <View style={[s.card, cardS]}>
+                <View style={s.cardHeader}>
+                  <View>
+                    <Text style={[s.cardTitle, { color: D.text }]}>Active Orders</Text>
+                    <Text style={[s.cardSub, { color: D.muted }]}>{activeOrders.length} in-flight</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => go('/(app)/orders')}>
+                    <Text style={{ color: S.primary, fontSize: 12, fontWeight: '700' }}>View All</Text>
+                  </TouchableOpacity>
+                </View>
+                {activeOrders.length > 0 ? (
+                  <View style={{ gap: 1, marginTop: 8 }}>
+                    {activeOrders.map(o => <ActiveOrderRow key={o.id} order={o} />)}
+                  </View>
+                ) : (
+                  <View style={s.emptyBox}>
+                    <Ionicons name="checkmark-circle-outline" size={32} color={D.muted + '60'} />
+                    <Text style={[s.emptyText, { color: D.muted }]}>No active orders</Text>
+                  </View>
+                )}
+                {activeOrders.length > 0 && (
+                  <TouchableOpacity
+                    style={[s.viewAllBtn, { marginTop: 10, borderColor: D.border }]}
+                    onPress={() => go('/(app)/orders')}
+                  >
+                    <Text style={[s.viewAllText, { color: S.primary }]}>View All Orders</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
         </View>
 
         {/* ── Notifications ── */}
