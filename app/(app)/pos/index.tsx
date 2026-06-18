@@ -27,6 +27,7 @@ import client, { API_BASE_URL } from '@/api/client';
 import type { Category, Item, Variation, RestaurantTable, Customer, StaffMember, Order } from '@/types';
 import { useThemedScreen } from '@/theme/useThemedScreen';
 import type { ThemeColors as _TC } from '@/theme/tokens';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const SERVER_URL = API_BASE_URL.replace('/api/mobile', '');
 
@@ -197,6 +198,14 @@ ${restaurant?.payment_qr ? `<div class="hr"></div><div class="c" style="margin:4
 </body></html>`;
   const w = window.open('', '_blank', 'width=400,height=620');
   if (w) { w.document.write(html); w.document.close(); }
+}
+
+// ── Sync status dot (replicates _layout SyncDot for standalone use) ───────────
+function SyncStatusDot() {
+  const { isSyncing, isOnline } = useAppStore();
+  const { colors } = useThemedScreen();
+  const color = isSyncing ? colors.warning : isOnline ? colors.success : colors.danger;
+  return <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: color }} />;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -1915,9 +1924,13 @@ export default function POSScreen() {
         <Pressable style={mb.backBtn} onPress={() => router.replace('/(app)/dashboard')}>
           <Ionicons name="arrow-back" size={18} color={t.colors.text} />
         </Pressable>
-        <Text style={mb.topTitle}>POS</Text>
+        <Text style={mb.topTitle}>Point of Sale</Text>
+        <View style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <ThemeToggle variant="header" size={16} />
+          <SyncStatusDot />
+        </View>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={mb.catBar} contentContainerStyle={{ paddingHorizontal: 10, gap: 7 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={mb.catBar} contentContainerStyle={{ paddingHorizontal: 10, gap: 7, alignItems: 'center', height: 54 }}>
         {[{ id: null as null, name: 'All' }, ...categories.map(c => ({ id: c.id, name: c.name }))].map(c => (
           <Pressable
             key={String(c.id ?? 'all')}
@@ -2292,8 +2305,8 @@ function mkCpm(c: _TC) { return StyleSheet.create({
 // Mobile layout
 function mkMb(c: _TC) { return StyleSheet.create({
   shell:      { flex: 1, backgroundColor: c.background },
-  catBar:     { maxHeight: 46, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-  catChip:    { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, alignSelf: 'center' },
+  catBar:     { height: 54, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+  catChip:    { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
   catChipActive: { backgroundColor: '#0D76E1', borderColor: '#0D76E1' },
   catChipText:   { fontSize: 12.5, fontWeight: '600', color: c.text },
   catChipTextActive: { color: '#fff' },

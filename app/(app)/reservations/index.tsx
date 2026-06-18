@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import client from '@/api/client';
 import type { Reservation } from '@/types';
 import { useTheme } from '@/store/themeStore';
@@ -304,6 +305,7 @@ function AddReservationModal({
 export default function ReservationsScreen() {
   const { colors: c } = useTheme();
   const st = useMemo(() => mkSt(c), [c]);
+  const insets = useSafeAreaInsets();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [refreshing,   setRefreshing]   = useState(false);
   const [showForm,     setShowForm]     = useState(false);
@@ -336,7 +338,7 @@ export default function ReservationsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
       {/* Header */}
-      <View style={st.header}>
+      <View style={[st.header, { paddingTop: insets.top + 14 }]}>
         <View>
           <Text style={st.headerTitle}>Reservations</Text>
           <Text style={st.headerSub}>{reservations.length} reservation{reservations.length !== 1 ? 's' : ''}</Text>

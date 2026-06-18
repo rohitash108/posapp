@@ -6,9 +6,10 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, RefreshControl, ScrollView,
-  TextInput, ActivityIndicator, Pressable,
+  TextInput, ActivityIndicator, Pressable, useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { paymentsApi } from '@/api/payments';
 import { buildCsv, downloadCsv } from '@/utils/export';
 import type { Payment } from '@/types';
@@ -31,9 +32,9 @@ function mkS(c: ThemeColors) {
     dropItem:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
     dropItemTxt:  { fontSize: 13, color: c.text },
     tableCard:    { margin: 16, backgroundColor: c.surface, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: c.border, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-    toolbar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
-    searchBox:    { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: c.border, minWidth: 200 },
-    searchInput:  { flex: 1, fontSize: 13, color: c.heading, minWidth: 120 },
+    toolbar:      { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    searchBox:    { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: c.border, minWidth: 140 },
+    searchInput:  { flex: 1, fontSize: 13, color: c.heading },
     toolBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
     toolBtnActive:{ borderColor: c.sidebar, backgroundColor: c.surfaceAlt },
     toolBtnTxt:   { fontSize: 12.5, fontWeight: '600', color: c.text },
@@ -72,6 +73,9 @@ function mkS(c: ThemeColors) {
 export default function PaymentsScreen() {
   const { colors: c } = useTheme();
   const s = useMemo(() => mkS(c), [c]);
+  const { width } = useWindowDimensions();
+  const insets   = useSafeAreaInsets();
+  const isMobile = width < 640;
 
   const [allPayments, setAllPayments] = useState<Payment[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -82,7 +86,7 @@ export default function PaymentsScreen() {
   const [sortNewest,  setSortNewest]  = useState(true);
   const [typeFilter,  setTypeFilter]  = useState<string>('all');
   const [filterOpen,  setFilterOpen]  = useState(false);
-  const [compactView, setCompactView] = useState(false);
+  const [compactView, setCompactView] = useState(() => width < 760);
   const [exportOpen,  setExportOpen]  = useState(false);
 
   const load = useCallback(async (silent = false) => {
@@ -151,7 +155,7 @@ export default function PaymentsScreen() {
 
   return (
     <View style={s.shell}>
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Text style={s.title}>Payments</Text>
           <Pressable onPress={() => { setRefreshing(true); load(true); }}
@@ -183,13 +187,14 @@ export default function PaymentsScreen() {
         }>
 
         <View style={s.tableCard}>
-          <View style={s.toolbar}>
+          <View style={[s.toolbar, isMobile && { flexDirection: 'column', alignItems: 'stretch' }]}>
+            {/* Search — full width on mobile */}
             <View style={s.searchBox}>
               <TextInput
                 style={s.searchInput}
                 value={search}
                 onChangeText={v => { setSearch(v); setPage(1); }}
-                placeholder="Search"
+                placeholder="Search payments…"
                 placeholderTextColor={c.textMuted} />
               {search
                 ? <Pressable onPress={() => { setSearch(''); setPage(1); }}>
@@ -198,9 +203,11 @@ export default function PaymentsScreen() {
                 : <Ionicons name="search-outline" size={15} color={c.textMuted} />
               }
             </View>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <View style={{ position: 'relative' }}>
-                <Pressable style={[s.toolBtn, typeFilter !== 'all' && s.toolBtnActive]} onPress={() => setFilterOpen(o => !o)}>
+            {/* Action buttons row */}
+            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'nowrap' as any }}>
+              <View style={{ position: 'relative', flex: isMobile ? 1 : undefined }}>
+                <Pressable style={[s.toolBtn, typeFilter !== 'all' && s.toolBtnActive, isMobile && { flex: 1 }]}
+                  onPress={() => setFilterOpen(o => !o)}>
                   <Ionicons name="filter-outline" size={14} color={c.text} />
                   <Text style={s.toolBtnTxt}>{typeFilter === 'all' ? 'Filter' : typeFilter}</Text>
                 </Pressable>
@@ -218,24 +225,12 @@ export default function PaymentsScreen() {
               <Pressable style={[s.toolBtn, compactView && s.toolBtnActive]} onPress={() => setCompactView(v => !v)}>
                 <Ionicons name="grid-outline" size={14} color={c.text} />
               </Pressable>
-              <Pressable style={s.sortBtn} onPress={() => setSortNewest(v => !v)}>
-                <Text style={s.toolBtnTxt}>Sort by : {sortNewest ? 'Newest' : 'Oldest'}</Text>
+              <Pressable style={[s.sortBtn, isMobile && { flex: 1 }]} onPress={() => setSortNewest(v => !v)}>
+                <Text style={s.toolBtnTxt}>{sortNewest ? 'Newest' : 'Oldest'}</Text>
                 <Ionicons name="chevron-down" size={13} color={c.text} />
               </Pressable>
             </View>
           </View>
-
-          {!compactView && (
-            <View style={s.colHead}>
-              <Text style={[s.colHd, { flex: 1.4 }]}>Transaction ID</Text>
-              <Text style={[s.colHd, { flex: 1   }]}>Order ID</Text>
-              <Text style={[s.colHd, { flex: 1.1 }]}>Token No</Text>
-              <Text style={[s.colHd, { flex: 1.5 }]}>Customer</Text>
-              <Text style={[s.colHd, { flex: 1.2 }]}>Type</Text>
-              <Text style={[s.colHd, { flex: 0.8 }]}>Menus</Text>
-              <Text style={[s.colHd, { flex: 1.2, textAlign: 'right' }]}>Grand Total</Text>
-            </View>
-          )}
 
           {loading ? (
             <View style={s.centerWrap}>
@@ -259,27 +254,40 @@ export default function PaymentsScreen() {
               );
             })
           ) : (
-            pageData.map((pay, i) => {
-              const ref      = pay.reference_number ?? `#${pay.id}`;
-              const orderId  = pay.order_id ?? '—';
-              const tokenNo  = (pay as any).token_no ?? '—';
-              const customer = pay.customer_name ?? 'Walk-in';
-              const type     = (pay as any).order_type ?? (pay as any).type ?? 'Dine in';
-              const menus    = (pay as any).items_count ?? (pay as any).menus ?? '—';
-              const total    = `₹${Number(pay.amount).toFixed(2)}`;
-              const isEven   = i % 2 === 1;
-              return (
-                <View key={pay.id} style={[s.row, isEven && s.rowAlt]}>
-                  <Text style={[s.cell, s.cellRef, { flex: 1.4 }]}>{ref}</Text>
-                  <Text style={[s.cell, { flex: 1   }]}>{orderId}</Text>
-                  <Text style={[s.cell, s.cellMuted, { flex: 1.1 }]}>{tokenNo}</Text>
-                  <Text style={[s.cell, { flex: 1.5 }]}>{customer}</Text>
-                  <Text style={[s.cell, { flex: 1.2 }]}>{type}</Text>
-                  <Text style={[s.cell, { flex: 0.8 }]}>{menus}</Text>
-                  <Text style={[s.cell, s.cellAmt, { flex: 1.2 }]}>{total}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={isMobile}>
+              <View style={isMobile ? { minWidth: 640 } : undefined}>
+                <View style={s.colHead}>
+                  <Text style={[s.colHd, { flex: 1.4 }]}>Transaction ID</Text>
+                  <Text style={[s.colHd, { flex: 1   }]}>Order ID</Text>
+                  <Text style={[s.colHd, { flex: 1.1 }]}>Token No</Text>
+                  <Text style={[s.colHd, { flex: 1.5 }]}>Customer</Text>
+                  <Text style={[s.colHd, { flex: 1.2 }]}>Type</Text>
+                  <Text style={[s.colHd, { flex: 0.8 }]}>Menus</Text>
+                  <Text style={[s.colHd, { flex: 1.2, textAlign: 'right' }]}>Grand Total</Text>
                 </View>
-              );
-            })
+                {pageData.map((pay, i) => {
+                  const ref      = pay.reference_number ?? `#${pay.id}`;
+                  const orderId  = pay.order_id ?? '—';
+                  const tokenNo  = (pay as any).token_no ?? '—';
+                  const customer = pay.customer_name ?? 'Walk-in';
+                  const type     = (pay as any).order_type ?? (pay as any).type ?? 'Dine in';
+                  const menus    = (pay as any).items_count ?? (pay as any).menus ?? '—';
+                  const total    = `₹${Number(pay.amount).toFixed(2)}`;
+                  const isEven   = i % 2 === 1;
+                  return (
+                    <View key={pay.id} style={[s.row, isEven && s.rowAlt]}>
+                      <Text style={[s.cell, s.cellRef, { flex: 1.4 }]}>{ref}</Text>
+                      <Text style={[s.cell, { flex: 1   }]}>{orderId}</Text>
+                      <Text style={[s.cell, s.cellMuted, { flex: 1.1 }]}>{tokenNo}</Text>
+                      <Text style={[s.cell, { flex: 1.5 }]}>{customer}</Text>
+                      <Text style={[s.cell, { flex: 1.2 }]}>{type}</Text>
+                      <Text style={[s.cell, { flex: 0.8 }]}>{menus}</Text>
+                      <Text style={[s.cell, s.cellAmt, { flex: 1.2 }]}>{total}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
           )}
 
           {!loading && filtered.length > 0 && (

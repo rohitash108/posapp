@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import client from '@/api/client';
 import { useTheme } from '@/store/themeStore';
@@ -183,8 +184,8 @@ function mkS(c: ThemeColors) {
     viewToggle:  { flexDirection: 'row', borderRadius: 7, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
     toggleBtn:   { paddingHorizontal: 9, paddingVertical: 7, backgroundColor: c.surface },
     toggleActive:{ backgroundColor: PRIMARY },
-    searchBox:   { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: c.surface, minWidth: 200 },
-    searchInput: { fontSize: 13, color: c.heading, minWidth: 140 },
+    searchBox:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: c.surface, minWidth: 120 },
+    searchInput: { flex: 1, fontSize: 13, color: c.heading },
     addBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.sidebar, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
     addBtnTxt:   { color: '#fff', fontWeight: '700', fontSize: 13 },
     loadWrap:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -559,13 +560,15 @@ export default function CustomersScreen() {
   const dc  = useMemo(() => mkDc(c), [c]);
 
   const { width } = useWindowDimensions();
+  const insets   = useSafeAreaInsets();
+  const isMobile = width < 640;
   const numCols = width >= 1400 ? 4 : width >= 1060 ? 3 : width >= 700 ? 2 : 1;
 
   const [customers,    setCustomers]    = useState<Customer[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [refreshing,   setRefreshing]   = useState(false);
   const [search,       setSearch]       = useState('');
-  const [viewMode,     setViewMode]     = useState<ViewMode>('list');
+  const [viewMode,     setViewMode]     = useState<ViewMode>(() => width < 760 ? 'grid' : 'list');
   const [showForm,     setShowForm]     = useState(false);
   const [editing,      setEditing]      = useState<Customer | null>(null);
   const [deleting,     setDeleting]     = useState<number | null>(null);
@@ -691,48 +694,78 @@ export default function CustomersScreen() {
   return (
     <Pressable style={{ flex: 1, backgroundColor: c.background }}>
       {/* ── Header ── */}
-      <View style={s.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Text style={s.headerTitle}>Customer</Text>
-          <Pressable style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]}
-            onPress={() => { setRefreshing(true); load(true); }}>
-            {refreshing
-              ? <ActivityIndicator size="small" color={c.text} />
-              : <Ionicons name="refresh-outline" size={16} color={c.text} />}
-          </Pressable>
-        </View>
-        <View style={s.headerRight}>
-          {/* Grid / List toggle */}
-          <View style={s.viewToggle}>
-            <Pressable style={[s.toggleBtn, viewMode === 'grid' && s.toggleActive]}
-              onPress={() => setViewMode('grid')}>
-              <Ionicons name="grid-outline" size={15} color={viewMode === 'grid' ? '#fff' : c.textMuted} />
-            </Pressable>
-            <Pressable style={[s.toggleBtn, viewMode === 'list' && s.toggleActive]}
-              onPress={() => setViewMode('list')}>
-              <Ionicons name="list-outline" size={16} color={viewMode === 'list' ? '#fff' : c.textMuted} />
-            </Pressable>
+      {isMobile ? (
+        /* Mobile: two rows */
+        <View style={[s.header, { flexDirection: 'column', alignItems: 'stretch', gap: 8, paddingTop: insets.top + 11 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={s.headerTitle}>Customer</Text>
+              <Pressable style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => { setRefreshing(true); load(true); }}>
+                {refreshing
+                  ? <ActivityIndicator size="small" color={c.text} />
+                  : <Ionicons name="refresh-outline" size={16} color={c.text} />}
+              </Pressable>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={s.viewToggle}>
+                <Pressable style={[s.toggleBtn, viewMode === 'grid' && s.toggleActive]} onPress={() => setViewMode('grid')}>
+                  <Ionicons name="grid-outline" size={15} color={viewMode === 'grid' ? '#fff' : c.textMuted} />
+                </Pressable>
+                <Pressable style={[s.toggleBtn, viewMode === 'list' && s.toggleActive]} onPress={() => setViewMode('list')}>
+                  <Ionicons name="list-outline" size={16} color={viewMode === 'list' ? '#fff' : c.textMuted} />
+                </Pressable>
+              </View>
+              <Pressable style={({ pressed }) => [s.addBtn, pressed && { opacity: 0.85 }]} onPress={openAdd}>
+                <Ionicons name="add-circle-outline" size={15} color="#fff" />
+                <Text style={s.addBtnTxt}>Add New</Text>
+              </Pressable>
+            </View>
           </View>
-          {/* Search */}
+          {/* Search — full width on mobile */}
           <View style={s.searchBox}>
-            <TextInput
-              style={s.searchInput}
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search by name or phone"
-              placeholderTextColor={c.textMuted}
-            />
+            <TextInput style={s.searchInput} value={search} onChangeText={setSearch}
+              placeholder="Search by name or phone" placeholderTextColor={c.textMuted} />
             {search
               ? <Pressable onPress={() => setSearch('')}><Ionicons name="close-circle" size={15} color={c.textMuted} /></Pressable>
               : <Ionicons name="search-outline" size={15} color={c.textMuted} />}
           </View>
-          {/* Add New */}
-          <Pressable style={({ pressed }) => [s.addBtn, pressed && { opacity: 0.85 }]} onPress={openAdd}>
-            <Ionicons name="add-circle-outline" size={15} color="#fff" />
-            <Text style={s.addBtnTxt}>Add New</Text>
-          </Pressable>
         </View>
-      </View>
+      ) : (
+        /* Desktop: single row */
+        <View style={[s.header, { paddingTop: insets.top + 11 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text style={s.headerTitle}>Customer</Text>
+            <Pressable style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]}
+              onPress={() => { setRefreshing(true); load(true); }}>
+              {refreshing
+                ? <ActivityIndicator size="small" color={c.text} />
+                : <Ionicons name="refresh-outline" size={16} color={c.text} />}
+            </Pressable>
+          </View>
+          <View style={s.headerRight}>
+            <View style={s.viewToggle}>
+              <Pressable style={[s.toggleBtn, viewMode === 'grid' && s.toggleActive]} onPress={() => setViewMode('grid')}>
+                <Ionicons name="grid-outline" size={15} color={viewMode === 'grid' ? '#fff' : c.textMuted} />
+              </Pressable>
+              <Pressable style={[s.toggleBtn, viewMode === 'list' && s.toggleActive]} onPress={() => setViewMode('list')}>
+                <Ionicons name="list-outline" size={16} color={viewMode === 'list' ? '#fff' : c.textMuted} />
+              </Pressable>
+            </View>
+            <View style={s.searchBox}>
+              <TextInput style={s.searchInput} value={search} onChangeText={setSearch}
+                placeholder="Search by name or phone" placeholderTextColor={c.textMuted} />
+              {search
+                ? <Pressable onPress={() => setSearch('')}><Ionicons name="close-circle" size={15} color={c.textMuted} /></Pressable>
+                : <Ionicons name="search-outline" size={15} color={c.textMuted} />}
+            </View>
+            <Pressable style={({ pressed }) => [s.addBtn, pressed && { opacity: 0.85 }]} onPress={openAdd}>
+              <Ionicons name="add-circle-outline" size={15} color="#fff" />
+              <Text style={s.addBtnTxt}>Add New</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* ── Content ── */}
       {loading ? (
@@ -743,26 +776,28 @@ export default function CustomersScreen() {
       ) : viewMode === 'list' ? (
         <ScrollView
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={c.brand} />}>
-          <View style={tbl.tableWrap}>
-            <View style={tbl.headerRow}>
-              <Text style={[tbl.th, tbl.cId]}>#</Text>
-              <Text style={[tbl.th, tbl.cName]}>Customer</Text>
-              <Text style={[tbl.th, tbl.cPhone]}>Phone</Text>
-              <Text style={[tbl.th, tbl.cOrders, { textAlign: 'center' }]}>Orders</Text>
-              <Text style={[tbl.th, tbl.cLast]}>Last Order</Text>
-              <Text style={[tbl.th, tbl.cBal]}>Balance</Text>
-              <Text style={[tbl.th, tbl.cStatus]}>Status</Text>
-              <Text style={[tbl.th, tbl.cAct]}>Actions</Text>
-            </View>
-            {filtered.length === 0 ? (
-              <View style={s.emptyWrap}>
-                <Ionicons name="people-outline" size={40} color={c.textMuted} />
-                <Text style={s.emptyTitle}>{search ? 'No customers matched' : 'No customers yet'}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={isMobile}>
+            <View style={[tbl.tableWrap, isMobile && { minWidth: 680 }]}>
+              <View style={tbl.headerRow}>
+                <Text style={[tbl.th, tbl.cId]}>#</Text>
+                <Text style={[tbl.th, tbl.cName]}>Customer</Text>
+                <Text style={[tbl.th, tbl.cPhone]}>Phone</Text>
+                <Text style={[tbl.th, tbl.cOrders, { textAlign: 'center' }]}>Orders</Text>
+                <Text style={[tbl.th, tbl.cLast]}>Last Order</Text>
+                <Text style={[tbl.th, tbl.cBal]}>Balance</Text>
+                <Text style={[tbl.th, tbl.cStatus]}>Status</Text>
+                <Text style={[tbl.th, tbl.cAct]}>Actions</Text>
               </View>
-            ) : (
-              filtered.map((cust, idx) => <TableRow key={cust.id ?? `od_${idx}`} cust={cust} idx={idx} />)
-            )}
-          </View>
+              {filtered.length === 0 ? (
+                <View style={s.emptyWrap}>
+                  <Ionicons name="people-outline" size={40} color={c.textMuted} />
+                  <Text style={s.emptyTitle}>{search ? 'No customers matched' : 'No customers yet'}</Text>
+                </View>
+              ) : (
+                filtered.map((cust, idx) => <TableRow key={cust.id ?? `od_${idx}`} cust={cust} idx={idx} />)
+              )}
+            </View>
+          </ScrollView>
         </ScrollView>
       ) : (
         <ScrollView

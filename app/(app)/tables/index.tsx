@@ -270,31 +270,33 @@ export default function TablesScreen() {
           contentContainerStyle={s.listPad}
         >
           {tables.length === 0 ? <EmptyState /> : (
-            <View style={s.listCard}>
-              {/* Header row */}
-              <View style={[s.listRow, s.listHeaderRow]}>
-                <Text style={[s.listCell, s.listColQr,   s.hdrTxt]}>QR</Text>
-                <Text style={[s.listCell, s.listColName, s.hdrTxt]}>Table</Text>
-                <Text style={[s.listCell, s.listColFloor,s.hdrTxt]}>Floor</Text>
-                <Text style={[s.listCell, s.listColCap,  s.hdrTxt, { textAlign: 'center' }]}>Cap.</Text>
-                <Text style={[s.listCell, s.listColSt,   s.hdrTxt]}>Status</Text>
-                <Text style={[s.listCell, s.listColAct,  s.hdrTxt, { textAlign: 'right' }]}>Actions</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={cols > 1 ? false : true}>
+              <View style={[s.listCard, cols <= 1 && { minWidth: 520 }]}>
+                {/* Header row */}
+                <View style={[s.listRow, s.listHeaderRow]}>
+                  <Text style={[s.listCell, s.listColQr,   s.hdrTxt]}>QR</Text>
+                  <Text style={[s.listCell, s.listColName, s.hdrTxt]}>Table</Text>
+                  <Text style={[s.listCell, s.listColFloor,s.hdrTxt]}>Floor</Text>
+                  <Text style={[s.listCell, s.listColCap,  s.hdrTxt, { textAlign: 'center' }]}>Cap.</Text>
+                  <Text style={[s.listCell, s.listColSt,   s.hdrTxt]}>Status</Text>
+                  <Text style={[s.listCell, s.listColAct,  s.hdrTxt, { textAlign: 'right' }]}>Actions</Text>
+                </View>
+                {tables.map((table, i) => (
+                  <ListRow
+                    key={table.id}
+                    table={table}
+                    isSuperAdmin={isSuperAdmin}
+                    isLast={i === tables.length - 1}
+                    onTap={cycleStatus}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                    onQr={setQrTable}
+                    onShare={handleShare}
+                    onWhatsApp={handleWhatsApp}
+                  />
+                ))}
               </View>
-              {tables.map((table, i) => (
-                <ListRow
-                  key={table.id}
-                  table={table}
-                  isSuperAdmin={isSuperAdmin}
-                  isLast={i === tables.length - 1}
-                  onTap={cycleStatus}
-                  onEdit={openEdit}
-                  onDelete={handleDelete}
-                  onQr={setQrTable}
-                  onShare={handleShare}
-                  onWhatsApp={handleWhatsApp}
-                />
-              ))}
-            </View>
+            </ScrollView>
           )}
         </ScrollView>
       )}

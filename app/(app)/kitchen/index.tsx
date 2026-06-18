@@ -2,10 +2,11 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   View, Text, FlatList, Pressable, StyleSheet,
   RefreshControl, ActivityIndicator, useWindowDimensions,
-  TextInput,
+  TextInput, ScrollView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ordersApi } from '@/api/orders';
 import { useAppStore } from '@/store/appStore';
 import { useTheme } from '@/store/themeStore';
@@ -14,11 +15,8 @@ import type { Order, OrderStatus } from '@/types';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-// Include 'served' so orders marked served from Orders/Waiter screen stay visible
-// until explicitly completed from Kitchen (matches CSPos KDS behaviour)
 const KDS_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'preparing', 'ready', 'served'];
 
-// csPos status label mapping — 'confirmed' = Accepted in kitchen lifecycle
 const STATUS_LABELS: Record<string, string> = {
   pending:   'Pending',
   confirmed: 'Accepted',
@@ -41,36 +39,28 @@ const SOURCE_CFG = {
   qr:     { label: 'QR',     color: '#7c3aed', bg: 'rgba(124,58,237,0.1)'  },
 };
 
+// Stat card config
+const STAT_CARDS = [
+  { key: 'pending',   label: 'Pending',    icon: 'time-outline'           as const, accent: '#f59e0b', bg: 'rgba(245,158,11,0.12)'  },
+  { key: 'inKitchen', label: 'In Kitchen', icon: 'flame-outline'          as const, accent: '#8b5cf6', bg: 'rgba(139,92,246,0.12)'  },
+  { key: 'ready',     label: 'Ready',      icon: 'checkmark-circle-outline'as const, accent: '#10b981', bg: 'rgba(16,185,129,0.12)' },
+  { key: 'completed', label: 'Done Today', icon: 'trophy-outline'         as const, accent: '#06b6d4', bg: 'rgba(6,182,212,0.12)'   },
+] as const;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// csPos status flow (Pending → Accepted → Preparing → Ready → Completed):
-// POS/QR:      pending → Accept(confirmed) → preparing → ready → served → completed
-// Aggregators: pending → Accept(confirmed)/Reject(cancelled) → preparing → ready → served → completed
-//
-// isAdmin: restaurant_admin role gets a direct "Complete" shortcut from ready/served.
 function getNextAction(
   order: Order,
   isAdmin: boolean,
 ): { status: OrderStatus; label: string; color: string } | null {
-  const isAgg = order.source === 'zomato' || order.source === 'swiggy';
-
-  // pending is always handled by explicit Accept/Reject buttons (see showAcceptReject below)
   if (order.status === 'pending') return null;
-
-  if (order.status === 'confirmed') {
-    return { status: 'preparing', label: 'Start Preparing', color: '#0D76E1' };
-  }
-  if (order.status === 'preparing') {
-    return { status: 'ready', label: 'Mark Ready', color: '#10b981' };
-  }
+  if (order.status === 'confirmed') return { status: 'preparing', label: 'Start Preparing', color: '#0D76E1' };
+  if (order.status === 'preparing') return { status: 'ready',     label: 'Mark Ready',      color: '#10b981' };
   if (order.status === 'ready') {
-    // Admin can complete directly; everyone can mark served
     if (isAdmin) return { status: 'completed', label: 'Mark Completed', color: '#16a34a' };
     return { status: 'served', label: 'Mark Served', color: '#06b6d4' };
   }
-  if (order.status === 'served') {
-    return { status: 'completed', label: 'Mark Completed', color: '#16a34a' };
-  }
+  if (order.status === 'served') return { status: 'completed', label: 'Mark Completed', color: '#16a34a' };
   return null;
 }
 
@@ -80,7 +70,7 @@ function formatDateTime(iso?: string) {
   const pad = (n: number) => String(n).padStart(2, '0');
   const mon = d.toLocaleString('en', { month: 'short' });
   const h = d.getHours();
-  return `${pad(d.getDate())} ${mon} ${d.getFullYear()}, ${pad(h % 12 || 12)}:${pad(d.getMinutes())} ${h >= 12 ? 'PM' : 'AM'}`;
+  return `${pad(d.getDate())} ${mon}, ${pad(h % 12 || 12)}:${pad(d.getMinutes())} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
 function elapsedMins(created_at?: string) {
@@ -88,105 +78,108 @@ function elapsedMins(created_at?: string) {
   return Math.floor((Date.now() - new Date(created_at).getTime()) / 60000);
 }
 
-// ─── Theme-aware styles ───────────────────────────────────────────────────────
+// ─── Styles ──────────────────────────────────────────────────────────────────
 
 function createStyles(c: ThemeColors) {
   return StyleSheet.create({
     shell: { flex: 1, backgroundColor: c.background },
 
     // Error banner
-    errBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: '#fecaca', paddingHorizontal: 14, paddingVertical: 9 },
-    errText: { flex: 1, fontSize: 12.5, color: '#dc2626' },
-    retryBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 6, backgroundColor: '#dc2626' },
-    retryTxt: { fontSize: 12, fontWeight: '700', color: '#fff' },
+    errBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fef2f2', borderBottomWidth: 1, borderBottomColor: '#fecaca', paddingHorizontal: 14, paddingVertical: 9 },
+    errText:   { flex: 1, fontSize: 12.5, color: '#dc2626' },
+    retryBtn:  { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 6, backgroundColor: '#dc2626' },
+    retryTxt:  { fontSize: 12, fontWeight: '700', color: '#fff' },
 
-    // Header
-    header: { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, paddingHorizontal: 14, paddingVertical: 12 },
-    headerTop: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
-    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    title: { fontSize: 18, fontWeight: '800', color: c.heading },
-    refreshBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.border },
+    // ── Header (dark green accent) ──────────────────────
+    header:    { backgroundColor: '#1A2B1A', paddingHorizontal: 16, paddingBottom: 14 },
+    titleRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+    titleLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    iconBubble:{ width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+    title:     { fontSize: 20, fontWeight: '800', color: '#ffffff', letterSpacing: 0.2 },
+    subtitle:  { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1, letterSpacing: 0.5 },
+    refreshBtn:{ width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
 
-    // Stats pills
-    pillsRow: { flexDirection: 'row', gap: 8, flex: 1, flexWrap: 'wrap' },
-    pill: {
-      flexDirection: 'row', alignItems: 'center', gap: 8,
-      backgroundColor: c.surface, borderRadius: 999, borderWidth: 1, borderColor: c.border,
-      paddingLeft: 6, paddingRight: 12, paddingVertical: 6,
-    },
-    pillIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-    pillLabel: { fontSize: 12, fontWeight: '500', color: c.text },
-    pillCount: { fontSize: 17, fontWeight: '700', color: c.heading },
+    // ── Stat cards ──────────────────────────────────────
+    statsRow:  { flexDirection: 'row', gap: 8 },
+    statCard:  { flex: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 10, alignItems: 'center', gap: 4 },
+    statNum:   { fontSize: 20, fontWeight: '800', color: '#fff' },
+    statLbl:   { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.65)', letterSpacing: 0.3, textAlign: 'center' },
 
-    // Filter bar
-    filterBar: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-    filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, flex: 1 },
-    chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1.5, borderColor: c.border },
-    chipTxt: { fontSize: 12, fontWeight: '700', color: c.text },
-    chipBadge: { backgroundColor: c.border, borderRadius: 999, paddingHorizontal: 5, paddingVertical: 1 },
-    chipBadgeTxt: { fontSize: 10, fontWeight: '700', color: c.text },
-    searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: c.surfaceAlt, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: c.border, minWidth: 180 },
+    // ── Filter bar ──────────────────────────────────────
+    filterBar:   { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, paddingVertical: 10, gap: 8 },
+    chipsScroll: { paddingHorizontal: 12, gap: 7 },
+    chip:        { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1.5, borderColor: c.border },
+    chipTxt:     { fontSize: 12, fontWeight: '700', color: c.text },
+    chipBadge:   { backgroundColor: c.border, borderRadius: 999, minWidth: 18, paddingHorizontal: 5, paddingVertical: 1, alignItems: 'center' },
+    chipBadgeTxt:{ fontSize: 10, fontWeight: '700', color: c.text },
+
+    // ── Search ──────────────────────────────────────────
+    searchWrap:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, backgroundColor: c.surfaceAlt, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: c.border },
     searchInput: { flex: 1, fontSize: 13, color: c.heading },
 
-    // Grid
+    // ── Grid ────────────────────────────────────────────
     listContent: { padding: 10, gap: 10, flexGrow: 1 },
-    colWrap: { gap: 10, alignItems: 'stretch' },
+    colWrap:     { gap: 10, alignItems: 'stretch' },
 
-    // Card
-    card: { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
-    cardUrgent: { borderColor: '#fca5a5' },
+    // ── Card ────────────────────────────────────────────
+    card:        { backgroundColor: c.surface, borderRadius: 14, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 4, borderWidth: 1, borderColor: c.border },
+    cardUrgent:  { borderColor: '#fca5a5' },
+    cardAccent:  { height: 3 },
 
-    // Card header — dark bg matching csPos
-    cardHead: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.sidebar, padding: 12, gap: 10 },
-    cardHeadL: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
-    cardAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-    cardCustomer: { fontSize: 13.5, fontWeight: '600', color: c.sidebarText },
-    cardOrderType: { fontSize: 11.5, color: c.sidebarTextMuted, marginTop: 2 },
-    cardHeadR: { alignItems: 'flex-end', gap: 3, flexShrink: 0 },
-    orderNumBadge: { backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 6, paddingHorizontal: 9, paddingVertical: 3 },
-    orderNumTxt: { fontSize: 11.5, fontWeight: '800', color: '#111827' },
-    srcBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1 },
-    srcBadgeTxt: { fontSize: 10.5, fontWeight: '800' },
-    extId: { fontSize: 10, color: c.sidebarTextMuted },
+    // Card header
+    cardHead:     { flexDirection: 'row', alignItems: 'center', backgroundColor: c.sidebar, paddingHorizontal: 13, paddingVertical: 11, gap: 10 },
+    cardHeadL:    { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
+    cardAvatar:   { width: 38, height: 38, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    cardCustomer: { fontSize: 13.5, fontWeight: '700', color: c.sidebarText },
+    cardOrderType:{ fontSize: 11, color: c.sidebarTextMuted, marginTop: 2, letterSpacing: 0.2 },
+    cardHeadR:    { alignItems: 'flex-end', gap: 4, flexShrink: 0 },
+    orderNumBadge:{ backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 6, paddingHorizontal: 9, paddingVertical: 3 },
+    orderNumTxt:  { fontSize: 11, fontWeight: '800', color: '#111827' },
+    srcBadge:     { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1 },
+    srcBadgeTxt:  { fontSize: 10, fontWeight: '800' },
+    extId:        { fontSize: 10, color: c.sidebarTextMuted },
 
-    // Card info row (table + datetime)
-    cardInfo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border },
-    cardInfoLbl: { fontSize: 12.5, color: c.text, fontWeight: '500' },
-    cardInfoDate: { fontSize: 11.5, color: c.text, fontWeight: '400' },
+    // Timer badge (elapsed time)
+    timerBadge:   { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+    timerTxt:     { fontSize: 10.5, fontWeight: '700' },
 
-    // Card body — items list
-    cardBody: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 8, gap: 5 },
-    noItems: { fontSize: 12, color: '#f59e0b', fontStyle: 'italic' },
-    itemRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    itemDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10b981', flexShrink: 0 },
-    itemName: { flex: 1, fontSize: 13, color: c.heading, lineHeight: 18 },
-    itemMeta: { fontSize: 12, color: c.text, flexShrink: 0 },
-    addons: { fontSize: 11, color: c.textMuted, paddingLeft: 16 },
+    // Card info row
+    cardInfo:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 13, paddingVertical: 8, backgroundColor: c.surfaceAlt, borderBottomWidth: 1, borderBottomColor: c.border },
+    cardInfoLbl:  { fontSize: 12, color: c.text, fontWeight: '600' },
+    cardInfoDate: { fontSize: 11, color: c.textMuted },
 
-    // Order total row (aggregator orders)
-    totalRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: c.border, paddingTop: 7, marginTop: 4 },
-    totalLabel: { fontSize: 12.5, fontWeight: '600', color: c.text },
-    totalVal: { fontSize: 12.5, fontWeight: '700', color: c.heading },
+    // Items
+    cardBody:  { paddingHorizontal: 13, paddingTop: 10, paddingBottom: 8, gap: 6 },
+    noItems:   { fontSize: 12, color: '#f59e0b', fontStyle: 'italic' },
+    itemRow:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    itemDot:   { width: 7, height: 7, borderRadius: 4, backgroundColor: '#10b981', flexShrink: 0 },
+    itemName:  { flex: 1, fontSize: 13, color: c.heading, lineHeight: 18 },
+    itemMeta:  { fontSize: 12, color: c.text, flexShrink: 0 },
+    addons:    { fontSize: 11, color: c.textMuted, paddingLeft: 15 },
+    totalRow:  { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: c.border, paddingTop: 7, marginTop: 4 },
+    totalLabel:{ fontSize: 12.5, fontWeight: '600', color: c.text },
+    totalVal:  { fontSize: 12.5, fontWeight: '700', color: c.heading },
 
-    // Info boxes (address, notes)
-    infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, backgroundColor: c.surfaceAlt, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, marginTop: 2 },
-    infoBoxTxt: { flex: 1, fontSize: 11.5, color: c.text, lineHeight: 16 },
-    notesBox: { backgroundColor: '#fffbeb' },
-    notesTxt: { color: '#92400e', fontStyle: 'italic' },
+    // Info boxes
+    infoBox:   { flexDirection: 'row', alignItems: 'flex-start', gap: 5, backgroundColor: c.surfaceAlt, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 6, marginTop: 4 },
+    infoBoxTxt:{ flex: 1, fontSize: 11.5, color: c.text, lineHeight: 16 },
+    notesBox:  { backgroundColor: '#fffbeb' },
+    notesTxt:  { color: '#92400e', fontStyle: 'italic' },
 
-    // Card footer
-    cardFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 9, borderTopWidth: 1, borderTopColor: c.border, gap: 6 },
-    statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
-    statusDot: { width: 7, height: 7, borderRadius: 4 },
-    statusTxt: { fontSize: 11.5, fontWeight: '700' },
-    actionRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-    actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8 },
-    actionBtnTxt: { fontSize: 12.5, fontWeight: '700', color: '#fff' },
+    // Footer
+    cardFoot:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 13, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border, gap: 6 },
+    statusBadge:{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
+    statusDot:  { width: 7, height: 7, borderRadius: 4 },
+    statusTxt:  { fontSize: 11.5, fontWeight: '700' },
+    actionRow:  { flexDirection: 'row', gap: 6, alignItems: 'center' },
+    actionBtn:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 9 },
+    actionBtnTxt:{ fontSize: 12.5, fontWeight: '700', color: '#fff' },
 
     // Empty state
-    empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 8 },
+    empty:      { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 10 },
+    emptyIcon:  { width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(107,114,128,0.1)', alignItems: 'center', justifyContent: 'center' },
     emptyTitle: { fontSize: 16, fontWeight: '700', color: c.textMuted },
-    emptyText: { fontSize: 13, color: c.border, textAlign: 'center' },
+    emptyText:  { fontSize: 13, color: c.border, textAlign: 'center' },
   });
 }
 
@@ -195,6 +188,8 @@ function createStyles(c: ThemeColors) {
 export default function KitchenScreen() {
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -206,51 +201,38 @@ export default function KitchenScreen() {
   const [completedToday, setCompletedToday] = useState(0);
   const { width } = useWindowDimensions();
   const user = useAppStore((s) => s.user);
-  // Restaurant Admin has full control: direct complete from ready, cancel orders, etc.
   const isAdmin = user?.role === 'restaurant_admin' || user?.role === 'admin';
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevFocusedRef = useRef(false);
   const isFocused = useIsFocused();
 
-  // 3 cols wide desktop, 2 medium, 1 mobile
-  const numCols = width >= 1440 ? 3 : width >= 880 ? 2 : 1;
+  const numCols  = width >= 1440 ? 3 : width >= 880 ? 2 : 1;
+  const isMobile = width < 640;
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     if (!silent) setError('');
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const res = await ordersApi.list({
-        per_page: 100,
-        status: KDS_STATUSES.join(','),
-        from: today,
-        to: today,
-      });
+      const res = await ordersApi.list({ per_page: 100, status: KDS_STATUSES.join(','), from: today, to: today });
       const raw = res.data?.data ?? res.data ?? [];
-      const orders: Order[] = Array.isArray(raw) ? raw : [];
-      // API already filters by status; sort newest first to match CSPos KDS order
-      const kitchen = orders.sort(
+      const kitchen: Order[] = (Array.isArray(raw) ? raw : []).sort(
         (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
       );
       setOrders(kitchen);
-      // completed count: fetch separately so it's accurate even with status filter active
-      const todayStr = new Date().toISOString().slice(0, 10);
       try {
-        const doneRes = await ordersApi.list({ per_page: 1, status: 'completed', from: todayStr, to: todayStr });
+        const doneRes = await ordersApi.list({ per_page: 1, status: 'completed', from: today, to: today });
         setCompletedToday(doneRes.data?.total ?? 0);
-      } catch { /* non-critical — leave at previous value */ }
+      } catch { /* non-critical */ }
     } catch (e: any) {
-      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load kitchen orders';
-      console.error('[Kitchen] load error:', e?.response?.status, msg);
-      if (!silent) setError(msg);
+      if (!silent) setError(e?.response?.data?.message ?? e?.message ?? 'Failed to load kitchen orders');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  // Load on mount + 10s polling
   useEffect(() => {
     load();
     pollRef.current = setInterval(() => load(true), 10000);
@@ -261,14 +243,8 @@ export default function KitchenScreen() {
     };
   }, [load]);
 
-  // Reload immediately on tab focus (false → true transition only).
-  // useIsFocused() from @react-navigation/native is driven by the navigator's
-  // focus/blur events — it only changes on REAL tab switches, never on
-  // re-renders, so this cannot cause an infinite loop unlike useFocusEffect.
   useEffect(() => {
-    if (isFocused && !prevFocusedRef.current) {
-      load(true);
-    }
+    if (isFocused && !prevFocusedRef.current) load(true);
     prevFocusedRef.current = isFocused;
   }, [isFocused, load]);
 
@@ -283,8 +259,7 @@ export default function KitchenScreen() {
         setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o));
       }
     } catch (e: any) {
-      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to update status';
-      setError(msg);
+      setError(e?.response?.data?.message ?? e?.message ?? 'Failed to update status');
       setTimeout(() => setError(''), 4000);
       load(true);
     } finally {
@@ -292,7 +267,6 @@ export default function KitchenScreen() {
     }
   }
 
-  // Apply source filter then search filter
   const filtered = orders
     .filter(o => srcFilter === 'all' || (o.source ?? 'pos') === srcFilter)
     .filter(o => {
@@ -306,7 +280,6 @@ export default function KitchenScreen() {
       );
     });
 
-  // Stats counts (matching csPos: Pending, In Kitchen, Ready, Completed)
   const counts = {
     pending:   orders.filter(o => o.status === 'pending').length,
     inKitchen: orders.filter(o => o.status === 'confirmed' || o.status === 'preparing').length,
@@ -317,8 +290,11 @@ export default function KitchenScreen() {
   if (loading) {
     return (
       <View style={[s.shell, { alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color={colors.brand} />
-        <Text style={{ color: colors.textMuted, marginTop: 10 }}>Loading kitchen orders…</Text>
+        <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: '#1A2B1A', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+          <Ionicons name="restaurant-outline" size={26} color="#fff" />
+        </View>
+        <ActivityIndicator size="large" color="#1A2B1A" />
+        <Text style={{ color: colors.textMuted, marginTop: 10, fontSize: 13 }}>Loading kitchen orders…</Text>
       </View>
     );
   }
@@ -337,44 +313,66 @@ export default function KitchenScreen() {
         </View>
       ) : null}
 
-      {/* ── Header ───────────────────────────────────────── */}
-      <View style={s.header}>
-        <View style={s.headerTop}>
-          {/* Title */}
-          <View style={s.titleRow}>
-            <Text style={s.title}>Kitchen</Text>
-            <Pressable
-              onPress={() => { setRefreshing(true); load(); }}
-              style={({ pressed }) => [s.refreshBtn, (loading || refreshing || pressed) && { opacity: 0.6 }]}
-              disabled={loading || refreshing}
-            >
-              {refreshing
-                ? <ActivityIndicator size="small" color={colors.text} />
-                : <Ionicons name="refresh-outline" size={16} color={colors.text} />}
-            </Pressable>
+      {/* ── Header (dark green) ──────────────────────────── */}
+      <View style={[s.header, { paddingTop: insets.top + 14 }]}>
+        {/* Title row */}
+        <View style={s.titleRow}>
+          <View style={s.titleLeft}>
+            <View style={s.iconBubble}>
+              <Ionicons name="restaurant-outline" size={18} color="#fff" />
+            </View>
+            <View>
+              <Text style={s.title}>Kitchen</Text>
+              <Text style={s.subtitle}>LIVE ORDER DISPLAY</Text>
+            </View>
           </View>
+          <Pressable
+            onPress={() => { setRefreshing(true); load(); }}
+            style={({ pressed }) => [s.refreshBtn, (loading || refreshing || pressed) && { opacity: 0.6 }]}
+            disabled={loading || refreshing}
+          >
+            {refreshing
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Ionicons name="refresh-outline" size={17} color="#fff" />}
+          </Pressable>
+        </View>
 
-          {/* csPos-style stats pills: Pending | In Kitchen | Ready | Completed */}
-          <View style={s.pillsRow}>
-            <StatPill icon="newspaper-outline"      iconBg="#374151" label="Pending"    count={counts.pending}   s={s} />
-            <StatPill icon="cube-outline"           iconBg="#6b7280" label="In Kitchen" count={counts.inKitchen} s={s} />
-            <StatPill icon="alarm-outline"          iconBg="#dc2626" label="Ready"      count={counts.ready}     s={s} />
-            <StatPill icon="checkmark-done-outline" iconBg="#059669" label="Completed"  count={counts.completed} s={s} />
-          </View>
+        {/* Stat cards row */}
+        <View style={s.statsRow}>
+          {STAT_CARDS.map(card => (
+            <View key={card.key} style={[s.statCard, { backgroundColor: card.bg }]}>
+              <Ionicons name={card.icon} size={17} color={card.accent} />
+              <Text style={[s.statNum, { color: card.accent }]}>
+                {counts[card.key]}
+              </Text>
+              <Text style={[s.statLbl, { color: card.accent }]}>{card.label}</Text>
+            </View>
+          ))}
         </View>
       </View>
 
-      {/* ── Source filter + Search ────────────────────────── */}
+      {/* ── Filter bar ───────────────────────────────────── */}
       <View style={s.filterBar}>
-        <View style={s.filterChips}>
+        {/* Source chips — always horizontal scroll (no wrap/clip issues) */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[s.chipsScroll, { flexDirection: 'row' }]}
+        >
           {(['all', 'pos', 'zomato', 'swiggy', 'qr'] as const).map(src => {
             const cfg = src !== 'all' ? SOURCE_CFG[src] : null;
             const active = srcFilter === src;
-            const cnt = src === 'all' ? orders.length : orders.filter(o => (o.source ?? 'pos') === src).length;
+            const cnt = src === 'all'
+              ? orders.length
+              : orders.filter(o => (o.source ?? 'pos') === src).length;
             return (
               <Pressable
                 key={src}
-                style={({ pressed }) => [s.chip, active && { backgroundColor: cfg?.color ?? '#1A2B1A', borderColor: cfg?.color ?? '#1A2B1A' }, pressed && { opacity: 0.75 }]}
+                style={({ pressed }) => [
+                  s.chip,
+                  active && { backgroundColor: cfg?.color ?? '#1A2B1A', borderColor: cfg?.color ?? '#1A2B1A' },
+                  pressed && { opacity: 0.75 },
+                ]}
                 onPress={() => setSrcFilter(src)}
               >
                 <Text style={[s.chipTxt, active && { color: '#fff' }]}>
@@ -386,19 +384,21 @@ export default function KitchenScreen() {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
+
+        {/* Search */}
         <View style={s.searchWrap}>
           <Ionicons name="search" size={14} color={colors.placeholder} />
           <TextInput
             style={s.searchInput}
-            placeholder="Search orders..."
+            placeholder="Search orders, items, tables…"
             value={search}
             onChangeText={setSearch}
             placeholderTextColor={colors.placeholder}
           />
           {search ? (
             <Pressable onPress={() => setSearch('')}>
-              <Ionicons name="close-circle" size={14} color={colors.placeholder} />
+              <Ionicons name="close-circle" size={15} color={colors.placeholder} />
             </Pressable>
           ) : null}
         </View>
@@ -411,7 +411,7 @@ export default function KitchenScreen() {
         numColumns={numCols}
         key={`grid-${numCols}`}
         columnWrapperStyle={numCols > 1 ? s.colWrap : undefined}
-        contentContainerStyle={s.listContent}
+        contentContainerStyle={[s.listContent, { paddingBottom: insets.bottom + 12 }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -432,9 +432,11 @@ export default function KitchenScreen() {
         )}
         ListEmptyComponent={
           <View style={s.empty}>
-            <Ionicons name="restaurant-outline" size={52} color="#d1d5db" />
+            <View style={s.emptyIcon}>
+              <Ionicons name="restaurant-outline" size={34} color="#9ca3af" />
+            </View>
             <Text style={s.emptyTitle}>
-              {search ? 'No orders matched' : 'No orders in kitchen'}
+              {search ? 'No orders matched' : 'Kitchen is clear'}
             </Text>
             <Text style={s.emptyText}>
               {search ? 'Try a different search term' : 'New and in-progress orders will appear here.'}
@@ -446,28 +448,7 @@ export default function KitchenScreen() {
   );
 }
 
-// ─── StatPill ─────────────────────────────────────────────────────────────────
-
-function StatPill({ icon, iconBg, label, count, s }: {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  iconBg: string;
-  label: string;
-  count: number;
-  s: ReturnType<typeof createStyles>;
-}) {
-  return (
-    <View style={s.pill}>
-      <View style={[s.pillIcon, { backgroundColor: iconBg }]}>
-        <Ionicons name={icon} size={13} color="#fff" />
-      </View>
-      <Text style={s.pillLabel}>{label}</Text>
-      <View style={{ flex: 1 }} />
-      <Text style={s.pillCount}>{count}</Text>
-    </View>
-  );
-}
-
-// ─── Card ─────────────────────────────────────────────────────────────────────
+// ─── KitchenCard ─────────────────────────────────────────────────────────────
 
 function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
   order: Order;
@@ -480,23 +461,32 @@ function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
   const src = order.source ?? 'pos';
   const srcCfg = SOURCE_CFG[src as keyof typeof SOURCE_CFG] ?? SOURCE_CFG.pos;
   const isAgg = src === 'zomato' || src === 'swiggy';
-  const isUrgent = elapsedMins(order.created_at) >= 15;
+  const elapsed = elapsedMins(order.created_at);
+  const isUrgent = elapsed >= 15;
   const statusColor = STATUS_COLORS[order.status] ?? '#6b7280';
   const statusLabel = STATUS_LABELS[order.status] ?? order.status;
   const nextAction = getNextAction(order, isAdmin);
-  // All pending orders show Accept/Reject (POS gets Accept only; aggregators get both)
   const showAcceptReject = order.status === 'pending';
   const orderTotal = (order.items ?? []).reduce((s, i) => s + (Number(i.unit_price) || 0) * (i.quantity || 1), 0);
   const hasTotal = isAgg && orderTotal > 0;
 
+  const timerColor = isUrgent ? '#ef4444' : elapsed >= 10 ? '#f59e0b' : '#6b7280';
+
   return (
     <View style={[s.card, numCols > 1 && { flex: 1 }, isUrgent && s.cardUrgent]}>
 
-      {/* ── Card header — dark (bg-gray like csPos) ────────── */}
+      {/* Status accent strip */}
+      <View style={[s.cardAccent, { backgroundColor: statusColor }]} />
+
+      {/* ── Card header ─────────────────────────────────── */}
       <View style={s.cardHead}>
         <View style={s.cardHeadL}>
           <View style={s.cardAvatar}>
-            <Ionicons name="hand-right-outline" size={18} color="rgba(255,255,255,0.8)" />
+            <Ionicons
+              name={isAgg ? 'bicycle-outline' : 'person-outline'}
+              size={18}
+              color="rgba(255,255,255,0.8)"
+            />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.cardCustomer} numberOfLines={1}>
@@ -509,41 +499,38 @@ function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
         </View>
         <View style={s.cardHeadR}>
           <View style={s.orderNumBadge}>
-            <Text style={s.orderNumTxt}>Order {order.order_number}</Text>
+            <Text style={s.orderNumTxt}>#{order.order_number}</Text>
+          </View>
+          {/* Elapsed timer */}
+          <View style={[s.timerBadge, { backgroundColor: timerColor + '20', borderColor: timerColor + '50' }]}>
+            <Ionicons name="alarm-outline" size={10} color={timerColor} />
+            <Text style={[s.timerTxt, { color: timerColor }]}>{elapsed}m</Text>
           </View>
           {isAgg && (
             <View style={[s.srcBadge, { backgroundColor: srcCfg.bg, borderColor: srcCfg.color + '40' }]}>
               <Text style={[s.srcBadgeTxt, { color: srcCfg.color }]}>{srcCfg.label}</Text>
             </View>
           )}
-          {order.external_id && isAgg && (
-            <Text style={s.extId}>ID: {order.external_id}</Text>
-          )}
         </View>
       </View>
 
-      {/* ── Table / delivery + datetime ───────────────────── */}
+      {/* ── Table / datetime ─────────────────────────────── */}
       <View style={s.cardInfo}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Ionicons name={isAgg ? 'bicycle-outline' : 'grid-outline'} size={12} color={s.cardInfoLbl.color} />
+          <Ionicons name={isAgg ? 'bicycle-outline' : 'grid-outline'} size={11} color={s.cardInfoLbl.color} />
           <Text style={s.cardInfoLbl}>
-            {isAgg
-              ? 'Delivery'
-              : order.table_name
-                ? `Table : ${order.table_name}`
-                : '–'}
+            {isAgg ? 'Delivery' : order.table_name ? `Table: ${order.table_name}` : '–'}
           </Text>
         </View>
         <Text style={s.cardInfoDate}>{formatDateTime(order.created_at)}</Text>
       </View>
 
-      {/* ── Items list ────────────────────────────────────── */}
+      {/* ── Items ────────────────────────────────────────── */}
       <View style={s.cardBody}>
         {(order.items ?? []).length === 0 ? (
           <Text style={s.noItems}>Items not loaded</Text>
         ) : (order.items ?? []).map((item, idx) => (
           <View key={idx} style={s.itemRow}>
-            {/* csPos uses green dot (dot success) for all items */}
             <View style={s.itemDot} />
             <Text style={s.itemName} numberOfLines={2}>
               {item.item_name ?? item.name ?? ''}
@@ -551,29 +538,24 @@ function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
             </Text>
             <Text style={s.itemMeta}>
               ×{item.quantity}
-              {item.unit_price ? ` · ₹${Number(item.unit_price).toFixed(2)}` : ''}
+              {item.unit_price ? ` · ₹${Number(item.unit_price).toFixed(0)}` : ''}
             </Text>
           </View>
         ))}
 
-        {/* Addons */}
         {(order.items ?? []).map((item, idx) =>
-          item.addons && item.addons.length > 0 ? (
-            <Text key={`adn-${idx}`} style={s.addons}>
-              + {item.addons.map(a => a.name).join(', ')}
-            </Text>
+          item.addons?.length ? (
+            <Text key={`adn-${idx}`} style={s.addons}>+ {item.addons.map(a => a.name).join(', ')}</Text>
           ) : null
         )}
 
-        {/* Order total for aggregator orders (matches csPos) */}
         {hasTotal && (
           <View style={s.totalRow}>
-            <Text style={s.totalLabel}>Order total</Text>
+            <Text style={s.totalLabel}>Order Total</Text>
             <Text style={s.totalVal}>₹{orderTotal.toFixed(2)}</Text>
           </View>
         )}
 
-        {/* Delivery address */}
         {isAgg && order.delivery_address ? (
           <View style={s.infoBox}>
             <Ionicons name="location-outline" size={11} color="#6b7280" />
@@ -581,20 +563,18 @@ function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
           </View>
         ) : null}
 
-        {/* Notes (matches csPos bg-light notes box) */}
         {order.notes ? (
           <View style={[s.infoBox, s.notesBox]}>
             <Ionicons name="information-circle-outline" size={11} color="#92400e" />
             <Text style={[s.infoBoxTxt, s.notesTxt]} numberOfLines={3}>
-              Notes : {order.notes}
+              Notes: {order.notes}
             </Text>
           </View>
         ) : null}
       </View>
 
-      {/* ── Footer: status badge + action buttons ─────────── */}
+      {/* ── Footer ───────────────────────────────────────── */}
       <View style={s.cardFoot}>
-        {/* Status badge (badge-soft style matching csPos) */}
         <View style={[s.statusBadge, { backgroundColor: statusColor + '18', borderColor: statusColor + '40' }]}>
           <View style={[s.statusDot, { backgroundColor: statusColor }]} />
           <Text style={[s.statusTxt, { color: statusColor }]}>{statusLabel}</Text>
@@ -612,7 +592,6 @@ function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
                 <Ionicons name="checkmark" size={13} color="#fff" />
                 <Text style={s.actionBtnTxt}>Accept</Text>
               </Pressable>
-              {/* Only aggregator orders can be rejected from Kitchen */}
               {isAgg && (
                 <Pressable
                   style={({ pressed }) => [s.actionBtn, { backgroundColor: '#ef4444' }, pressed && { opacity: 0.75 }]}
@@ -625,13 +604,12 @@ function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
             </>
           ) : nextAction ? (
             <>
-              {/* Admin on a 'ready' order gets a secondary 'Mark Served' button too */}
               {isAdmin && order.status === 'ready' && (
                 <Pressable
                   style={({ pressed }) => [s.actionBtn, { backgroundColor: '#06b6d4' }, pressed && { opacity: 0.75 }]}
                   onPress={() => onAction(order, 'served')}
                 >
-                  <Text style={s.actionBtnTxt}>Mark Served</Text>
+                  <Text style={s.actionBtnTxt}>Served</Text>
                 </Pressable>
               )}
               <Pressable
@@ -647,5 +625,3 @@ function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
     </View>
   );
 }
-
-// Styles are generated dynamically by createStyles(colors) above the KitchenScreen component.

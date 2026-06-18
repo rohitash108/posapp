@@ -5,6 +5,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { inventoryApi } from '@/api/inventory';
 import { useTheme } from '@/store/themeStore';
 import type { ThemeColors } from '@/theme/tokens';
@@ -374,6 +375,8 @@ export default function InventoryScreen() {
   const s = useMemo(() => mkS(c), [c]);
 
   const { width } = useWindowDimensions();
+  const insets   = useSafeAreaInsets();
+  const isMobile = width < 640;
   const [data, setData]         = useState<InventoryData | null>(null);
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -434,7 +437,7 @@ export default function InventoryScreen() {
   return (
     <View style={s.shell}>
       {/* ── Top bar ────────────────────────────────────────── */}
-      <View style={s.topbar}>
+      <View style={[s.topbar, { paddingTop: insets.top + 12 }]}>
         <View style={{ flex: 1 }}>
           <Text style={s.pageTitle}>Inventory</Text>
           <Text style={s.pageSub}>{ingredients.length} ingredients tracked</Text>
@@ -552,7 +555,7 @@ export default function InventoryScreen() {
             /* ── On-hand by ingredient ─────────────────────── */
             <View style={s.card}>
               {/* Search + filter */}
-              <View style={s.tableToolbar}>
+              <View style={[s.tableToolbar, isMobile && { flexDirection: 'column', alignItems: 'stretch' }]}>
                 <View style={s.searchWrap}>
                   <Ionicons name="search" size={13} color={c.textMuted} />
                   <TextInput
@@ -568,7 +571,8 @@ export default function InventoryScreen() {
                     </TouchableOpacity>
                   ) : null}
                 </View>
-                <View style={s.filterChips}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ flexDirection: 'row', gap: 6 }}>
                   {([
                     ['all', 'All',       ingredients.length,                                '#374151'],
                     ['low', 'Low Stock', lowStock.length,                                    '#d97706'],
@@ -587,60 +591,64 @@ export default function InventoryScreen() {
                       )}
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
               </View>
 
-              {/* Table header */}
-              <View style={[s.tRow, s.tHead]}>
-                <Text style={[s.tCell, s.cName]}>Ingredient</Text>
-                <Text style={[s.tCell, s.cUnit]}>Unit</Text>
-                <Text style={[s.tCell, s.cOnHand]}>On Hand</Text>
-                <Text style={[s.tCell, s.cStatus]}>Status</Text>
-                <Text style={[s.tCell, s.cAct]}>Actions</Text>
-              </View>
-
-              {displayed.length === 0 ? (
-                <View style={s.emptyWrap}>
-                  <Ionicons name="cube-outline" size={36} color={c.textMuted} />
-                  <Text style={s.emptyTxt}>{search ? 'No ingredients matched' : 'No inventory items'}</Text>
-                </View>
-              ) : displayed.map((ing, idx) => {
-                const st = stockStatus(ing);
-                const pct = ing.low_stock_threshold > 0
-                  ? Math.min(100, (ing.on_hand / (ing.low_stock_threshold * 3)) * 100)
-                  : Math.min(100, (ing.on_hand / 100) * 100);
-                return (
-                  <View key={ing.id} style={[s.tRow, idx % 2 === 1 && s.tRowAlt]}>
-                    <View style={s.cName}>
-                      <Text style={s.ingName}>{ing.name}</Text>
-                      {ing.sku ? <Text style={s.ingSku}>{ing.sku}</Text> : null}
-                      <View style={s.progressBg}>
-                        <View style={[s.progressFill, { width: `${pct}%` as any, backgroundColor: st.color }]} />
-                      </View>
-                    </View>
-                    <Text style={[s.tCell, s.cUnit]}>{ing.unit ?? '—'}</Text>
-                    <Text style={[s.tCell, s.cOnHand, { fontWeight: '800', color: ing.on_hand <= 0 ? '#dc2626' : c.heading, fontSize: 15 }]}>
-                      {ing.on_hand.toFixed(3)}
-                    </Text>
-                    <View style={s.cStatus}>
-                      <View style={[s.statusBadge, { backgroundColor: st.bg }]}>
-                        <Text style={[s.statusTxt, { color: st.color }]}>{st.label}</Text>
-                      </View>
-                      {ing.low_stock_threshold > 0 && (
-                        <Text style={s.minTxt}>Min: {ing.low_stock_threshold}</Text>
-                      )}
-                    </View>
-                    <View style={[s.cAct, { flexDirection: 'row', gap: 5 }]}>
-                      <TouchableOpacity style={s.actBtn} onPress={() => openStockIn(ing)}>
-                        <Ionicons name="arrow-down-circle-outline" size={14} color={BRAND} />
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[s.actBtn, { borderColor: '#fecaca' }]} onPress={() => openWaste(ing)}>
-                        <Ionicons name="trash-outline" size={14} color="#dc2626" />
-                      </TouchableOpacity>
-                    </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={!twoCol}>
+                <View style={{ minWidth: twoCol ? undefined : 480 }}>
+                  {/* Table header */}
+                  <View style={[s.tRow, s.tHead]}>
+                    <Text style={[s.tCell, s.cName]}>Ingredient</Text>
+                    <Text style={[s.tCell, s.cUnit]}>Unit</Text>
+                    <Text style={[s.tCell, s.cOnHand]}>On Hand</Text>
+                    <Text style={[s.tCell, s.cStatus]}>Status</Text>
+                    <Text style={[s.tCell, s.cAct]}>Actions</Text>
                   </View>
-                );
-              })}
+
+                  {displayed.length === 0 ? (
+                    <View style={s.emptyWrap}>
+                      <Ionicons name="cube-outline" size={36} color={c.textMuted} />
+                      <Text style={s.emptyTxt}>{search ? 'No ingredients matched' : 'No inventory items'}</Text>
+                    </View>
+                  ) : displayed.map((ing, idx) => {
+                    const st = stockStatus(ing);
+                    const pct = ing.low_stock_threshold > 0
+                      ? Math.min(100, (ing.on_hand / (ing.low_stock_threshold * 3)) * 100)
+                      : Math.min(100, (ing.on_hand / 100) * 100);
+                    return (
+                      <View key={ing.id} style={[s.tRow, idx % 2 === 1 && s.tRowAlt]}>
+                        <View style={s.cName}>
+                          <Text style={s.ingName}>{ing.name}</Text>
+                          {ing.sku ? <Text style={s.ingSku}>{ing.sku}</Text> : null}
+                          <View style={s.progressBg}>
+                            <View style={[s.progressFill, { width: `${pct}%` as any, backgroundColor: st.color }]} />
+                          </View>
+                        </View>
+                        <Text style={[s.tCell, s.cUnit]}>{ing.unit ?? '—'}</Text>
+                        <Text style={[s.tCell, s.cOnHand, { fontWeight: '800', color: ing.on_hand <= 0 ? '#dc2626' : c.heading, fontSize: 15 }]}>
+                          {ing.on_hand.toFixed(3)}
+                        </Text>
+                        <View style={s.cStatus}>
+                          <View style={[s.statusBadge, { backgroundColor: st.bg }]}>
+                            <Text style={[s.statusTxt, { color: st.color }]}>{st.label}</Text>
+                          </View>
+                          {ing.low_stock_threshold > 0 && (
+                            <Text style={s.minTxt}>Min: {ing.low_stock_threshold}</Text>
+                          )}
+                        </View>
+                        <View style={[s.cAct, { flexDirection: 'row', gap: 5 }]}>
+                          <TouchableOpacity style={s.actBtn} onPress={() => openStockIn(ing)}>
+                            <Ionicons name="arrow-down-circle-outline" size={14} color={BRAND} />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={[s.actBtn, { borderColor: '#fecaca' }]} onPress={() => openWaste(ing)}>
+                            <Ionicons name="trash-outline" size={14} color="#dc2626" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
             </View>
           ) : (
             /* ── Recent movements ──────────────────────────── */

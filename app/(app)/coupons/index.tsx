@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { couponsApi } from '@/api/coupons';
 import { useTheme } from '@/store/themeStore';
 import type { ThemeColors } from '@/theme/tokens';
@@ -623,6 +624,7 @@ export default function CouponsScreen() {
   const [editing,    setEditing]    = useState<Coupon | null>(null);
   const [toggling,   setToggling]   = useState<Set<number>>(new Set());
   const { width } = useWindowDimensions();
+  const insets    = useSafeAreaInsets();
   const isDesktop = width >= 900;
 
   const load = useCallback(async (silent = false) => {
@@ -698,7 +700,7 @@ export default function CouponsScreen() {
     <View style={{ flex: 1, backgroundColor: c.background }}>
 
       {/* Header */}
-      <View style={s.pageHeader}>
+      <View style={[s.pageHeader, { paddingTop: insets.top + 12 }]}>
         <View style={{ flex: 1 }}>
           <Text style={s.pageTitle}>Coupons</Text>
           <Text style={s.pageSub}>{statsTotal} discount code{statsTotal !== 1 ? 's' : ''}</Text>

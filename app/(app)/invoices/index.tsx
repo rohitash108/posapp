@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, isToday, isYesterday } from 'date-fns';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { invoicesApi } from '@/api/invoices';
 import { buildCsv, downloadCsv } from '@/utils/export';
 import { useAppStore } from '@/store/appStore';
@@ -86,9 +87,9 @@ function mkS(c: ThemeColors) {
     exportMenu:   { position: 'absolute', top: '100%', right: 0, marginTop: 4, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, minWidth: 140, zIndex: 50, elevation: 4 },
     exportMenuItem:{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
     exportMenuTxt:{ fontSize: 13, color: c.text },
-    filterRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-    searchBox:    { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: c.surface, minWidth: 180 },
-    searchInput:  { flex: 1, fontSize: 13, color: c.heading, minWidth: 120 },
+    filterRow:    { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    searchBox:    { flex: 1, minWidth: 140, flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: c.surface },
+    searchInput:  { flex: 1, fontSize: 13, color: c.heading },
     filterBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
     filterBtnTxt: { fontSize: 13, fontWeight: '600', color: c.text },
     filterDot:    { width: 7, height: 7, borderRadius: 3.5, backgroundColor: c.sidebar },
@@ -756,7 +757,9 @@ export default function InvoicesScreen() {
 
   const { restaurant } = useAppStore();
   const { width } = useWindowDimensions();
+  const insets    = useSafeAreaInsets();
   const isDesktop = width >= 900;
+  const isMobile  = width < 640;
 
   const load = useCallback(async (opts?: {
     pg?: number; pp?: number; silent?: boolean;
@@ -843,7 +846,7 @@ export default function InvoicesScreen() {
   return (
     <Pressable style={{ flex: 1, backgroundColor: c.background }} onPress={() => { setSortOpen(false); setFilterOpen(false); }}>
       {/* ── Header ── */}
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: insets.top + 12 }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Text style={s.headerTitle}>Invoices</Text>
           <Pressable style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]} onPress={doRefresh}>
@@ -870,8 +873,8 @@ export default function InvoicesScreen() {
       </View>
 
       {/* ── Search + filter bar ── */}
-      <View style={s.filterRow}>
-        {/* Search */}
+      <View style={[s.filterRow, isMobile && { flexDirection: 'column', gap: 8 }]}>
+        {/* Row 1: Search (always full-width on mobile) */}
         <View style={s.searchBox}>
           <TextInput
             style={s.searchInput}
@@ -888,56 +891,52 @@ export default function InvoicesScreen() {
           <Ionicons name="search-outline" size={15} color={c.textMuted} />
         </View>
 
-        <View style={{ flex: 1 }} />
+        {/* Row 2 (desktop: inline; mobile: second row) */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: isMobile ? 'flex-start' : 'flex-end' }}>
+          {/* Filter dropdown */}
+          <View style={{ position: 'relative', zIndex: 100 }}>
+            <Pressable style={({ pressed }) => [s.filterBtn, filterOpen && { borderColor: c.sidebar }, pressed && { opacity: 0.8 }]}
+              onPress={e => { e.stopPropagation?.(); setFilterOpen(p => !p); setSortOpen(false); }}>
+              <Ionicons name="funnel-outline" size={14} color={c.text} />
+              <Text style={s.filterBtnTxt}>Filter</Text>
+              {statusFilter ? <View style={s.filterDot} /> : null}
+            </Pressable>
+            {filterOpen && (
+              <View style={s.dropMenu}>
+                {STATUS_OPTIONS.map(o => (
+                  <Pressable key={o.key} style={[s.dropItem, statusFilter === o.key && s.dropItemActive]}
+                    onPress={() => { setStatusFilter(o.key); setFilterOpen(false); setPage(1); load({ pg: 1, status: o.key }); }}>
+                    {o.key ? (
+                      <Text style={[s.dropItemTxt, { color: PAY_CFG[o.key]?.color ?? c.text }, statusFilter === o.key && { fontWeight: '700' }]}>{o.label}</Text>
+                    ) : (
+                      <Text style={[s.dropItemTxt, statusFilter === '' && { fontWeight: '700', color: c.sidebar }]}>All Statuses</Text>
+                    )}
+                    {statusFilter === o.key && <Ionicons name="checkmark" size={13} color={c.sidebar} />}
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
 
-        {/* Filter dropdown */}
-        <View style={{ position: 'relative', zIndex: 100 }}>
-          <Pressable style={({ pressed }) => [s.filterBtn, filterOpen && { borderColor: c.sidebar }, pressed && { opacity: 0.8 }]}
-            onPress={e => { e.stopPropagation?.(); setFilterOpen(p => !p); setSortOpen(false); }}>
-            <Ionicons name="funnel-outline" size={14} color={c.text} />
-            <Text style={s.filterBtnTxt}>Filter</Text>
-            {statusFilter ? <View style={s.filterDot} /> : null}
-          </Pressable>
-          {filterOpen && (
-            <View style={s.dropMenu}>
-              {STATUS_OPTIONS.map(o => (
-                <Pressable key={o.key} style={[s.dropItem, statusFilter === o.key && s.dropItemActive]}
-                  onPress={() => { setStatusFilter(o.key); setFilterOpen(false); setPage(1); load({ pg: 1, status: o.key }); }}>
-                  {o.key ? (
-                    <Text style={[s.dropItemTxt, { color: PAY_CFG[o.key]?.color ?? c.text }, statusFilter === o.key && { fontWeight: '700' }]}>{o.label}</Text>
-                  ) : (
-                    <Text style={[s.dropItemTxt, statusFilter === '' && { fontWeight: '700', color: c.sidebar }]}>All Statuses</Text>
-                  )}
-                  {statusFilter === o.key && <Ionicons name="checkmark" size={13} color={c.sidebar} />}
-                </Pressable>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Column toggle (cosmetic) */}
-        <Pressable style={({ pressed }) => [s.iconBtn2, pressed && { opacity: 0.7 }]}>
-          <Ionicons name="grid-outline" size={16} color={c.text} />
-        </Pressable>
-
-        {/* Sort dropdown */}
-        <View style={{ position: 'relative', zIndex: 99 }}>
-          <Pressable style={({ pressed }) => [s.sortBtn, pressed && { opacity: 0.8 }]}
-            onPress={e => { e.stopPropagation?.(); setSortOpen(p => !p); setFilterOpen(false); }}>
-            <Text style={s.sortBtnTxt}>Sort by : {sortOrder === 'newest' ? 'Newest' : 'Oldest'}</Text>
-            <Ionicons name={sortOpen ? 'chevron-up' : 'chevron-down'} size={12} color={c.text} />
-          </Pressable>
-          {sortOpen && (
-            <View style={[s.dropMenu, { right: 0, left: 'auto' as any, minWidth: 140 }]}>
-              {(['newest', 'oldest'] as const).map(o => (
-                <Pressable key={o} style={[s.dropItem, sortOrder === o && s.dropItemActive]}
-                  onPress={() => { setSortOrder(o); setSortOpen(false); }}>
-                  <Text style={[s.dropItemTxt, sortOrder === o && { fontWeight: '700', color: c.sidebar }]}>{o === 'newest' ? 'Newest' : 'Oldest'}</Text>
-                  {sortOrder === o && <Ionicons name="checkmark" size={13} color={c.sidebar} />}
-                </Pressable>
-              ))}
-            </View>
-          )}
+          {/* Sort dropdown */}
+          <View style={{ position: 'relative', zIndex: 99 }}>
+            <Pressable style={({ pressed }) => [s.sortBtn, pressed && { opacity: 0.8 }]}
+              onPress={e => { e.stopPropagation?.(); setSortOpen(p => !p); setFilterOpen(false); }}>
+              <Text style={s.sortBtnTxt}>Sort: {sortOrder === 'newest' ? 'Newest' : 'Oldest'}</Text>
+              <Ionicons name={sortOpen ? 'chevron-up' : 'chevron-down'} size={12} color={c.text} />
+            </Pressable>
+            {sortOpen && (
+              <View style={[s.dropMenu, { right: 0, left: 'auto' as any, minWidth: 130 }]}>
+                {(['newest', 'oldest'] as const).map(o => (
+                  <Pressable key={o} style={[s.dropItem, sortOrder === o && s.dropItemActive]}
+                    onPress={() => { setSortOrder(o); setSortOpen(false); }}>
+                    <Text style={[s.dropItemTxt, sortOrder === o && { fontWeight: '700', color: c.sidebar }]}>{o === 'newest' ? 'Newest' : 'Oldest'}</Text>
+                    {sortOrder === o && <Ionicons name="checkmark" size={13} color={c.sidebar} />}
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
         </View>
       </View>
 

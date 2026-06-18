@@ -13,6 +13,7 @@ import {
   Pressable, useWindowDimensions, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { itemsApi } from '@/api/items';
 import { categoriesApi } from '@/api/categories';
@@ -126,8 +127,8 @@ function mkS(c: ThemeColors) {
     ftCheckActive: { backgroundColor: PRIMARY },
     ftDot:         { width: 13, height: 13, borderRadius: 3, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
     ftDotInner:    { width: 6, height: 6, borderRadius: 3 },
-    searchRow:     { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto' },
-    searchBox:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: c.border, minWidth: 180 },
+    searchRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    searchBox:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: c.border, minWidth: 160 },
     searchInput:   { flex: 1, fontSize: 13, color: c.heading },
     iconBtn:       { width: 34, height: 34, borderRadius: 8, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
     ribbonScroll:  { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
@@ -820,7 +821,9 @@ export default function ItemsScreen() {
   const canManageMyMenu    = isRestaurantAdmin || isSuperAdmin;
 
   const { width } = useWindowDimensions();
+  const insets    = useSafeAreaInsets();
   const isDesktop = width >= 1024;
+  const isMobile  = width < 640;
   const contentW  = isDesktop ? width - 220 : width;
   const numCols   = contentW >= 2000 ? 6 : contentW >= 1500 ? 5 : contentW >= 1100 ? 4 : contentW >= 750 ? 3 : contentW >= 480 ? 2 : 1;
 
@@ -908,7 +911,7 @@ export default function ItemsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={c.brand} />}>
 
         {/* ── Page header ── */}
-        <View style={s.pageHeader}>
+        <View style={[s.pageHeader, { paddingTop: insets.top + 14 }]}>
           <View>
             <Text style={s.pageTitle}>Items</Text>
             <Text style={s.pageSub}>Manage your restaurant's menu items</Text>
@@ -939,40 +942,77 @@ export default function ItemsScreen() {
 
         {/* ── Food-type filter bar ── */}
         <View style={s.filterBar}>
-          <View style={s.filterBarRow}>
-            <Text style={s.filterBarLabel}>Food Type</Text>
-            <View style={s.ftChipsRow}>
-              {FOOD_TYPES.map(ft => {
-                const active = foodFilters[ft.key as FoodType];
-                return (
-                  <TouchableOpacity key={ft.key}
-                    style={[s.ftChip, active && { backgroundColor: 'rgba(37,99,235,0.08)', borderColor: 'rgba(37,99,235,0.25)' }]}
-                    onPress={() => toggleFoodType(ft.key as FoodType)}>
-                    {/* Checkmark */}
-                    <View style={[s.ftCheck, active && s.ftCheckActive]}>
-                      {active && <Ionicons name="checkmark" size={11} color="#fff" />}
-                    </View>
-                    {/* Colored food dot */}
-                    <View style={[s.ftDot, { borderColor: ft.color }]}>
-                      <View style={[s.ftDotInner, { backgroundColor: ft.color }]} />
-                    </View>
-                    <Text style={s.ftChipTxt}>{ft.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            {/* Search + refresh */}
-            <View style={s.searchRow}>
-              <View style={s.searchBox}>
-                <TextInput style={s.searchInput} value={search} onChangeText={setSearch}
-                  placeholder="Search menu" placeholderTextColor={c.textMuted} />
-                <Ionicons name="search-outline" size={14} color={c.textMuted} />
+          {isMobile ? (
+            /* ── Mobile: one row — label + horizontal-scroll chips + search below ── */
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={s.filterBarLabel}>Food Type</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  {FOOD_TYPES.map(ft => {
+                    const active = foodFilters[ft.key as FoodType];
+                    return (
+                      <TouchableOpacity key={ft.key}
+                        style={[s.ftChip, active && { backgroundColor: 'rgba(37,99,235,0.08)', borderColor: 'rgba(37,99,235,0.25)' }]}
+                        onPress={() => toggleFoodType(ft.key as FoodType)}>
+                        <View style={[s.ftCheck, active && s.ftCheckActive]}>
+                          {active && <Ionicons name="checkmark" size={11} color="#fff" />}
+                        </View>
+                        <View style={[s.ftDot, { borderColor: ft.color }]}>
+                          <View style={[s.ftDotInner, { backgroundColor: ft.color }]} />
+                        </View>
+                        <Text style={s.ftChipTxt}>{ft.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
               </View>
-              <TouchableOpacity style={s.iconBtn} onPress={() => load(true)}>
-                <Ionicons name="refresh-outline" size={16} color={c.textMuted} />
-              </TouchableOpacity>
+              {/* Search row below on mobile */}
+              <View style={[s.searchRow, { marginTop: 8 }]}>
+                <View style={[s.searchBox, { flex: 1 }]}>
+                  <TextInput style={s.searchInput} value={search} onChangeText={setSearch}
+                    placeholder="Search menu" placeholderTextColor={c.textMuted} />
+                  <Ionicons name="search-outline" size={14} color={c.textMuted} />
+                </View>
+                <TouchableOpacity style={s.iconBtn} onPress={() => load(true)}>
+                  <Ionicons name="refresh-outline" size={16} color={c.textMuted} />
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            /* ── Desktop: all in one row ── */
+            <View style={s.filterBarRow}>
+              <Text style={s.filterBarLabel}>Food Type</Text>
+              <View style={s.ftChipsRow}>
+                {FOOD_TYPES.map(ft => {
+                  const active = foodFilters[ft.key as FoodType];
+                  return (
+                    <TouchableOpacity key={ft.key}
+                      style={[s.ftChip, active && { backgroundColor: 'rgba(37,99,235,0.08)', borderColor: 'rgba(37,99,235,0.25)' }]}
+                      onPress={() => toggleFoodType(ft.key as FoodType)}>
+                      <View style={[s.ftCheck, active && s.ftCheckActive]}>
+                        {active && <Ionicons name="checkmark" size={11} color="#fff" />}
+                      </View>
+                      <View style={[s.ftDot, { borderColor: ft.color }]}>
+                        <View style={[s.ftDotInner, { backgroundColor: ft.color }]} />
+                      </View>
+                      <Text style={s.ftChipTxt}>{ft.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={s.searchRow}>
+                <View style={s.searchBox}>
+                  <TextInput style={s.searchInput} value={search} onChangeText={setSearch}
+                    placeholder="Search menu" placeholderTextColor={c.textMuted} />
+                  <Ionicons name="search-outline" size={14} color={c.textMuted} />
+                </View>
+                <TouchableOpacity style={s.iconBtn} onPress={() => load(true)}>
+                  <Ionicons name="refresh-outline" size={16} color={c.textMuted} />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
         </View>
 
         {/* ── Category ribbon ── */}

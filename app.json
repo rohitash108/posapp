@@ -5,9 +5,16 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/gtc-logo.png",
+    "splash": {
+      "image": "./assets/gtc-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1A2B1A"
+    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cspos.mobile"
+      "bundleIdentifier": "com.cspos.mobile",
+      "icon": "./assets/gtc-logo.png"
     },
     "android": {
       "adaptiveIcon": {
