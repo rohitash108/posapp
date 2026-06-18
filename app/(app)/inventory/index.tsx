@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, ActivityIndicator, RefreshControl, Alert,
@@ -6,6 +6,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { inventoryApi } from '@/api/inventory';
+import { useTheme } from '@/store/themeStore';
+import type { ThemeColors } from '@/theme/tokens';
 import type { Ingredient, ExpiringBatch, StockMovement, InventoryData } from '@/types';
 
 const BRAND = '#0f8f73';
@@ -47,6 +49,122 @@ function stockStatus(ing: Ingredient): { label: string; color: string; bg: strin
   return { label: 'In Stock', color: '#16a34a', bg: '#f0fdf4' };
 }
 
+// ─── Style factories ──────────────────────────────────────────────────────────
+
+function mkS(c: ThemeColors) {
+  return StyleSheet.create({
+    shell:    { flex: 1, backgroundColor: c.background },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+    topbar:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, gap: 10 },
+    pageTitle:   { fontSize: 18, fontWeight: '800', color: c.heading },
+    pageSub:     { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    topActions:  { flexDirection: 'row', gap: 8 },
+    actionBtn:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, borderWidth: 1, borderColor: 'transparent' },
+    actionBtnTxt:{ fontSize: 13, fontWeight: '700' },
+
+    errBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fef2f2', borderBottomWidth: 1, borderBottomColor: '#fecaca', paddingHorizontal: 14, paddingVertical: 9 },
+    errText:   { flex: 1, fontSize: 12.5, color: '#dc2626' },
+    retryBtn:  { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 6, backgroundColor: '#dc2626' },
+    retryTxt:  { fontSize: 12, fontWeight: '700', color: '#fff' },
+
+    alertRow:  { gap: 14 },
+    alertCard: { backgroundColor: c.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: c.border },
+    alertCardHdr: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10 },
+    alertCardTitle: { fontSize: 13.5, fontWeight: '700', color: c.heading, flex: 1 },
+    alertBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, backgroundColor: c.surfaceAlt },
+    alertBadgeTxt: { fontSize: 12, fontWeight: '700' },
+    alertEmpty: { fontSize: 12.5, color: c.textMuted, paddingVertical: 4 },
+    alertRow2:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border },
+    alertItemName: { fontSize: 13, fontWeight: '600', color: c.text },
+    alertItemUnit: { fontSize: 11.5, color: c.textMuted, marginTop: 1 },
+    warnBadge: { backgroundColor: '#fef3c7', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+    warnBadgeTxt: { fontSize: 11.5, fontWeight: '700', color: '#92400e' },
+
+    tabBar:   { flexDirection: 'row', backgroundColor: c.surface, borderRadius: 10, borderWidth: 1, borderColor: c.border, overflow: 'hidden' },
+    tabBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
+    tabActive:{ borderBottomWidth: 2, borderBottomColor: BRAND },
+    tabTxt:   { fontSize: 13, fontWeight: '600', color: c.textMuted },
+
+    card:     { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: 'hidden' },
+    cardHdr:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    cardHdrTxt: { fontSize: 14, fontWeight: '700', color: c.heading },
+    cardHdrSub: { fontSize: 12, color: c.textMuted },
+
+    tableToolbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border, flexWrap: 'wrap' },
+    searchWrap:   { flex: 1, minWidth: 150, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: c.border },
+    searchInput:  { flex: 1, fontSize: 13, color: c.heading },
+    filterChips:  { flexDirection: 'row', gap: 6 },
+    chip:         { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+    chipTxt:      { fontSize: 12, fontWeight: '600', color: c.text },
+    chipBadge:    { backgroundColor: c.border, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 1 },
+    chipBadgeTxt: { fontSize: 10, fontWeight: '700', color: c.text },
+
+    tRow:    { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: c.border },
+    tHead:   { backgroundColor: c.surfaceAlt, borderBottomColor: c.border },
+    tRowAlt: { backgroundColor: c.surfaceAlt },
+    tCell:   { paddingHorizontal: 12, paddingVertical: 11, fontSize: 12.5, color: c.text },
+
+    cName:   { flex: 2, paddingHorizontal: 12, paddingVertical: 10 },
+    cUnit:   { width: 70 },
+    cOnHand: { width: 90, textAlign: 'right' },
+    cStatus: { width: 110, paddingHorizontal: 8, paddingVertical: 8, justifyContent: 'center' },
+    cAct:    { width: 80, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
+
+    ingName:  { fontSize: 13.5, fontWeight: '600', color: c.heading },
+    ingSku:   { fontSize: 11, color: c.textMuted, marginTop: 1 },
+    progressBg:   { height: 3, backgroundColor: c.border, borderRadius: 2, marginTop: 5, overflow: 'hidden' },
+    progressFill: { height: 3, borderRadius: 2 },
+    statusBadge:  { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' },
+    statusTxt:    { fontSize: 11, fontWeight: '700' },
+    minTxt:       { fontSize: 10.5, color: c.textMuted, marginTop: 2 },
+    actBtn:       { width: 30, height: 30, borderRadius: 7, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+
+    mWhen: { width: 90 },
+    mType: { width: 110, paddingHorizontal: 8, paddingVertical: 8, justifyContent: 'center' },
+    mIng:  { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
+    mQty:  { width: 90, textAlign: 'right', paddingRight: 14 },
+    movBadge:    { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' },
+    movBadgeTxt: { fontSize: 11.5, fontWeight: '700' },
+
+    emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50, gap: 8 },
+    emptyTxt:  { fontSize: 14, color: c.textMuted, fontWeight: '600' },
+  });
+}
+
+function mkM(c: ThemeColors) {
+  return StyleSheet.create({
+    overlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+    box:      { backgroundColor: c.surface, borderRadius: 16, width: '100%', maxWidth: 500, maxHeight: '90%', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
+    hdr:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border },
+    hdrIcon:  { width: 32, height: 32, borderRadius: 8, backgroundColor: BRAND, alignItems: 'center', justifyContent: 'center' },
+    hdrTitle: { flex: 1, fontSize: 16, fontWeight: '800', color: c.heading },
+    closeBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+    body:     { padding: 18, gap: 14 },
+    field:    { gap: 6 },
+    label:    { fontSize: 12.5, fontWeight: '700', color: c.text, textTransform: 'uppercase', letterSpacing: 0.3 },
+    input:    { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 11, fontSize: 14.5, color: c.heading },
+    currentQty: { fontSize: 11.5, color: c.textMuted, marginTop: 3 },
+    opRow:    { flexDirection: 'row', gap: 8 },
+    opBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 9, borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surfaceAlt },
+    opTxt:    { fontSize: 12.5, fontWeight: '600', color: c.text },
+    picker:   { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11 },
+    pickerTxt:{ flex: 1, fontSize: 14, color: c.heading },
+    pickerDropdown: { borderWidth: 1, borderColor: c.border, borderRadius: 10, backgroundColor: c.surface, marginTop: 4, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6, zIndex: 10 },
+    pickerSearch: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: c.border },
+    pickerSearchInput: { flex: 1, fontSize: 13, color: c.heading },
+    pickerItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: c.border },
+    pickerItemTxt:  { fontSize: 13.5, color: c.text },
+    pickerItemUnit: { fontSize: 12, color: c.textMuted },
+    err:      { fontSize: 12.5, color: '#dc2626', fontWeight: '600' },
+    footer:   { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: c.border },
+    cancelBtn:{ flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: c.border },
+    cancelTxt:{ fontSize: 14.5, fontWeight: '600', color: c.text },
+    saveBtn:  { flex: 2, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: BRAND },
+    saveTxt:  { fontSize: 14.5, fontWeight: '800', color: '#fff' },
+  });
+}
+
 // ─── Stock-in / Waste / Adjustment Modal ────────────────────────────────────
 
 type OpType = 'stock-in' | 'waste' | 'adjustment';
@@ -61,6 +179,9 @@ function StockOpModal({
   onSave: () => void;
   onClose: () => void;
 }) {
+  const { colors: c } = useTheme();
+  const m = useMemo(() => mkM(c), [c]);
+
   const [op, setOp]           = useState<OpType>(defaultOp ?? 'stock-in');
   const [ingId, setIngId]     = useState<number | null>(defaultId ?? null);
   const [qty, setQty]         = useState('');
@@ -123,7 +244,7 @@ function StockOpModal({
             </View>
             <Text style={m.hdrTitle}>Stock Operation</Text>
             <TouchableOpacity onPress={onClose} style={m.closeBtn}>
-              <Ionicons name="close" size={20} color="#6b7280" />
+              <Ionicons name="close" size={20} color={c.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -149,22 +270,22 @@ function StockOpModal({
             <View style={m.field}>
               <Text style={m.label}>Ingredient *</Text>
               <TouchableOpacity style={m.picker} onPress={() => setShowPicker(p => !p)}>
-                <Ionicons name="cube-outline" size={14} color="#9ca3af" />
-                <Text style={[m.pickerTxt, !selected && { color: '#9ca3af' }]}>
+                <Ionicons name="cube-outline" size={14} color={c.textMuted} />
+                <Text style={[m.pickerTxt, !selected && { color: c.textMuted }]}>
                   {selected ? `${selected.name} (${selected.unit ?? ''})` : 'Select ingredient...'}
                 </Text>
-                <Ionicons name={showPicker ? 'chevron-up' : 'chevron-down'} size={14} color="#9ca3af" />
+                <Ionicons name={showPicker ? 'chevron-up' : 'chevron-down'} size={14} color={c.textMuted} />
               </TouchableOpacity>
               {showPicker && (
                 <View style={m.pickerDropdown}>
                   <View style={m.pickerSearch}>
-                    <Ionicons name="search" size={13} color="#9ca3af" />
+                    <Ionicons name="search" size={13} color={c.textMuted} />
                     <TextInput
                       style={m.pickerSearchInput}
                       value={ingSearch}
                       onChangeText={setIngSearch}
                       placeholder="Search..."
-                      placeholderTextColor="#9ca3af"
+                      placeholderTextColor={c.textMuted}
                     />
                   </View>
                   <ScrollView style={{ maxHeight: 200 }}>
@@ -181,7 +302,7 @@ function StockOpModal({
                       </TouchableOpacity>
                     ))}
                     {filteredIngs.length === 0 && (
-                      <Text style={{ padding: 12, color: '#9ca3af', fontSize: 13 }}>No ingredients found</Text>
+                      <Text style={{ padding: 12, color: c.textMuted, fontSize: 13 }}>No ingredients found</Text>
                     )}
                   </ScrollView>
                 </View>
@@ -199,7 +320,7 @@ function StockOpModal({
                 value={qty}
                 onChangeText={setQty}
                 placeholder={op === 'adjustment' ? 'e.g. 5 or -2' : '0.000'}
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={c.textMuted}
                 keyboardType="numeric"
               />
               {selected && (
@@ -217,7 +338,7 @@ function StockOpModal({
                 value={notes}
                 onChangeText={setNotes}
                 placeholder="Optional note..."
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={c.textMuted}
                 multiline
               />
             </View>
@@ -249,6 +370,9 @@ function StockOpModal({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function InventoryScreen() {
+  const { colors: c } = useTheme();
+  const s = useMemo(() => mkS(c), [c]);
+
   const { width } = useWindowDimensions();
   const [data, setData]         = useState<InventoryData | null>(null);
   const [loading, setLoading]   = useState(true);
@@ -316,7 +440,7 @@ export default function InventoryScreen() {
           <Text style={s.pageSub}>{ingredients.length} ingredients tracked</Text>
         </View>
         <View style={s.topActions}>
-          <TouchableOpacity style={[s.actionBtn, { backgroundColor: '#fff', borderColor: '#e5e7eb' }]} onPress={() => openWaste()}>
+          <TouchableOpacity style={[s.actionBtn, { backgroundColor: c.surface, borderColor: c.border }]} onPress={() => openWaste()}>
             <Ionicons name="trash-outline" size={14} color="#dc2626" />
             <Text style={[s.actionBtnTxt, { color: '#dc2626' }]}>Waste</Text>
           </TouchableOpacity>
@@ -341,7 +465,7 @@ export default function InventoryScreen() {
       {loading ? (
         <View style={s.centered}>
           <ActivityIndicator size="large" color={BRAND} />
-          <Text style={{ marginTop: 10, color: '#6b7280', fontSize: 13 }}>Loading inventory…</Text>
+          <Text style={{ marginTop: 10, color: c.textMuted, fontSize: 13 }}>Loading inventory…</Text>
         </View>
       ) : (
         <ScrollView
@@ -408,7 +532,7 @@ export default function InventoryScreen() {
               style={[s.tabBtn, tab === 'stock' && s.tabActive]}
               onPress={() => setTab('stock')}
             >
-              <Ionicons name="cube-outline" size={14} color={tab === 'stock' ? BRAND : '#6b7280'} />
+              <Ionicons name="cube-outline" size={14} color={tab === 'stock' ? BRAND : c.textMuted} />
               <Text style={[s.tabTxt, tab === 'stock' && { color: BRAND, fontWeight: '700' }]}>
                 On-hand ({ingredients.length})
               </Text>
@@ -417,7 +541,7 @@ export default function InventoryScreen() {
               style={[s.tabBtn, tab === 'movements' && s.tabActive]}
               onPress={() => setTab('movements')}
             >
-              <Ionicons name="swap-horizontal-outline" size={14} color={tab === 'movements' ? BRAND : '#6b7280'} />
+              <Ionicons name="swap-horizontal-outline" size={14} color={tab === 'movements' ? BRAND : c.textMuted} />
               <Text style={[s.tabTxt, tab === 'movements' && { color: BRAND, fontWeight: '700' }]}>
                 Recent Movements
               </Text>
@@ -430,25 +554,25 @@ export default function InventoryScreen() {
               {/* Search + filter */}
               <View style={s.tableToolbar}>
                 <View style={s.searchWrap}>
-                  <Ionicons name="search" size={13} color="#9ca3af" />
+                  <Ionicons name="search" size={13} color={c.textMuted} />
                   <TextInput
                     style={s.searchInput}
                     value={search}
                     onChangeText={setSearch}
                     placeholder="Search ingredient..."
-                    placeholderTextColor="#9ca3af"
+                    placeholderTextColor={c.textMuted}
                   />
                   {search ? (
                     <TouchableOpacity onPress={() => setSearch('')}>
-                      <Ionicons name="close-circle" size={13} color="#9ca3af" />
+                      <Ionicons name="close-circle" size={13} color={c.textMuted} />
                     </TouchableOpacity>
                   ) : null}
                 </View>
                 <View style={s.filterChips}>
                   {([
-                    ['all', 'All',       ingredients.length,                                                    '#374151'],
-                    ['low', 'Low Stock', lowStock.length,                                                       '#d97706'],
-                    ['out', 'Out',       ingredients.filter(i => i.on_hand <= 0).length, '#dc2626'],
+                    ['all', 'All',       ingredients.length,                                '#374151'],
+                    ['low', 'Low Stock', lowStock.length,                                    '#d97706'],
+                    ['out', 'Out',       ingredients.filter(i => i.on_hand <= 0).length,    '#dc2626'],
                   ] as const).map(([f, label, cnt, col]) => (
                     <TouchableOpacity
                       key={f}
@@ -477,7 +601,7 @@ export default function InventoryScreen() {
 
               {displayed.length === 0 ? (
                 <View style={s.emptyWrap}>
-                  <Ionicons name="cube-outline" size={36} color="#d1d5db" />
+                  <Ionicons name="cube-outline" size={36} color={c.textMuted} />
                   <Text style={s.emptyTxt}>{search ? 'No ingredients matched' : 'No inventory items'}</Text>
                 </View>
               ) : displayed.map((ing, idx) => {
@@ -490,13 +614,12 @@ export default function InventoryScreen() {
                     <View style={s.cName}>
                       <Text style={s.ingName}>{ing.name}</Text>
                       {ing.sku ? <Text style={s.ingSku}>{ing.sku}</Text> : null}
-                      {/* Progress bar */}
                       <View style={s.progressBg}>
                         <View style={[s.progressFill, { width: `${pct}%` as any, backgroundColor: st.color }]} />
                       </View>
                     </View>
                     <Text style={[s.tCell, s.cUnit]}>{ing.unit ?? '—'}</Text>
-                    <Text style={[s.tCell, s.cOnHand, { fontWeight: '800', color: ing.on_hand <= 0 ? '#dc2626' : '#111827', fontSize: 15 }]}>
+                    <Text style={[s.tCell, s.cOnHand, { fontWeight: '800', color: ing.on_hand <= 0 ? '#dc2626' : c.heading, fontSize: 15 }]}>
                       {ing.on_hand.toFixed(3)}
                     </Text>
                     <View style={s.cStatus}>
@@ -541,10 +664,9 @@ export default function InventoryScreen() {
                 </View>
               ) : movements.map((mv, idx) => {
                 const cfg = moveCfg(mv.type);
-                const isPos = mv.quantity_change >= 0;
                 return (
                   <View key={mv.id} style={[s.tRow, idx % 2 === 1 && s.tRowAlt]}>
-                    <Text style={[s.tCell, s.mWhen, { color: '#6b7280', fontSize: 12 }]}>
+                    <Text style={[s.tCell, s.mWhen, { color: c.textMuted, fontSize: 12 }]}>
                       {timeAgo(mv.created_at)}
                     </Text>
                     <View style={s.mType}>
@@ -559,7 +681,7 @@ export default function InventoryScreen() {
                     <Text style={[s.tCell, s.mQty, {
                       fontFamily: 'monospace',
                       fontWeight: '700',
-                      color: mv.quantity_change > 0 ? '#059669' : mv.quantity_change < 0 ? '#dc2626' : '#6b7280',
+                      color: mv.quantity_change > 0 ? '#059669' : mv.quantity_change < 0 ? '#dc2626' : c.textMuted,
                     }]}>
                       {mv.quantity_change > 0 ? '+' : ''}{mv.quantity_change.toFixed(3)}
                     </Text>
@@ -583,127 +705,3 @@ export default function InventoryScreen() {
     </View>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const s = StyleSheet.create({
-  shell:    { flex: 1, backgroundColor: '#f0f2f7' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-
-  // Top bar
-  topbar:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', gap: 10 },
-  pageTitle:   { fontSize: 18, fontWeight: '800', color: '#111827' },
-  pageSub:     { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  topActions:  { flexDirection: 'row', gap: 8 },
-  actionBtn:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, borderWidth: 1, borderColor: 'transparent' },
-  actionBtnTxt:{ fontSize: 13, fontWeight: '700' },
-
-  // Error
-  errBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fef2f2', borderBottomWidth: 1, borderBottomColor: '#fecaca', paddingHorizontal: 14, paddingVertical: 9 },
-  errText:   { flex: 1, fontSize: 12.5, color: '#dc2626' },
-  retryBtn:  { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 6, backgroundColor: '#dc2626' },
-  retryTxt:  { fontSize: 12, fontWeight: '700', color: '#fff' },
-
-  // Alert cards
-  alertRow:  { gap: 14 },
-  alertCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#e5e7eb' },
-  alertCardHdr: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10 },
-  alertCardTitle: { fontSize: 13.5, fontWeight: '700', color: '#111827', flex: 1 },
-  alertBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, backgroundColor: '#f3f4f6' },
-  alertBadgeTxt: { fontSize: 12, fontWeight: '700' },
-  alertEmpty: { fontSize: 12.5, color: '#9ca3af', paddingVertical: 4 },
-  alertRow2:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  alertItemName: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  alertItemUnit: { fontSize: 11.5, color: '#9ca3af', marginTop: 1 },
-  warnBadge: { backgroundColor: '#fef3c7', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  warnBadgeTxt: { fontSize: 11.5, fontWeight: '700', color: '#92400e' },
-
-  // Tabs
-  tabBar:   { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden' },
-  tabBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
-  tabActive:{ borderBottomWidth: 2, borderBottomColor: BRAND },
-  tabTxt:   { fontSize: 13, fontWeight: '600', color: '#6b7280' },
-
-  // Card container
-  card:     { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden' },
-  cardHdr:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  cardHdrTxt: { fontSize: 14, fontWeight: '700', color: '#111827' },
-  cardHdrSub: { fontSize: 12, color: '#9ca3af' },
-
-  // Toolbar inside card
-  tableToolbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', flexWrap: 'wrap' },
-  searchWrap:   { flex: 1, minWidth: 150, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f9fafb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: '#e5e7eb' },
-  searchInput:  { flex: 1, fontSize: 13, color: '#111827' },
-  filterChips:  { flexDirection: 'row', gap: 6 },
-  chip:         { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  chipTxt:      { fontSize: 12, fontWeight: '600', color: '#374151' },
-  chipBadge:    { backgroundColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 5, paddingVertical: 1 },
-  chipBadgeTxt: { fontSize: 10, fontWeight: '700', color: '#374151' },
-
-  // Table
-  tRow:    { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
-  tHead:   { backgroundColor: '#f9fafb', borderBottomColor: '#e5e7eb' },
-  tRowAlt: { backgroundColor: '#fafafa' },
-  tCell:   { paddingHorizontal: 12, paddingVertical: 11, fontSize: 12.5, color: '#374151' },
-
-  // Stock table columns
-  cName:   { flex: 2, paddingHorizontal: 12, paddingVertical: 10 },
-  cUnit:   { width: 70 },
-  cOnHand: { width: 90, textAlign: 'right' },
-  cStatus: { width: 110, paddingHorizontal: 8, paddingVertical: 8, justifyContent: 'center' },
-  cAct:    { width: 80, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-
-  ingName:  { fontSize: 13.5, fontWeight: '600', color: '#111827' },
-  ingSku:   { fontSize: 11, color: '#9ca3af', marginTop: 1 },
-  progressBg:   { height: 3, backgroundColor: '#f3f4f6', borderRadius: 2, marginTop: 5, overflow: 'hidden' },
-  progressFill: { height: 3, borderRadius: 2 },
-  statusBadge:  { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' },
-  statusTxt:    { fontSize: 11, fontWeight: '700' },
-  minTxt:       { fontSize: 10.5, color: '#9ca3af', marginTop: 2 },
-  actBtn:       { width: 30, height: 30, borderRadius: 7, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb', alignItems: 'center', justifyContent: 'center' },
-
-  // Movement table columns
-  mWhen: { width: 90 },
-  mType: { width: 110, paddingHorizontal: 8, paddingVertical: 8, justifyContent: 'center' },
-  mIng:  { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
-  mQty:  { width: 90, textAlign: 'right', paddingRight: 14 },
-  movBadge:    { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' },
-  movBadgeTxt: { fontSize: 11.5, fontWeight: '700' },
-
-  // Empty
-  emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50, gap: 8 },
-  emptyTxt:  { fontSize: 14, color: '#9ca3af', fontWeight: '600' },
-});
-
-// ─── Modal styles ─────────────────────────────────────────────────────────────
-
-const m = StyleSheet.create({
-  overlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  box:      { backgroundColor: '#fff', borderRadius: 16, width: '100%', maxWidth: 500, maxHeight: '90%', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
-  hdr:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  hdrIcon:  { width: 32, height: 32, borderRadius: 8, backgroundColor: BRAND, alignItems: 'center', justifyContent: 'center' },
-  hdrTitle: { flex: 1, fontSize: 16, fontWeight: '800', color: '#111827' },
-  closeBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: '#f5f6f8', alignItems: 'center', justifyContent: 'center' },
-  body:     { padding: 18, gap: 14 },
-  field:    { gap: 6 },
-  label:    { fontSize: 12.5, fontWeight: '700', color: '#374151', textTransform: 'uppercase', letterSpacing: 0.3 },
-  input:    { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 13, paddingVertical: 11, fontSize: 14.5, color: '#111827' },
-  currentQty: { fontSize: 11.5, color: '#9ca3af', marginTop: 3 },
-  opRow:    { flexDirection: 'row', gap: 8 },
-  opBtn:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 9, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#f9fafb' },
-  opTxt:    { fontSize: 12.5, fontWeight: '600', color: '#374151' },
-  picker:   { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11 },
-  pickerTxt:{ flex: 1, fontSize: 14, color: '#111827' },
-  pickerDropdown: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#fff', marginTop: 4, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6, zIndex: 10 },
-  pickerSearch: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  pickerSearchInput: { flex: 1, fontSize: 13, color: '#111827' },
-  pickerItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
-  pickerItemTxt:  { fontSize: 13.5, color: '#374151' },
-  pickerItemUnit: { fontSize: 12, color: '#9ca3af' },
-  err:      { fontSize: 12.5, color: '#dc2626', fontWeight: '600' },
-  footer:   { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  cancelBtn:{ flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb' },
-  cancelTxt:{ fontSize: 14.5, fontWeight: '600', color: '#374151' },
-  saveBtn:  { flex: 2, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: BRAND },
-  saveTxt:  { fontSize: 14.5, fontWeight: '800', color: '#fff' },
-});

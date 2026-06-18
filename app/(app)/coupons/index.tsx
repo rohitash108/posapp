@@ -14,6 +14,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { couponsApi } from '@/api/coupons';
+import { useTheme } from '@/store/themeStore';
+import type { ThemeColors } from '@/theme/tokens';
 import type { Coupon } from '@/types';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -62,6 +64,121 @@ function formatDateDisplay(d?: string): string {
   catch { return d; }
 }
 
+// ── Style factories ───────────────────────────────────────────────────────────
+
+function mkS(c: ThemeColors) {
+  return StyleSheet.create({
+    pageHeader:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    pageTitle:   { fontSize: 18, fontWeight: '800', color: c.heading },
+    pageSub:     { fontSize: 11, color: c.textMuted, marginTop: 1 },
+    addBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.sidebar, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+    addBtnTxt:   { color: '#fff', fontWeight: '800', fontSize: 13 },
+
+    statsBar:    { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border },
+    statItem:    { flex: 1, alignItems: 'center', gap: 1 },
+    statIcon:    { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginBottom: 1 },
+    statVal:     { fontSize: 14, fontWeight: '800' },
+    statLbl:     { fontSize: 9, color: c.textMuted },
+    statDivider: { width: 1, height: 28, backgroundColor: c.border },
+
+    searchRow:   { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: c.border },
+    searchBox:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: c.surfaceAlt, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: c.border },
+    searchInput: { flex: 1, fontSize: 13, color: c.heading },
+
+    tabsRow:      { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, height: 48 },
+    filterTab:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1.5, borderColor: c.border },
+    filterTabTxt: { fontSize: 12, fontWeight: '600', color: c.text },
+    tabCount:     { backgroundColor: c.border, borderRadius: 99, paddingHorizontal: 6, paddingVertical: 1 },
+    tabCountTxt:  { fontSize: 10, fontWeight: '700', color: c.textMuted },
+
+    resultRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 7, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    resultTxt:  { fontSize: 11.5, color: c.textMuted, fontWeight: '600' },
+    clearAll:   { fontSize: 12, color: PRIMARY, textDecorationLine: 'underline' },
+    loadWrap:   { paddingTop: 80, alignItems: 'center', gap: 12 },
+    loadTxt:    { fontSize: 14, color: c.textMuted },
+    emptyWrap:  { paddingTop: 70, alignItems: 'center', gap: 10 },
+    emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+    emptyTitle: { fontSize: 16, fontWeight: '700', color: c.text },
+    emptySub:   { fontSize: 13, color: c.textMuted, textAlign: 'center', paddingHorizontal: 40 },
+    emptyAddBtn:{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: c.sidebar, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 10 },
+    emptyAddTxt:{ color: c.brand, fontWeight: '800', fontSize: 13.5 },
+
+    modalBackdrop:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+    modalPanel:        { width: '100%', maxHeight: '95%', borderRadius: 16, overflow: 'hidden', backgroundColor: c.surface, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
+    modalPanelDesktop: { width: 580, maxWidth: 580 },
+  });
+}
+
+function mkCc(c: ThemeColors) {
+  return StyleSheet.create({
+    card:        { backgroundColor: c.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: c.border, borderLeftWidth: 4, borderLeftColor: c.brand, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+    cardFaded:   { opacity: 0.75 },
+    top:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+    codeTag:     { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fefce8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#fef08a' },
+    codeText:    { fontSize: 15, fontWeight: '900', color: c.heading, letterSpacing: 1.5 },
+    statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1 },
+    statusDot:   { width: 5, height: 5, borderRadius: 2.5 },
+    statusTxt:   { fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
+    midRow:      { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 7, marginBottom: 10 },
+    valuePill:   { paddingHorizontal: 11, paddingVertical: 5, borderRadius: 8 },
+    pillGold:    { backgroundColor: '#fefce8', borderWidth: 1, borderColor: '#fde68a' },
+    pillBlue:    { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe' },
+    valueTxt:    { fontSize: 13, fontWeight: '800' },
+    metaChip:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.surfaceAlt, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7 },
+    metaTxt:     { fontSize: 11, fontWeight: '600', color: c.textMuted },
+    progressWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+    progressTrack:{ flex: 1, height: 5, backgroundColor: c.surfaceAlt, borderRadius: 3, overflow: 'hidden' },
+    progressFill: { height: 5, borderRadius: 3, backgroundColor: '#16a34a' },
+    progressTxt:  { fontSize: 10, fontWeight: '700', color: c.textMuted, width: 32, textAlign: 'right' },
+    botRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 4 },
+    metaLine:    { fontSize: 11.5, color: c.textMuted },
+    actionsRow:  { flexDirection: 'row', gap: 8 },
+    actionBtn:   { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  });
+}
+
+function mkFm(c: ThemeColors) {
+  return StyleSheet.create({
+    header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, backgroundColor: c.sidebar },
+    headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    headerIcon:  { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(201,165,42,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(201,165,42,0.25)' },
+    headerTitle: { fontSize: 16, fontWeight: '800', color: '#fff' },
+    headerSub:   { fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
+    closeBtn:    { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+    field:       { gap: 0 },
+    label:       { fontSize: 11.5, fontWeight: '800', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 7 },
+    labelHint:   { fontSize: 10, fontWeight: '400', color: c.textMuted, textTransform: 'none', letterSpacing: 0 },
+    req:         { color: '#ef4444' },
+    opt:         { color: c.textMuted, fontWeight: '400', textTransform: 'none', letterSpacing: 0, fontSize: 10 },
+    hint:        { fontSize: 11, color: c.textMuted, marginTop: 5 },
+    fieldError:  { fontSize: 11.5, color: '#dc2626', fontWeight: '600', marginTop: 4 },
+    inputWrap:   { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: c.border, borderRadius: 11, backgroundColor: c.surfaceAlt, overflow: 'hidden' },
+    inputError:  { borderColor: '#fca5a5', backgroundColor: '#fff5f5' },
+    inputPrefix: { width: 40, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surfaceAlt, borderRightWidth: 1, borderRightColor: c.border },
+    inputPrefixTxt: { fontSize: 14, fontWeight: '800', color: c.textMuted },
+    input:       { flex: 1, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: c.heading },
+    typeBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: 11, borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surfaceAlt, position: 'relative' },
+    typeBtnActive:{ backgroundColor: c.sidebar, borderColor: c.sidebar },
+    typeBtnTxt:  { fontSize: 13, fontWeight: '600', color: c.text },
+    typeBtnTxtActive: { color: '#fff', fontWeight: '700' },
+    typeBtnIcon: { fontSize: 15, fontWeight: '800', color: c.textMuted },
+    typeBtnCheck:{ position: 'absolute', top: 6, right: 8, width: 16, height: 16, borderRadius: 8, backgroundColor: 'rgba(201,165,42,0.2)', alignItems: 'center', justifyContent: 'center' },
+    errorBox:    { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#fef2f2', borderRadius: 9, padding: 10, borderWidth: 1, borderColor: '#fecaca' },
+    errorTxt:    { color: '#dc2626', fontSize: 12.5, fontWeight: '600', flex: 1 },
+    previewBox:  { gap: 8 },
+    previewLabel:{ fontSize: 11.5, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+    previewPill: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: c.sidebar, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
+    previewCode: { fontSize: 14, fontWeight: '900', color: '#fff', letterSpacing: 2 },
+    previewVal:  { fontSize: 13, fontWeight: '700', color: c.brand },
+    previewMeta: { fontSize: 11, color: c.textMuted },
+    footer:      { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface },
+    cancelBtn:   { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 11, borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surface },
+    cancelTxt:   { fontWeight: '700', color: c.text, fontSize: 14 },
+    saveBtn:     { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 13, borderRadius: 11, backgroundColor: c.sidebar },
+    saveTxt:     { fontWeight: '800', color: c.brand, fontSize: 14 },
+  });
+}
+
 // ── Form ─────────────────────────────────────────────────────────────────────
 
 interface FormState {
@@ -88,6 +205,9 @@ function CouponForm({
   onSave: () => void;
   onClose: () => void;
 }) {
+  const { colors: c } = useTheme();
+  const fm = useMemo(() => mkFm(c), [c]);
+
   const isEdit = !!coupon?.id;
 
   const [form, setForm] = useState<FormState>(
@@ -151,12 +271,12 @@ function CouponForm({
     : null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#fff' }}>
+    <View style={{ flex: 1, backgroundColor: c.surface }}>
       {/* Header */}
       <View style={fm.header}>
         <View style={fm.headerLeft}>
           <View style={fm.headerIcon}>
-            <Ionicons name={isEdit ? 'pencil' : 'pricetag'} size={16} color={GOLD} />
+            <Ionicons name={isEdit ? 'pencil' : 'pricetag'} size={16} color={c.brand} />
           </View>
           <View>
             <Text style={fm.headerTitle}>{isEdit ? 'Edit Coupon' : 'New Coupon'}</Text>
@@ -183,14 +303,14 @@ function CouponForm({
             <Text style={fm.label}>Coupon Code <Text style={fm.req}>*</Text></Text>
             <View style={[fm.inputWrap, !!errors.code && fm.inputError]}>
               <View style={fm.inputPrefix}>
-                <Ionicons name="pricetag-outline" size={15} color="#9ca3af" />
+                <Ionicons name="pricetag-outline" size={15} color={c.textMuted} />
               </View>
               <TextInput
                 style={[fm.input, { fontFamily: 'monospace', letterSpacing: 2, fontWeight: '800', fontSize: 15 }]}
                 value={form.code}
                 onChangeText={v => { field('code')(v.toUpperCase()); }}
                 placeholder="e.g. SAVE20"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={c.textMuted}
                 autoCapitalize="characters"
               />
             </View>
@@ -216,7 +336,7 @@ function CouponForm({
                 key={t}
                 style={[fm.typeBtn, form.discount_type === t && fm.typeBtnActive]}
                 onPress={() => setForm(p => ({ ...p, discount_type: t }))}>
-                <Text style={[fm.typeBtnIcon, form.discount_type === t && { color: GOLD }]}>
+                <Text style={[fm.typeBtnIcon, form.discount_type === t && { color: c.brand }]}>
                   {t === 'percentage' ? '%' : '₹'}
                 </Text>
                 <Text style={[fm.typeBtnTxt, form.discount_type === t && fm.typeBtnTxtActive]}>
@@ -224,7 +344,7 @@ function CouponForm({
                 </Text>
                 {form.discount_type === t && (
                   <View style={fm.typeBtnCheck}>
-                    <Ionicons name="checkmark" size={11} color={GOLD} />
+                    <Ionicons name="checkmark" size={11} color={c.brand} />
                   </View>
                 )}
               </Pressable>
@@ -247,7 +367,7 @@ function CouponForm({
               value={form.discount_amount}
               onChangeText={field('discount_amount')}
               placeholder={form.discount_type === 'percentage' ? '0–100' : '0.00'}
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={c.textMuted}
               keyboardType="decimal-pad"
             />
           </View>
@@ -259,14 +379,14 @@ function CouponForm({
           <Text style={fm.label}>Max Uses <Text style={fm.opt}>(leave empty for unlimited)</Text></Text>
           <View style={[fm.inputWrap, !!errors.max_uses && fm.inputError]}>
             <View style={fm.inputPrefix}>
-              <Ionicons name="people-outline" size={14} color="#9ca3af" />
+              <Ionicons name="people-outline" size={14} color={c.textMuted} />
             </View>
             <TextInput
               style={fm.input}
               value={form.max_uses}
               onChangeText={field('max_uses')}
               placeholder="Unlimited"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={c.textMuted}
               keyboardType="numeric"
             />
           </View>
@@ -279,18 +399,18 @@ function CouponForm({
             <Text style={fm.label}>Valid From</Text>
             {Platform.OS === 'web' ? (
               <View style={fm.inputWrap}>
-                <View style={fm.inputPrefix}><Ionicons name="calendar-outline" size={14} color="#9ca3af" /></View>
+                <View style={fm.inputPrefix}><Ionicons name="calendar-outline" size={14} color={c.textMuted} /></View>
                 <input
                   type="date"
                   value={form.valid_from}
                   onChange={e => field('valid_from')((e.target as HTMLInputElement).value)}
-                  style={{ flex: 1, padding: '12px', fontSize: 14, color: '#111827', border: 'none', outline: 'none', background: 'transparent' } as any}
+                  style={{ flex: 1, padding: '12px', fontSize: 14, color: c.heading, border: 'none', outline: 'none', background: 'transparent' } as any}
                 />
               </View>
             ) : (
               <View style={fm.inputWrap}>
-                <View style={fm.inputPrefix}><Ionicons name="calendar-outline" size={14} color="#9ca3af" /></View>
-                <TextInput style={fm.input} value={form.valid_from} onChangeText={field('valid_from')} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" />
+                <View style={fm.inputPrefix}><Ionicons name="calendar-outline" size={14} color={c.textMuted} /></View>
+                <TextInput style={fm.input} value={form.valid_from} onChangeText={field('valid_from')} placeholder="YYYY-MM-DD" placeholderTextColor={c.textMuted} />
               </View>
             )}
             <Text style={fm.hint}>Leave empty to activate immediately</Text>
@@ -299,18 +419,18 @@ function CouponForm({
             <Text style={fm.label}>Expiry Date</Text>
             {Platform.OS === 'web' ? (
               <View style={[fm.inputWrap, !!errors.valid_to && fm.inputError]}>
-                <View style={fm.inputPrefix}><Ionicons name="time-outline" size={14} color="#9ca3af" /></View>
+                <View style={fm.inputPrefix}><Ionicons name="time-outline" size={14} color={c.textMuted} /></View>
                 <input
                   type="date"
                   value={form.valid_to}
                   onChange={e => field('valid_to')((e.target as HTMLInputElement).value)}
-                  style={{ flex: 1, padding: '12px', fontSize: 14, color: '#111827', border: 'none', outline: 'none', background: 'transparent' } as any}
+                  style={{ flex: 1, padding: '12px', fontSize: 14, color: c.heading, border: 'none', outline: 'none', background: 'transparent' } as any}
                 />
               </View>
             ) : (
               <View style={[fm.inputWrap, !!errors.valid_to && fm.inputError]}>
-                <View style={fm.inputPrefix}><Ionicons name="time-outline" size={14} color="#9ca3af" /></View>
-                <TextInput style={fm.input} value={form.valid_to} onChangeText={field('valid_to')} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" />
+                <View style={fm.inputPrefix}><Ionicons name="time-outline" size={14} color={c.textMuted} /></View>
+                <TextInput style={fm.input} value={form.valid_to} onChangeText={field('valid_to')} placeholder="YYYY-MM-DD" placeholderTextColor={c.textMuted} />
               </View>
             )}
             {errors.valid_to ? <Text style={fm.fieldError}>{errors.valid_to}</Text> : <Text style={fm.hint}>Leave empty for no expiry</Text>}
@@ -322,7 +442,7 @@ function CouponForm({
           <View style={fm.previewBox}>
             <Text style={fm.previewLabel}>Preview</Text>
             <View style={fm.previewPill}>
-              <Ionicons name="pricetag" size={13} color={GOLD} />
+              <Ionicons name="pricetag" size={13} color={c.brand} />
               <Text style={fm.previewCode}>{form.code.toUpperCase()}</Text>
               <Text style={fm.previewVal}>{discountPreview}</Text>
             </View>
@@ -347,9 +467,9 @@ function CouponForm({
           disabled={saving}
           onPress={save}>
           {saving
-            ? <ActivityIndicator color={GOLD} size="small" />
+            ? <ActivityIndicator color={c.brand} size="small" />
             : <>
-                <Ionicons name={isEdit ? 'checkmark-circle' : 'add-circle'} size={17} color={GOLD} />
+                <Ionicons name={isEdit ? 'checkmark-circle' : 'add-circle'} size={17} color={c.brand} />
                 <Text style={fm.saveTxt}>{isEdit ? 'Update Coupon' : 'Create Coupon'}</Text>
               </>
           }
@@ -370,7 +490,7 @@ const STATUS_CONFIG = {
 };
 
 function CouponCard({
-  coupon: c, toggling, onEdit, onDelete, onToggle,
+  coupon: coup, toggling, onEdit, onDelete, onToggle,
 }: {
   coupon: Coupon;
   toggling: boolean;
@@ -378,13 +498,16 @@ function CouponCard({
   onDelete: () => void;
   onToggle: () => void;
 }) {
-  const status  = couponStatus(c);
+  const { colors: c } = useTheme();
+  const cc = useMemo(() => mkCc(c), [c]);
+
+  const status  = couponStatus(coup);
   const cfg     = STATUS_CONFIG[status];
-  const pct     = usagePercent(c);
-  const used    = c.times_used ?? c.used_count ?? 0;
-  const limit   = c.max_uses   ?? c.usage_limit;
-  const expiry  = c.valid_to   ?? c.expires_at;
-  const amount  = c.discount_amount ?? c.discount_value ?? 0;
+  const pct     = usagePercent(coup);
+  const used    = coup.times_used ?? coup.used_count ?? 0;
+  const limit   = coup.max_uses   ?? coup.usage_limit;
+  const expiry  = coup.valid_to   ?? coup.expires_at;
+  const amount  = coup.discount_amount ?? coup.discount_value ?? 0;
 
   return (
     <View style={[cc.card, status === 'expired' && cc.cardFaded, status === 'inactive' && cc.cardFaded]}>
@@ -393,8 +516,8 @@ function CouponCard({
       <View style={cc.top}>
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <View style={[cc.codeTag, status === 'expired' && { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb' }]}>
-            <Ionicons name="pricetag" size={11} color={status === 'expired' ? '#9ca3af' : GOLD} />
-            <Text style={[cc.codeText, status === 'expired' && { color: '#9ca3af' }]}>{c.code}</Text>
+            <Ionicons name="pricetag" size={11} color={status === 'expired' ? c.textMuted : c.brand} />
+            <Text style={[cc.codeText, status === 'expired' && { color: c.textMuted }]}>{coup.code}</Text>
           </View>
           <View style={[cc.statusBadge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
             <View style={[cc.statusDot, { backgroundColor: cfg.dot }]} />
@@ -402,11 +525,11 @@ function CouponCard({
           </View>
         </View>
         {toggling
-          ? <ActivityIndicator size="small" color={FOREST} style={{ marginLeft: 8 }} />
+          ? <ActivityIndicator size="small" color={c.sidebar} style={{ marginLeft: 8 }} />
           : <Switch
-              value={!!c.is_active && !isExpired(c)}
+              value={!!coup.is_active && !isExpired(coup)}
               onValueChange={onToggle}
-              disabled={isExpired(c) || isUsageExhausted(c)}
+              disabled={isExpired(coup) || isUsageExhausted(coup)}
               trackColor={{ true: '#16a34a', false: '#e5e7eb' }}
               thumbColor="#fff"
             />
@@ -415,20 +538,20 @@ function CouponCard({
 
       {/* Discount value chip + meta */}
       <View style={cc.midRow}>
-        <View style={[cc.valuePill, c.discount_type === 'percentage' ? cc.pillGold : cc.pillBlue]}>
-          <Text style={[cc.valueTxt, c.discount_type === 'percentage' ? { color: '#92400e' } : { color: PRIMARY }]}>
-            {c.discount_type === 'percentage' ? `${amount}% OFF` : `₹${amount} OFF`}
+        <View style={[cc.valuePill, coup.discount_type === 'percentage' ? cc.pillGold : cc.pillBlue]}>
+          <Text style={[cc.valueTxt, coup.discount_type === 'percentage' ? { color: '#92400e' } : { color: PRIMARY }]}>
+            {coup.discount_type === 'percentage' ? `${amount}% OFF` : `₹${amount} OFF`}
           </Text>
         </View>
-        {c.valid_from && (
+        {coup.valid_from && (
           <View style={cc.metaChip}>
-            <Ionicons name="calendar-outline" size={10} color="#6b7280" />
-            <Text style={cc.metaTxt}>From {formatDateDisplay(c.valid_from)}</Text>
+            <Ionicons name="calendar-outline" size={10} color={c.textMuted} />
+            <Text style={cc.metaTxt}>From {formatDateDisplay(coup.valid_from)}</Text>
           </View>
         )}
         {limit ? (
           <View style={cc.metaChip}>
-            <Ionicons name="people-outline" size={10} color="#6b7280" />
+            <Ionicons name="people-outline" size={10} color={c.textMuted} />
             <Text style={cc.metaTxt}>{used}/{limit}</Text>
           </View>
         ) : null}
@@ -455,12 +578,12 @@ function CouponCard({
         <View style={{ gap: 3 }}>
           {!limit && (
             <Text style={cc.metaLine}>
-              <Ionicons name="repeat-outline" size={11} color="#9ca3af" /> {used} total uses
+              <Ionicons name="repeat-outline" size={11} color={c.textMuted} /> {used} total uses
             </Text>
           )}
           {expiry ? (
             <Text style={[cc.metaLine, status === 'expired' && { color: '#dc2626', fontWeight: '700' }]}>
-              <Ionicons name="time-outline" size={11} color={status === 'expired' ? '#dc2626' : '#9ca3af'} />
+              <Ionicons name="time-outline" size={11} color={status === 'expired' ? '#dc2626' : c.textMuted} />
               {' '}{status === 'expired' ? 'Expired' : 'Expires'} {formatDateDisplay(expiry)}
             </Text>
           ) : (
@@ -487,6 +610,9 @@ function CouponCard({
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function CouponsScreen() {
+  const { colors: c } = useTheme();
+  const s = useMemo(() => mkS(c), [c]);
+
   const [coupons,    setCoupons]    = useState<Coupon[]>([]);
   const [meta,       setMeta]       = useState({ total: 0, active: 0, inactive: 0, expired: 0 });
   const [loading,    setLoading]    = useState(true);
@@ -512,27 +638,25 @@ export default function CouponsScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Client-side filter + search on the loaded set
   const filtered = useMemo(() => {
-    return coupons.filter(c => {
-      const st = couponStatus(c);
+    return coupons.filter(coup => {
+      const st = couponStatus(coup);
       if (filter === 'active'   && st !== 'active')   return false;
       if (filter === 'inactive' && st !== 'inactive') return false;
       if (filter === 'expired'  && st !== 'expired')  return false;
-      if (search) return c.code.toLowerCase().includes(search.toLowerCase());
+      if (search) return coup.code.toLowerCase().includes(search.toLowerCase());
       return true;
     });
   }, [coupons, filter, search]);
 
-  // Derived stats (use server meta if available, fall back to local count)
   const statsTotal    = meta.total    || coupons.length;
-  const statsActive   = meta.active   || coupons.filter(c => couponStatus(c) === 'active').length;
-  const statsInactive = meta.inactive || coupons.filter(c => couponStatus(c) === 'inactive').length;
-  const statsExpired  = meta.expired  || coupons.filter(c => couponStatus(c) === 'expired').length;
+  const statsActive   = meta.active   || coupons.filter(coup => couponStatus(coup) === 'active').length;
+  const statsInactive = meta.inactive || coupons.filter(coup => couponStatus(coup) === 'inactive').length;
+  const statsExpired  = meta.expired  || coupons.filter(coup => couponStatus(coup) === 'expired').length;
 
-  async function handleDelete(c: Coupon) {
+  async function handleDelete(coup: Coupon) {
     const doDelete = async () => {
-      try { await couponsApi.delete(c.id); load(true); }
+      try { await couponsApi.delete(coup.id); load(true); }
       catch (e: any) {
         const msg = e?.response?.data?.message ?? 'Delete failed';
         if (Platform.OS === 'web') window.alert(msg);
@@ -540,38 +664,38 @@ export default function CouponsScreen() {
       }
     };
     if (Platform.OS === 'web') {
-      if (window.confirm(`Delete coupon "${c.code}"? This cannot be undone.`)) doDelete();
+      if (window.confirm(`Delete coupon "${coup.code}"? This cannot be undone.`)) doDelete();
     } else {
-      Alert.alert('Delete Coupon', `Delete coupon "${c.code}"?`, [
+      Alert.alert('Delete Coupon', `Delete coupon "${coup.code}"?`, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: doDelete },
       ]);
     }
   }
 
-  async function handleToggle(c: Coupon) {
-    if (isExpired(c) || isUsageExhausted(c)) return;
-    setToggling(prev => new Set(prev).add(c.id));
-    const newVal = !c.is_active;
-    setCoupons(prev => prev.map(x => x.id === c.id ? { ...x, is_active: newVal } : x));
-    try { await couponsApi.toggle(c.id); }
-    catch { setCoupons(prev => prev.map(x => x.id === c.id ? { ...x, is_active: !newVal } : x)); }
-    finally { setToggling(prev => { const n = new Set(prev); n.delete(c.id); return n; }); }
+  async function handleToggle(coup: Coupon) {
+    if (isExpired(coup) || isUsageExhausted(coup)) return;
+    setToggling(prev => new Set(prev).add(coup.id));
+    const newVal = !coup.is_active;
+    setCoupons(prev => prev.map(x => x.id === coup.id ? { ...x, is_active: newVal } : x));
+    try { await couponsApi.toggle(coup.id); }
+    catch { setCoupons(prev => prev.map(x => x.id === coup.id ? { ...x, is_active: !newVal } : x)); }
+    finally { setToggling(prev => { const n = new Set(prev); n.delete(coup.id); return n; }); }
   }
 
   function openCreate() { setEditing(null); setFormOpen(true); }
-  function openEdit(c: Coupon) { setEditing(c); setFormOpen(true); }
+  function openEdit(coup: Coupon) { setEditing(coup); setFormOpen(true); }
   function afterSave() { setFormOpen(false); setEditing(null); load(true); }
 
   const FILTER_TABS = [
-    { key: 'all'     as const, label: 'All',      count: statsTotal,    color: FOREST },
+    { key: 'all'     as const, label: 'All',      count: statsTotal,    color: c.sidebar },
     { key: 'active'  as const, label: 'Active',   count: statsActive,   color: '#16a34a' },
     { key: 'inactive'as const, label: 'Inactive', count: statsInactive, color: '#6b7280' },
     { key: 'expired' as const, label: 'Expired',  count: statsExpired,  color: '#ef4444' },
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f0f2f7' }}>
+    <View style={{ flex: 1, backgroundColor: c.background }}>
 
       {/* Header */}
       <View style={s.pageHeader}>
@@ -609,18 +733,18 @@ export default function CouponsScreen() {
       {/* Search */}
       <View style={s.searchRow}>
         <View style={s.searchBox}>
-          <Ionicons name="search-outline" size={15} color="#9ca3af" />
+          <Ionicons name="search-outline" size={15} color={c.textMuted} />
           <TextInput
             style={s.searchInput}
             value={search}
             onChangeText={setSearch}
             placeholder="Search coupon code…"
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={c.textMuted}
             autoCapitalize="characters"
           />
           {search ? (
             <Pressable onPress={() => setSearch('')}>
-              <Ionicons name="close-circle" size={16} color="#9ca3af" />
+              <Ionicons name="close-circle" size={16} color={c.textMuted} />
             </Pressable>
           ) : null}
         </View>
@@ -660,7 +784,7 @@ export default function CouponsScreen() {
       {/* List */}
       {loading ? (
         <View style={s.loadWrap}>
-          <ActivityIndicator color={FOREST} size="large" />
+          <ActivityIndicator color={c.sidebar} size="large" />
           <Text style={s.loadTxt}>Loading coupons…</Text>
         </View>
       ) : (
@@ -671,21 +795,21 @@ export default function CouponsScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing}
               onRefresh={() => { setRefreshing(true); load(true); }}
-              tintColor={GOLD} />
+              tintColor={c.brand} />
           }
-          renderItem={({ item: c }) => (
+          renderItem={({ item: coup }) => (
             <CouponCard
-              coupon={c}
-              toggling={toggling.has(c.id)}
-              onEdit={() => openEdit(c)}
-              onDelete={() => handleDelete(c)}
-              onToggle={() => handleToggle(c)}
+              coupon={coup}
+              toggling={toggling.has(coup.id)}
+              onEdit={() => openEdit(coup)}
+              onDelete={() => handleDelete(coup)}
+              onToggle={() => handleToggle(coup)}
             />
           )}
           ListEmptyComponent={
             <View style={s.emptyWrap}>
               <View style={s.emptyIconWrap}>
-                <Ionicons name="pricetags-outline" size={36} color="#94a3b8" />
+                <Ionicons name="pricetags-outline" size={36} color={c.textMuted} />
               </View>
               <Text style={s.emptyTitle}>No coupons found</Text>
               <Text style={s.emptySub}>
@@ -693,7 +817,7 @@ export default function CouponsScreen() {
               </Text>
               {!search && filter === 'all' && (
                 <Pressable style={({ pressed }) => [s.emptyAddBtn, pressed && { opacity: 0.85 }]} onPress={openCreate}>
-                  <Ionicons name="add" size={16} color={GOLD} />
+                  <Ionicons name="add" size={16} color={c.brand} />
                   <Text style={s.emptyAddTxt}>Create First Coupon</Text>
                 </Pressable>
               )}
@@ -721,112 +845,3 @@ export default function CouponsScreen() {
     </View>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const s = StyleSheet.create({
-  pageHeader:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  pageTitle:   { fontSize: 18, fontWeight: '800', color: '#111827' },
-  pageSub:     { fontSize: 11, color: '#6b7280', marginTop: 1 },
-  addBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
-  addBtnTxt:   { color: '#fff', fontWeight: '800', fontSize: 13 },
-
-  statsBar:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  statItem:    { flex: 1, alignItems: 'center', gap: 1 },
-  statIcon:    { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginBottom: 1 },
-  statVal:     { fontSize: 14, fontWeight: '800' },
-  statLbl:     { fontSize: 9, color: '#6b7280' },
-  statDivider: { width: 1, height: 28, backgroundColor: '#e5e7eb' },
-
-  searchRow:   { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  searchBox:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f8fafc', borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e2e8f0' },
-  searchInput: { flex: 1, fontSize: 13, color: '#111827' },
-
-  tabsRow:      { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', height: 48 },
-  filterTab:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  filterTabTxt: { fontSize: 12, fontWeight: '600', color: '#374151' },
-  tabCount:     { backgroundColor: '#e5e7eb', borderRadius: 99, paddingHorizontal: 6, paddingVertical: 1 },
-  tabCountTxt:  { fontSize: 10, fontWeight: '700', color: '#6b7280' },
-
-  resultRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 7, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  resultTxt:  { fontSize: 11.5, color: '#9ca3af', fontWeight: '600' },
-  clearAll:   { fontSize: 12, color: PRIMARY, textDecorationLine: 'underline' },
-  loadWrap:   { paddingTop: 80, alignItems: 'center', gap: 12 },
-  loadTxt:    { fontSize: 14, color: '#9ca3af' },
-  emptyWrap:  { paddingTop: 70, alignItems: 'center', gap: 10 },
-  emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#374151' },
-  emptySub:   { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 40 },
-  emptyAddBtn:{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 10 },
-  emptyAddTxt:{ color: '#fff', fontWeight: '800', fontSize: 13.5 },
-
-  modalBackdrop:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 16 },
-  modalPanel:        { width: '100%', maxHeight: '95%', borderRadius: 16, overflow: 'hidden', backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
-  modalPanelDesktop: { width: 580, maxWidth: 580 },
-});
-
-const cc = StyleSheet.create({
-  card:        { backgroundColor: '#fff', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#f1f5f9', borderLeftWidth: 4, borderLeftColor: GOLD, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  cardFaded:   { opacity: 0.75 },
-  top:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  codeTag:     { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fefce8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#fef08a' },
-  codeText:    { fontSize: 15, fontWeight: '900', color: '#111827', letterSpacing: 1.5 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1 },
-  statusDot:   { width: 5, height: 5, borderRadius: 2.5 },
-  statusTxt:   { fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
-  midRow:      { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 7, marginBottom: 10 },
-  valuePill:   { paddingHorizontal: 11, paddingVertical: 5, borderRadius: 8 },
-  pillGold:    { backgroundColor: '#fefce8', borderWidth: 1, borderColor: '#fde68a' },
-  pillBlue:    { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe' },
-  valueTxt:    { fontSize: 13, fontWeight: '800' },
-  metaChip:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f3f4f6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7 },
-  metaTxt:     { fontSize: 11, fontWeight: '600', color: '#6b7280' },
-  progressWrap:{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  progressTrack:{ flex: 1, height: 5, backgroundColor: '#f3f4f6', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: 5, borderRadius: 3, backgroundColor: '#16a34a' },
-  progressTxt:  { fontSize: 10, fontWeight: '700', color: '#9ca3af', width: 32, textAlign: 'right' },
-  botRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 4 },
-  metaLine:    { fontSize: 11.5, color: '#9ca3af' },
-  actionsRow:  { flexDirection: 'row', gap: 8 },
-  actionBtn:   { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-});
-
-const fm = StyleSheet.create({
-  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, backgroundColor: FOREST },
-  headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  headerIcon:  { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(201,165,42,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(201,165,42,0.25)' },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: '#fff' },
-  headerSub:   { fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
-  closeBtn:    { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
-  field:       { gap: 0 },
-  label:       { fontSize: 11.5, fontWeight: '800', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 7 },
-  labelHint:   { fontSize: 10, fontWeight: '400', color: '#9ca3af', textTransform: 'none', letterSpacing: 0 },
-  req:         { color: '#ef4444' },
-  opt:         { color: '#9ca3af', fontWeight: '400', textTransform: 'none', letterSpacing: 0, fontSize: 10 },
-  hint:        { fontSize: 11, color: '#9ca3af', marginTop: 5 },
-  fieldError:  { fontSize: 11.5, color: '#dc2626', fontWeight: '600', marginTop: 4 },
-  inputWrap:   { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 11, backgroundColor: '#fafafa', overflow: 'hidden' },
-  inputError:  { borderColor: '#fca5a5', backgroundColor: '#fff5f5' },
-  inputPrefix: { width: 40, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6', borderRightWidth: 1, borderRightColor: '#e5e7eb' },
-  inputPrefixTxt: { fontSize: 14, fontWeight: '800', color: '#6b7280' },
-  input:       { flex: 1, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: '#111827' },
-  typeBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: 11, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#f3f4f6', position: 'relative' },
-  typeBtnActive:{ backgroundColor: FOREST, borderColor: FOREST },
-  typeBtnTxt:  { fontSize: 13, fontWeight: '600', color: '#374151' },
-  typeBtnTxtActive: { color: '#fff', fontWeight: '700' },
-  typeBtnIcon: { fontSize: 15, fontWeight: '800', color: '#6b7280' },
-  typeBtnCheck:{ position: 'absolute', top: 6, right: 8, width: 16, height: 16, borderRadius: 8, backgroundColor: 'rgba(201,165,42,0.2)', alignItems: 'center', justifyContent: 'center' },
-  errorBox:    { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#fef2f2', borderRadius: 9, padding: 10, borderWidth: 1, borderColor: '#fecaca' },
-  errorTxt:    { color: '#dc2626', fontSize: 12.5, fontWeight: '600', flex: 1 },
-  previewBox:  { gap: 8 },
-  previewLabel:{ fontSize: 11.5, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 },
-  previewPill: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
-  previewCode: { fontSize: 14, fontWeight: '900', color: '#fff', letterSpacing: 2 },
-  previewVal:  { fontSize: 13, fontWeight: '700', color: GOLD },
-  previewMeta: { fontSize: 11, color: '#9ca3af' },
-  footer:      { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6', backgroundColor: '#fff' },
-  cancelBtn:   { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 11, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#fff' },
-  cancelTxt:   { fontWeight: '700', color: '#374151', fontSize: 14 },
-  saveBtn:     { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 13, borderRadius: 11, backgroundColor: FOREST },
-  saveTxt:     { fontWeight: '800', color: GOLD, fontSize: 14 },
-});

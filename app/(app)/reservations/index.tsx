@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet,
   TextInput, Modal, RefreshControl, Alert, ActivityIndicator,
@@ -8,6 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import client from '@/api/client';
 import type { Reservation } from '@/types';
+import { useTheme } from '@/store/themeStore';
+import type { ThemeColors } from '@/theme/tokens';
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const FOREST  = '#1A2B1A';
@@ -41,6 +43,8 @@ function AddReservationModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { colors: c } = useTheme();
+  const rm = useMemo(() => mkRm(c), [c]);
   const { width } = useWindowDimensions();
   const isDesktop = width >= 860;
 
@@ -146,16 +150,16 @@ function AddReservationModal({
                 <View style={[rm.field, { flex: 1 }]}>
                   <Text style={rm.label}>Customer name <Text style={rm.req}>*</Text></Text>
                   <View style={[rm.inputWrap, !!errors.customer_name && rm.inputError]}>
-                    <View style={rm.prefix}><Ionicons name="person-outline" size={15} color="#9ca3af" /></View>
-                    <TextInput style={rm.input} value={form.customer_name} onChangeText={field('customer_name')} placeholder="Customer name" placeholderTextColor="#9ca3af" />
+                    <View style={rm.prefix}><Ionicons name="person-outline" size={15} color={c.textMuted} /></View>
+                    <TextInput style={rm.input} value={form.customer_name} onChangeText={field('customer_name')} placeholder="Customer name" placeholderTextColor={c.textMuted} />
                   </View>
                   {errors.customer_name ? <Text style={rm.fieldErr}>{errors.customer_name}</Text> : null}
                 </View>
                 <View style={[rm.field, { flex: 1 }]}>
                   <Text style={rm.label}>Customer phone</Text>
                   <View style={rm.inputWrap}>
-                    <View style={rm.prefix}><Ionicons name="call-outline" size={15} color="#9ca3af" /></View>
-                    <TextInput style={rm.input} value={form.customer_phone} onChangeText={field('customer_phone')} placeholder="Phone" placeholderTextColor="#9ca3af" keyboardType="phone-pad" />
+                    <View style={rm.prefix}><Ionicons name="call-outline" size={15} color={c.textMuted} /></View>
+                    <TextInput style={rm.input} value={form.customer_phone} onChangeText={field('customer_phone')} placeholder="Phone" placeholderTextColor={c.textMuted} keyboardType="phone-pad" />
                   </View>
                 </View>
               </View>
@@ -165,13 +169,13 @@ function AddReservationModal({
                 <View style={[rm.field, { flex: 1 }]}>
                   <Text style={rm.label}>Date <Text style={rm.req}>*</Text></Text>
                   <View style={[rm.inputWrap, !!errors.date && rm.inputError]}>
-                    <View style={rm.prefix}><Ionicons name="calendar-outline" size={15} color="#9ca3af" /></View>
+                    <View style={rm.prefix}><Ionicons name="calendar-outline" size={15} color={c.textMuted} /></View>
                     {Platform.OS === 'web' ? (
                       <input type="date" value={form.date}
                         onChange={e => field('date')((e.target as HTMLInputElement).value)}
-                        style={{ flex: 1, padding: '11px 12px', fontSize: 14, color: '#111827', border: 'none', outline: 'none', background: 'transparent', minWidth: 0 } as any} />
+                        style={{ flex: 1, padding: '11px 12px', fontSize: 14, color: c.heading, border: 'none', outline: 'none', background: 'transparent', minWidth: 0 } as any} />
                     ) : (
-                      <TextInput style={rm.input} value={form.date} onChangeText={field('date')} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" />
+                      <TextInput style={rm.input} value={form.date} onChangeText={field('date')} placeholder="YYYY-MM-DD" placeholderTextColor={c.textMuted} />
                     )}
                   </View>
                   {errors.date ? <Text style={rm.fieldErr}>{errors.date}</Text> : null}
@@ -179,13 +183,13 @@ function AddReservationModal({
                 <View style={[rm.field, { flex: 1 }]}>
                   <Text style={rm.label}>Time</Text>
                   <View style={rm.inputWrap}>
-                    <View style={rm.prefix}><Ionicons name="time-outline" size={15} color="#9ca3af" /></View>
+                    <View style={rm.prefix}><Ionicons name="time-outline" size={15} color={c.textMuted} /></View>
                     {Platform.OS === 'web' ? (
                       <input type="time" value={form.time}
                         onChange={e => field('time')((e.target as HTMLInputElement).value)}
-                        style={{ flex: 1, padding: '11px 12px', fontSize: 14, color: '#111827', border: 'none', outline: 'none', background: 'transparent', minWidth: 0 } as any} />
+                        style={{ flex: 1, padding: '11px 12px', fontSize: 14, color: c.heading, border: 'none', outline: 'none', background: 'transparent', minWidth: 0 } as any} />
                     ) : (
-                      <TextInput style={rm.input} value={form.time} onChangeText={field('time')} placeholder="HH:MM" placeholderTextColor="#9ca3af" />
+                      <TextInput style={rm.input} value={form.time} onChangeText={field('time')} placeholder="HH:MM" placeholderTextColor={c.textMuted} />
                     )}
                   </View>
                 </View>
@@ -197,12 +201,12 @@ function AddReservationModal({
                 <View style={[rm.field, { flex: 1 }]}>
                   <Text style={rm.label}>Table</Text>
                   <Pressable style={[rm.inputWrap, { justifyContent: 'space-between' }]} onPress={() => { setTableOpen(p => !p); setStatusOpen(false); }}>
-                    <View style={rm.prefix}><Ionicons name="grid-outline" size={15} color="#9ca3af" /></View>
-                    <Text style={[rm.input, { paddingVertical: 13, color: selectedTable ? '#111827' : '#9ca3af' }]}>
+                    <View style={rm.prefix}><Ionicons name="grid-outline" size={15} color={c.textMuted} /></View>
+                    <Text style={[rm.input, { paddingVertical: 13, color: selectedTable ? c.heading : c.textMuted }]}>
                       {selectedTable ? selectedTable.name : 'Select'}
                     </Text>
                     <View style={{ paddingRight: 12 }}>
-                      <Ionicons name={tableOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#9ca3af" />
+                      <Ionicons name={tableOpen ? 'chevron-up' : 'chevron-down'} size={14} color={c.textMuted} />
                     </View>
                   </Pressable>
                   {tableOpen && (
@@ -225,8 +229,8 @@ function AddReservationModal({
                 <View style={[rm.field, { flex: 1 }]}>
                   <Text style={rm.label}>No of Guests <Text style={rm.req}>*</Text></Text>
                   <View style={[rm.inputWrap, !!errors.guest_count && rm.inputError]}>
-                    <View style={rm.prefix}><Ionicons name="people-outline" size={15} color="#9ca3af" /></View>
-                    <TextInput style={rm.input} value={form.guest_count} onChangeText={field('guest_count')} keyboardType="number-pad" placeholder="1" placeholderTextColor="#9ca3af" />
+                    <View style={rm.prefix}><Ionicons name="people-outline" size={15} color={c.textMuted} /></View>
+                    <TextInput style={rm.input} value={form.guest_count} onChangeText={field('guest_count')} keyboardType="number-pad" placeholder="1" placeholderTextColor={c.textMuted} />
                   </View>
                   {errors.guest_count ? <Text style={rm.fieldErr}>{errors.guest_count}</Text> : null}
                 </View>
@@ -236,12 +240,12 @@ function AddReservationModal({
               <View style={rm.field}>
                 <Text style={rm.label}>Status <Text style={rm.req}>*</Text></Text>
                 <Pressable style={[rm.inputWrap, { justifyContent: 'space-between' }]} onPress={() => { setStatusOpen(p => !p); setTableOpen(false); }}>
-                  <View style={rm.prefix}><Ionicons name="flag-outline" size={15} color="#9ca3af" /></View>
-                  <Text style={[rm.input, { paddingVertical: 13, color: '#111827' }]}>
+                  <View style={rm.prefix}><Ionicons name="flag-outline" size={15} color={c.textMuted} /></View>
+                  <Text style={[rm.input, { paddingVertical: 13, color: c.heading }]}>
                     {selectedStatus?.label ?? 'Booked'}
                   </Text>
                   <View style={{ paddingRight: 12 }}>
-                    <Ionicons name={statusOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#9ca3af" />
+                    <Ionicons name={statusOpen ? 'chevron-up' : 'chevron-down'} size={14} color={c.textMuted} />
                   </View>
                 </Pressable>
                 {statusOpen && (
@@ -267,7 +271,7 @@ function AddReservationModal({
                     value={form.notes}
                     onChangeText={field('notes')}
                     placeholder="Notes"
-                    placeholderTextColor="#9ca3af"
+                    placeholderTextColor={c.textMuted}
                     multiline
                     numberOfLines={3}
                   />
@@ -298,6 +302,8 @@ function AddReservationModal({
 
 // ── Main Screen ────────────────────────────────────────────────────────────────
 export default function ReservationsScreen() {
+  const { colors: c } = useTheme();
+  const st = useMemo(() => mkSt(c), [c]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [refreshing,   setRefreshing]   = useState(false);
   const [showForm,     setShowForm]     = useState(false);
@@ -328,7 +334,7 @@ export default function ReservationsScreen() {
     : reservations.filter(r => r.status === activeFilter);
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f0f2f7' }}>
+    <View style={{ flex: 1, backgroundColor: c.background }}>
       {/* Header */}
       <View style={st.header}>
         <View>
@@ -354,7 +360,7 @@ export default function ReservationsScreen() {
                 key={s}
                 style={({ pressed }) => [
                   st.filterChip,
-                  active && { backgroundColor: cfg?.color ?? FOREST, borderColor: cfg?.color ?? FOREST },
+                  active && { backgroundColor: cfg?.color ?? c.sidebar, borderColor: cfg?.color ?? c.sidebar },
                   pressed && { opacity: 0.8 },
                 ]}
                 onPress={() => setActiveFilter(s)}>
@@ -382,7 +388,7 @@ export default function ReservationsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }}
-            tintColor={FOREST}
+            tintColor={c.brand}
           />
         }
         renderItem={({ item: r }) => {
@@ -393,7 +399,7 @@ export default function ReservationsScreen() {
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={st.customerName}>{r.customer_name}</Text>
                   {r.customer_phone
-                    ? <Text style={st.customerPhone}><Ionicons name="call-outline" size={11} color="#9ca3af" /> {r.customer_phone}</Text>
+                    ? <Text style={st.customerPhone}><Ionicons name="call-outline" size={11} color={c.textMuted} /> {r.customer_phone}</Text>
                     : null}
                 </View>
                 <View style={[st.statusBadge, { backgroundColor: cfg.bg, borderColor: cfg.color + '40' }]}>
@@ -404,16 +410,16 @@ export default function ReservationsScreen() {
 
               <View style={st.metaRow}>
                 <View style={st.metaItem}>
-                  <Ionicons name="calendar-outline" size={12} color="#6b7280" />
+                  <Ionicons name="calendar-outline" size={12} color={c.textMuted} />
                   <Text style={st.metaTxt}>{format(new Date(r.reserved_at), 'dd MMM yyyy, hh:mm a')}</Text>
                 </View>
                 <View style={st.metaItem}>
-                  <Ionicons name="people-outline" size={12} color="#6b7280" />
+                  <Ionicons name="people-outline" size={12} color={c.textMuted} />
                   <Text style={st.metaTxt}>{r.guest_count} guests</Text>
                 </View>
                 {r.table_name
                   ? <View style={st.metaItem}>
-                      <Ionicons name="grid-outline" size={12} color="#6b7280" />
+                      <Ionicons name="grid-outline" size={12} color={c.textMuted} />
                       <Text style={st.metaTxt}>{r.table_name}</Text>
                     </View>
                   : null}
@@ -458,7 +464,7 @@ export default function ReservationsScreen() {
         ListEmptyComponent={
           <View style={st.empty}>
             <View style={st.emptyIcon}>
-              <Ionicons name="calendar-outline" size={36} color="#94a3b8" />
+              <Ionicons name="calendar-outline" size={36} color={c.textMuted} />
             </View>
             <Text style={st.emptyTitle}>No reservations found</Text>
             <Text style={st.emptySub}>{activeFilter === 'all' ? 'Start booking tables for customers.' : `No ${activeFilter} reservations.`}</Text>
@@ -481,76 +487,71 @@ export default function ReservationsScreen() {
   );
 }
 
-// ── Screen styles ──────────────────────────────────────────────────────────────
-const st = StyleSheet.create({
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  headerTitle:  { fontSize: 20, fontWeight: '800', color: '#111827' },
-  headerSub:    { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  addBtn:       { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
-  addBtnTxt:    { color: '#fff', fontWeight: '800', fontSize: 13.5 },
+// ── StyleSheet factory functions (theme-aware) ────────────────────────────────
+function mkSt(c: ThemeColors) {
+  return StyleSheet.create({
+    header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    headerTitle:  { fontSize: 20, fontWeight: '800', color: c.heading },
+    headerSub:    { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    addBtn:       { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.sidebar, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
+    addBtnTxt:    { color: '#fff', fontWeight: '800', fontSize: 13.5 },
+    filtersWrap:  { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, height: 50 },
+    filterChip:   { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1.5, borderColor: c.border },
+    filterTxt:    { fontSize: 12, fontWeight: '600', color: c.text },
+    filterBadge:  { backgroundColor: c.border, borderRadius: 99, paddingHorizontal: 6, paddingVertical: 1 },
+    filterBadgeTxt:{ fontSize: 10, fontWeight: '700', color: c.textMuted },
+    card:         { backgroundColor: c.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: c.border, gap: 10, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+    cardTop:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+    customerName: { fontSize: 15, fontWeight: '800', color: c.heading },
+    customerPhone:{ fontSize: 12, color: c.textMuted },
+    statusBadge:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
+    statusTxt:    { fontSize: 11, fontWeight: '700' },
+    metaRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    metaItem:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    metaTxt:      { fontSize: 12.5, color: c.text, fontWeight: '500' },
+    notes:        { fontSize: 12.5, color: c.textMuted, fontStyle: 'italic', paddingTop: 8, borderTopWidth: 1, borderTopColor: c.border },
+    actions:      { flexDirection: 'row', gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: c.border },
+    actionBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+    actionTxt:    { color: '#fff', fontSize: 12.5, fontWeight: '700' },
+    empty:        { paddingTop: 70, alignItems: 'center', gap: 10 },
+    emptyIcon:    { width: 72, height: 72, borderRadius: 36, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+    emptyTitle:   { fontSize: 16, fontWeight: '700', color: c.text },
+    emptySub:     { fontSize: 13, color: c.textMuted, textAlign: 'center', paddingHorizontal: 40 },
+    emptyAddBtn:  { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: c.sidebar, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 10 },
+    emptyAddTxt:  { color: c.brand, fontWeight: '800', fontSize: 13.5 },
+  });
+}
 
-  filtersWrap:  { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', height: 50 },
-  filterChip:   { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  filterTxt:    { fontSize: 12, fontWeight: '600', color: '#374151' },
-  filterBadge:  { backgroundColor: '#e5e7eb', borderRadius: 99, paddingHorizontal: 6, paddingVertical: 1 },
-  filterBadgeTxt:{ fontSize: 10, fontWeight: '700', color: '#6b7280' },
-
-  card:         { backgroundColor: '#fff', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', gap: 10, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  cardTop:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  customerName: { fontSize: 15, fontWeight: '800', color: '#111827' },
-  customerPhone:{ fontSize: 12, color: '#9ca3af' },
-  statusBadge:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
-  statusTxt:    { fontSize: 11, fontWeight: '700' },
-  metaRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  metaItem:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaTxt:      { fontSize: 12.5, color: '#374151', fontWeight: '500' },
-  notes:        { fontSize: 12.5, color: '#6b7280', fontStyle: 'italic', paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  actions:      { flexDirection: 'row', gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  actionBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  actionTxt:    { color: '#fff', fontSize: 12.5, fontWeight: '700' },
-
-  empty:        { paddingTop: 70, alignItems: 'center', gap: 10 },
-  emptyIcon:    { width: 72, height: 72, borderRadius: 36, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
-  emptyTitle:   { fontSize: 16, fontWeight: '700', color: '#374151' },
-  emptySub:     { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 40 },
-  emptyAddBtn:  { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 10 },
-  emptyAddTxt:  { color: GOLD, fontWeight: '800', fontSize: 13.5 },
-});
-
-// ── Modal styles ───────────────────────────────────────────────────────────────
-const rm = StyleSheet.create({
-  backdrop:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 16 },
-  panel:        { width: '100%', maxHeight: '92%', borderRadius: 16, overflow: 'hidden', backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
-  panelDesktop: { width: 580, maxWidth: 580 },
-
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, backgroundColor: FOREST },
-  headerLeft:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  headerIcon:   { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(201,165,42,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(201,165,42,0.25)' },
-  headerTitle:  { fontSize: 15, fontWeight: '800', color: '#fff' },
-  headerSub:    { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
-  closeBtn:     { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
-
-  row:          { flexDirection: 'row', gap: 10 },
-  field:        { gap: 0 },
-  label:        { fontSize: 11.5, fontWeight: '800', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 7 },
-  req:          { color: '#ef4444' },
-  opt:          { color: '#9ca3af', fontWeight: '500', textTransform: 'none' },
-
-  inputWrap:    { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 11, backgroundColor: '#fafafa', overflow: 'hidden' },
-  inputError:   { borderColor: '#fca5a5', backgroundColor: '#fff5f5' },
-  prefix:       { width: 40, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6', borderRightWidth: 1, borderRightColor: '#e5e7eb' },
-  input:        { flex: 1, paddingHorizontal: 12, paddingVertical: 12, fontSize: 14, color: '#111827' },
-  fieldErr:     { fontSize: 11.5, color: '#dc2626', fontWeight: '600', marginTop: 4 },
-
-  dropdown:     { position: 'absolute', top: 52, left: 0, right: 0, zIndex: 999, backgroundColor: '#fff', borderRadius: 11, borderWidth: 1.5, borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 8, overflow: 'hidden' },
-  dropItem:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  dropItemActive:{ backgroundColor: '#fef9ec' },
-  dropItemTxt:  { flex: 1, fontSize: 13.5, color: '#374151', fontWeight: '600' },
-  statusDot:    { width: 8, height: 8, borderRadius: 4 },
-
-  footer:       { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6', backgroundColor: '#fff' },
-  cancelBtn:    { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 11, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#fff' },
-  cancelTxt:    { fontWeight: '700', color: '#374151', fontSize: 14 },
-  saveBtn:      { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 13, borderRadius: 11, backgroundColor: FOREST },
-  saveTxt:      { fontWeight: '800', color: GOLD, fontSize: 14 },
-});
+function mkRm(c: ThemeColors) {
+  return StyleSheet.create({
+    backdrop:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+    panel:        { width: '100%', maxHeight: '92%', borderRadius: 16, overflow: 'hidden', backgroundColor: c.surface, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
+    panelDesktop: { width: 580, maxWidth: 580 },
+    header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, backgroundColor: c.sidebar },
+    headerLeft:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    headerIcon:   { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(201,165,42,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(201,165,42,0.25)' },
+    headerTitle:  { fontSize: 15, fontWeight: '800', color: '#fff' },
+    headerSub:    { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
+    closeBtn:     { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+    row:          { flexDirection: 'row', gap: 10 },
+    field:        { gap: 0 },
+    label:        { fontSize: 11.5, fontWeight: '800', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 7 },
+    req:          { color: '#ef4444' },
+    opt:          { color: c.textMuted, fontWeight: '500', textTransform: 'none' },
+    inputWrap:    { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: c.border, borderRadius: 11, backgroundColor: c.surfaceAlt, overflow: 'hidden' },
+    inputError:   { borderColor: '#fca5a5', backgroundColor: '#fff5f5' },
+    prefix:       { width: 40, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surfaceAlt, borderRightWidth: 1, borderRightColor: c.border },
+    input:        { flex: 1, paddingHorizontal: 12, paddingVertical: 12, fontSize: 14, color: c.heading },
+    fieldErr:     { fontSize: 11.5, color: '#dc2626', fontWeight: '600', marginTop: 4 },
+    dropdown:     { position: 'absolute', top: 52, left: 0, right: 0, zIndex: 999, backgroundColor: c.surface, borderRadius: 11, borderWidth: 1.5, borderColor: c.border, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 8, overflow: 'hidden' },
+    dropItem:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    dropItemActive:{ backgroundColor: c.surfaceAlt },
+    dropItemTxt:  { flex: 1, fontSize: 13.5, color: c.text, fontWeight: '600' },
+    statusDot:    { width: 8, height: 8, borderRadius: 4 },
+    footer:       { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface },
+    cancelBtn:    { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 11, borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surface },
+    cancelTxt:    { fontWeight: '700', color: c.text, fontSize: 14 },
+    saveBtn:      { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 13, borderRadius: 11, backgroundColor: c.sidebar },
+    saveTxt:      { fontWeight: '800', color: c.brand, fontSize: 14 },
+  });
+}

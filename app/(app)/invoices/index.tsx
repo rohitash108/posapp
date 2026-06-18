@@ -15,6 +15,8 @@ import { format, isToday, isYesterday } from 'date-fns';
 import { invoicesApi } from '@/api/invoices';
 import { buildCsv, downloadCsv } from '@/utils/export';
 import { useAppStore } from '@/store/appStore';
+import { useTheme } from '@/store/themeStore';
+import type { ThemeColors } from '@/theme/tokens';
 import type { Invoice, PaymentMethod } from '@/types';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -70,6 +72,157 @@ function fmtDate(dt?: string) {
 function fmtDateTime(dt?: string) {
   if (!dt) return '—';
   return format(new Date(dt), 'dd MMM yyyy, hh:mm a');
+}
+
+// ── Style factories ───────────────────────────────────────────────────────────
+
+function mkS(c: ThemeColors) {
+  return StyleSheet.create({
+    header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    headerTitle:  { fontSize: 20, fontWeight: '800', color: c.heading },
+    iconBtn:      { width: 32, height: 32, borderRadius: 8, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+    exportBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
+    exportBtnTxt: { fontSize: 13, fontWeight: '600', color: c.text },
+    exportMenu:   { position: 'absolute', top: '100%', right: 0, marginTop: 4, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, minWidth: 140, zIndex: 50, elevation: 4 },
+    exportMenuItem:{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
+    exportMenuTxt:{ fontSize: 13, color: c.text },
+    filterRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    searchBox:    { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: c.surface, minWidth: 180 },
+    searchInput:  { flex: 1, fontSize: 13, color: c.heading, minWidth: 120 },
+    filterBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
+    filterBtnTxt: { fontSize: 13, fontWeight: '600', color: c.text },
+    filterDot:    { width: 7, height: 7, borderRadius: 3.5, backgroundColor: c.sidebar },
+    iconBtn2:     { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface },
+    sortBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
+    sortBtnTxt:   { fontSize: 13, fontWeight: '600', color: c.text },
+    dropMenu:     { position: 'absolute', top: 38, left: 0, minWidth: 150, zIndex: 999, backgroundColor: c.surface, borderRadius: 10, borderWidth: 1, borderColor: c.border, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 12, elevation: 10, overflow: 'hidden' },
+    dropItem:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border },
+    dropItemActive:{ backgroundColor: c.surfaceAlt },
+    dropItemTxt:  { fontSize: 13, color: c.text },
+    loadWrap:    { paddingTop: 80, alignItems: 'center', gap: 12 },
+    loadTxt:     { fontSize: 14, color: c.textMuted },
+    emptyWrap:   { paddingVertical: 60, alignItems: 'center', gap: 10 },
+    emptyTitle:  { fontSize: 15, fontWeight: '600', color: c.textMuted },
+    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+    modalPanel:    { width: 600, maxWidth: '95%', maxHeight: '90%', borderRadius: 16, overflow: 'hidden', backgroundColor: c.surface, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
+  });
+}
+
+function mkTr(c: ThemeColors) {
+  return StyleSheet.create({
+    tableWrap:  { backgroundColor: c.surface, marginHorizontal: 12, marginTop: 12, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
+    headerRow:  { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceAlt, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    th:         { fontSize: 11, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.3 },
+    row:        { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: c.border },
+    rowAlt:     { backgroundColor: c.surfaceAlt },
+    cell:       { flexDirection: 'row', alignItems: 'center' },
+    cellTxt:    { fontSize: 13.5, color: c.text },
+    invNo:      { fontSize: 13.5, fontWeight: '600', color: c.heading },
+    orderNo:    { fontSize: 11, color: c.textMuted, marginTop: 1 },
+    amtTxt:     { fontSize: 13.5, fontWeight: '600', color: c.heading },
+    statusTxt:  { fontSize: 13.5, fontWeight: '600' },
+    actions:    { width: 80, alignItems: 'center', justifyContent: 'center' },
+    actionBtn:  { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    paidBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, width: 'auto', backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#86efac' },
+    paidBtnTxt: { fontSize: 11, fontWeight: '700', color: '#16a34a' },
+    footer:     { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surfaceAlt, borderTopWidth: 1, borderTopColor: c.border },
+    footerTxt:  { fontSize: 12, color: c.textMuted },
+  });
+}
+
+function mkPg(c: ThemeColors) {
+  return StyleSheet.create({
+    wrap:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface },
+    left:         { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    entriesInput: { width: 44, borderWidth: 1, borderColor: c.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: 13, color: c.heading, textAlign: 'center', backgroundColor: c.surface },
+    entriesLbl:   { fontSize: 13, color: c.text },
+    right:        { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    navBtn:       { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
+    navBtnDisabled: { opacity: 0.4 },
+    navBtnTxt:    { fontSize: 13, fontWeight: '600', color: c.text },
+    pageNumRow:   { flexDirection: 'row', gap: 4 },
+    pageBtn:      { width: 32, height: 32, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+    pageBtnActive:{ backgroundColor: PRIMARY, borderColor: PRIMARY },
+    pageBtnTxt:   { fontSize: 13, fontWeight: '600', color: c.text },
+    pageBtnTxtActive: { color: '#fff' },
+    bottomRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surfaceAlt },
+    showingTxt:   { fontSize: 12.5, color: c.brand, fontWeight: '600' },
+    numBar:       { flexDirection: 'row', alignItems: 'center', gap: 3 },
+    numBtn:       { width: 28, height: 28, borderRadius: 5, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+    numBtnArrow:  { backgroundColor: c.surface },
+    numBtnActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+    numBtnTxt:    { fontSize: 12, fontWeight: '600', color: c.text },
+    numBtnTxtActive: { color: '#fff' },
+  });
+}
+
+function mkCd(c: ThemeColors) {
+  return StyleSheet.create({
+    card:        { backgroundColor: c.surface, borderRadius: 12, padding: 14, marginBottom: 8, borderLeftWidth: 4, borderWidth: 1, borderColor: c.border, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+    top:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+    invNo:       { fontSize: 15, fontWeight: '800', color: c.heading },
+    orderNo:     { fontSize: 11, color: c.textMuted, marginTop: 2 },
+    badge:       { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1 },
+    badgeTxt:    { fontSize: 11, fontWeight: '700' },
+    mid:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+    customer:    { fontSize: 12.5, fontWeight: '600', color: c.text },
+    tableTag:    { fontSize: 11, fontWeight: '600', color: c.textMuted },
+    date:        { fontSize: 11, color: c.textMuted, flexShrink: 0 },
+    bot:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    methodChip:  { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.surfaceAlt, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
+    methodTxt:   { fontSize: 10, fontWeight: '600', color: c.textMuted },
+    typeChip:    { backgroundColor: '#f0f9ff', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
+    typeChipTxt: { fontSize: 10, fontWeight: '600', color: '#0284c7' },
+    itemChip:    { backgroundColor: '#eff6ff', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
+    itemChipTxt: { fontSize: 10, fontWeight: '600', color: PRIMARY },
+    total:       { fontSize: 17, fontWeight: '800', color: c.brand },
+  });
+}
+
+function mkDt(c: ThemeColors) {
+  return StyleSheet.create({
+    header:       { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 16, borderBottomWidth: 1, borderBottomColor: c.border, borderLeftWidth: 4 },
+    invNo:        { fontSize: 17, fontWeight: '800', color: c.heading },
+    orderNo:      { fontSize: 12, color: c.textMuted, marginTop: 3 },
+    statusBadge:  { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1, alignSelf: 'flex-start', marginTop: 2 },
+    statusTxt:    { fontSize: 11, fontWeight: '800' },
+    closeBtn:     { width: 30, height: 30, borderRadius: 8, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    accent:       { height: 3 },
+    section:      { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    sectionLbl:   { fontSize: 10.5, fontWeight: '800', color: c.textMuted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 },
+    infoGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    infoItem:     { minWidth: 140 },
+    infoLbl:      { fontSize: 10.5, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 },
+    infoVal:      { fontSize: 13.5, fontWeight: '600', color: c.heading },
+    tableHeader:  { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: c.border, marginBottom: 2 },
+    tHCell:       { fontSize: 10, fontWeight: '800', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+    tableRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7 },
+    qtyBox:       { width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    qtyTxt:       { fontSize: 11, fontWeight: '800' },
+    itemName:     { fontSize: 13, fontWeight: '600', color: c.heading },
+    cellTxt:      { fontSize: 12, color: c.textMuted },
+    amtTxt:       { fontSize: 13, fontWeight: '700', color: c.text },
+    sumRow:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5 },
+    sumLbl:       { fontSize: 13, color: c.textMuted },
+    sumVal:       { fontSize: 13, fontWeight: '600', color: c.text },
+    couponBadge:  { backgroundColor: '#fef9ec', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#fcd34d' },
+    couponCode:   { fontSize: 10, fontWeight: '700', color: '#d97706' },
+    totalRow:     { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 10, marginTop: 6, borderTopWidth: 1.5, borderTopColor: c.border },
+    totalLbl:     { fontSize: 15, fontWeight: '800', color: c.sidebar },
+    totalVal:     { fontSize: 18, fontWeight: '800', color: PRIMARY },
+    markPaidBtn:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#16a34a', borderRadius: 12, paddingVertical: 14 },
+    markPaidTxt:       { color: '#fff', fontWeight: '800', fontSize: 15 },
+    markPaidPanel:     { backgroundColor: c.surfaceAlt, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: c.border },
+    markPaidPanelTitle:{ fontSize: 13, fontWeight: '700', color: c.text },
+    pmChip:       { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, backgroundColor: c.surfaceAlt, borderWidth: 1.5, borderColor: c.border },
+    pmChipTxt:    { fontSize: 13, fontWeight: '600', color: c.textMuted },
+    cancelBtn:    { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 10, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+    cancelTxt:    { fontSize: 14, fontWeight: '700', color: c.textMuted },
+    confirmPaidBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: 10, backgroundColor: '#16a34a' },
+    confirmPaidTxt: { fontSize: 14, fontWeight: '800', color: '#fff' },
+    printBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: c.sidebar, borderRadius: 12, paddingVertical: 14 },
+    printTxt:     { color: c.brand, fontWeight: '800', fontSize: 15 },
+  });
 }
 
 // ── Print ─────────────────────────────────────────────────────────────────────
@@ -141,6 +294,9 @@ ${tableLine}${orderTypeLine}
 
 // ── Invoice Card (mobile) ─────────────────────────────────────────────────────
 function InvoiceCard({ inv, onPress }: { inv: Invoice; onPress: () => void }) {
+  const { colors: c } = useTheme();
+  const cd = useMemo(() => mkCd(c), [c]);
+
   const cfg = pCfg(inv.payment_status);
   return (
     <Pressable
@@ -157,12 +313,12 @@ function InvoiceCard({ inv, onPress }: { inv: Invoice; onPress: () => void }) {
       </View>
       <View style={cd.mid}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
-          <Ionicons name="person-outline" size={12} color="#94a3b8" />
+          <Ionicons name="person-outline" size={12} color={c.textMuted} />
           <Text style={cd.customer} numberOfLines={1}>{inv.customer_name || 'Walk-in'}</Text>
           {inv.table_name ? (
             <>
-              <Text style={{ color: '#d1d5db', fontSize: 11 }}>·</Text>
-              <Ionicons name="grid-outline" size={11} color="#94a3b8" />
+              <Text style={{ color: c.border, fontSize: 11 }}>·</Text>
+              <Ionicons name="grid-outline" size={11} color={c.textMuted} />
               <Text style={cd.tableTag}>{inv.table_name}</Text>
             </>
           ) : null}
@@ -173,7 +329,7 @@ function InvoiceCard({ inv, onPress }: { inv: Invoice; onPress: () => void }) {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
           {inv.payment_method ? (
             <View style={cd.methodChip}>
-              <Ionicons name="card-outline" size={10} color="#6b7280" />
+              <Ionicons name="card-outline" size={10} color={c.textMuted} />
               <Text style={cd.methodTxt}>{inv.payment_method.toUpperCase()}</Text>
             </View>
           ) : null}
@@ -203,13 +359,16 @@ function TableRow({
   onView: () => void;
   onMarkPaid: () => void;
 }) {
+  const { colors: c } = useTheme();
+  const tr = useMemo(() => mkTr(c), [c]);
+
   const cfg = pCfg(inv.payment_status);
   return (
     <Pressable
       style={({ pressed }) => [
         tr.row,
         idx % 2 === 1 && tr.rowAlt,
-        pressed && { backgroundColor: '#f8fafc' },
+        pressed && { backgroundColor: c.surfaceAlt },
       ]}
       onPress={onView}>
       {/* Invoice ID */}
@@ -232,16 +391,16 @@ function TableRow({
       <Text style={[tr.amtTxt, { width: 100 }]}>
         ₹{Number(inv.total).toFixed(2)}
       </Text>
-      {/* Status — plain colored text, matching CSPos */}
+      {/* Status */}
       <View style={{ width: 100 }}>
         <Text style={[tr.statusTxt, { color: cfg.color }]}>{cfg.label}</Text>
       </View>
-      {/* Actions — eye icon only */}
+      {/* Actions */}
       <View style={tr.actions}>
         <Pressable
           style={({ pressed }) => [tr.actionBtn, pressed && { opacity: 0.7 }]}
           onPress={(e) => { e.stopPropagation?.(); onView(); }}>
-          <Ionicons name="eye-outline" size={17} color="#6b7280" />
+          <Ionicons name="eye-outline" size={17} color={c.textMuted} />
         </Pressable>
       </View>
     </Pressable>
@@ -257,6 +416,9 @@ function InvoiceDetail({
   onClose: () => void;
   onUpdated: (updated: Invoice) => void;
 }) {
+  const { colors: c } = useTheme();
+  const dt = useMemo(() => mkDt(c), [c]);
+
   const cfg = pCfg(inv.payment_status);
   const [saving,         setSaving]         = useState(false);
   const [showMarkPaid,   setShowMarkPaid]   = useState(false);
@@ -283,7 +445,7 @@ function InvoiceDetail({
   }, [inv, markPaidMethod, onUpdated]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#fff' }}>
+    <View style={{ flex: 1, backgroundColor: c.surface }}>
       {/* Header */}
       <View style={[dt.header, { borderLeftColor: cfg.color }]}>
         <View style={{ flex: 1 }}>
@@ -294,7 +456,7 @@ function InvoiceDetail({
           <Text style={[dt.statusTxt, { color: cfg.color }]}>{cfg.label}</Text>
         </View>
         <Pressable style={({ pressed }) => [dt.closeBtn, pressed && { opacity: 0.7 }]} onPress={onClose}>
-          <Ionicons name="close" size={18} color="#374151" />
+          <Ionicons name="close" size={18} color={c.text} />
         </Pressable>
       </View>
 
@@ -361,7 +523,7 @@ function InvoiceDetail({
               <Text style={[dt.tHCell, { width: 76, textAlign: 'right' }]}>Amount</Text>
             </View>
             {inv.items!.map((item, idx) => (
-              <View key={idx} style={[dt.tableRow, idx % 2 === 1 && { backgroundColor: '#fafafa' }]}>
+              <View key={idx} style={[dt.tableRow, idx % 2 === 1 && { backgroundColor: c.surfaceAlt }]}>
                 <View style={[dt.qtyBox, { backgroundColor: cfg.bg }]}>
                   <Text style={[dt.qtyTxt, { color: cfg.color }]}>{item.quantity}</Text>
                 </View>
@@ -434,17 +596,17 @@ function InvoiceDetail({
                       key={pm.key}
                       style={[
                         dt.pmChip,
-                        markPaidMethod === pm.key && { backgroundColor: FOREST, borderColor: FOREST },
+                        markPaidMethod === pm.key && { backgroundColor: c.sidebar, borderColor: c.sidebar },
                       ]}
                       onPress={() => setMarkPaidMethod(pm.key)}>
                       <Ionicons
                         name={pm.icon}
                         size={14}
-                        color={markPaidMethod === pm.key ? GOLD : '#6b7280'}
+                        color={markPaidMethod === pm.key ? c.brand : c.textMuted}
                       />
                       <Text style={[
                         dt.pmChipTxt,
-                        markPaidMethod === pm.key && { color: GOLD, fontWeight: '700' },
+                        markPaidMethod === pm.key && { color: c.brand, fontWeight: '700' },
                       ]}>{pm.label}</Text>
                     </Pressable>
                   ))}
@@ -476,7 +638,7 @@ function InvoiceDetail({
             <Pressable
               style={({ pressed }) => [dt.printBtn, pressed && { opacity: 0.8 }]}
               onPress={() => printInvoice(inv, restaurant)}>
-              <Ionicons name="print-outline" size={17} color={GOLD} />
+              <Ionicons name="print-outline" size={17} color={c.brand} />
               <Text style={dt.printTxt}>Print Invoice</Text>
             </Pressable>
           )}
@@ -498,7 +660,9 @@ function PaginationBar({
   onPage: (p: number) => void;
   onPerPage: (n: number) => void;
 }) {
-  const pages = Array.from({ length: Math.min(totalPages, 8) }, (_, i) => i + 1);
+  const { colors: c } = useTheme();
+  const pg = useMemo(() => mkPg(c), [c]);
+
   return (
     <View style={pg.wrap}>
       {/* Left: entries selector */}
@@ -517,8 +681,8 @@ function PaginationBar({
       <View style={pg.right}>
         <Pressable style={({ pressed }) => [pg.navBtn, page <= 1 && pg.navBtnDisabled, pressed && { opacity: 0.6 }]}
           onPress={() => page > 1 && onPage(page - 1)} disabled={page <= 1}>
-          <Ionicons name="chevron-back" size={13} color={page <= 1 ? '#d1d5db' : '#374151'} />
-          <Text style={[pg.navBtnTxt, page <= 1 && { color: '#d1d5db' }]}>Prev</Text>
+          <Ionicons name="chevron-back" size={13} color={page <= 1 ? c.border : c.text} />
+          <Text style={[pg.navBtnTxt, page <= 1 && { color: c.border }]}>Prev</Text>
         </Pressable>
         <View style={pg.pageNumRow}>
           <Pressable style={[pg.pageBtn, page === 1 && pg.pageBtnActive]} onPress={() => onPage(1)}>
@@ -532,8 +696,8 @@ function PaginationBar({
         </View>
         <Pressable style={({ pressed }) => [pg.navBtn, page >= totalPages && pg.navBtnDisabled, pressed && { opacity: 0.6 }]}
           onPress={() => page < totalPages && onPage(page + 1)} disabled={page >= totalPages}>
-          <Text style={[pg.navBtnTxt, page >= totalPages && { color: '#d1d5db' }]}>Next</Text>
-          <Ionicons name="chevron-forward" size={13} color={page >= totalPages ? '#d1d5db' : '#374151'} />
+          <Text style={[pg.navBtnTxt, page >= totalPages && { color: c.border }]}>Next</Text>
+          <Ionicons name="chevron-forward" size={13} color={page >= totalPages ? c.border : c.text} />
         </Pressable>
       </View>
     </View>
@@ -543,12 +707,15 @@ function PaginationBar({
 function PageNumBar({
   page, totalPages, onPage,
 }: { page: number; totalPages: number; onPage: (p: number) => void }) {
+  const { colors: c } = useTheme();
+  const pg = useMemo(() => mkPg(c), [c]);
+
   const maxPages = Math.min(totalPages, 8);
   const pageList = Array.from({ length: maxPages }, (_, i) => i + 1);
   return (
     <View style={pg.numBar}>
       <Pressable style={[pg.numBtn, pg.numBtnArrow]} onPress={() => page > 1 && onPage(page - 1)} disabled={page <= 1}>
-        <Ionicons name="chevron-back" size={12} color={page <= 1 ? '#d1d5db' : '#374151'} />
+        <Ionicons name="chevron-back" size={12} color={page <= 1 ? c.border : c.text} />
       </Pressable>
       {pageList.map(p => (
         <Pressable key={p} style={[pg.numBtn, page === p && pg.numBtnActive]} onPress={() => onPage(p)}>
@@ -557,7 +724,7 @@ function PageNumBar({
       ))}
       {totalPages > 8 && <Text style={pg.numBtnTxt}>…</Text>}
       <Pressable style={[pg.numBtn, pg.numBtnArrow]} onPress={() => page < totalPages && onPage(page + 1)} disabled={page >= totalPages}>
-        <Ionicons name="chevron-forward" size={12} color={page >= totalPages ? '#d1d5db' : '#374151'} />
+        <Ionicons name="chevron-forward" size={12} color={page >= totalPages ? c.border : c.text} />
       </Pressable>
     </View>
   );
@@ -565,14 +732,18 @@ function PageNumBar({
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function InvoicesScreen() {
+  const { colors: c } = useTheme();
+  const s  = useMemo(() => mkS(c), [c]);
+  const tr = useMemo(() => mkTr(c), [c]);
+  const pg = useMemo(() => mkPg(c), [c]);
+
   const [invoices,   setInvoices]   = useState<Invoice[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [total,      setTotal]      = useState(0);   // server total count
+  const [total,      setTotal]      = useState(0);
   const [page,       setPage]       = useState(1);
   const [perPage,    setPerPage]    = useState(10);
 
-  // Pending filter state
   const [search,       setSearch]       = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortOrder,    setSortOrder]    = useState<'newest' | 'oldest'>('newest');
@@ -587,7 +758,6 @@ export default function InvoicesScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 900;
 
-  // ── Load (server-side page + filter) ─────────────────────────────────────────
   const load = useCallback(async (opts?: {
     pg?: number; pp?: number; silent?: boolean;
     status?: string; q?: string;
@@ -633,7 +803,6 @@ export default function InvoicesScreen() {
     setExportOpen(false);
   }
 
-  // Client-side filter + sort applied to current page data
   const filtered = useMemo(() => {
     let list = [...invoices];
     if (statusFilter) list = list.filter(inv => inv.payment_status === statusFilter);
@@ -651,9 +820,9 @@ export default function InvoicesScreen() {
     return list;
   }, [invoices, search, statusFilter, sortOrder]);
 
-  const totalPages = Math.max(1, Math.ceil((total || filtered.length) / perPage));
-  const fromNum    = Math.max(1, (page - 1) * perPage + 1);
-  const toNum      = Math.min(total || filtered.length, page * perPage);
+  const totalPages   = Math.max(1, Math.ceil((total || filtered.length) / perPage));
+  const fromNum      = Math.max(1, (page - 1) * perPage + 1);
+  const toNum        = Math.min(total || filtered.length, page * perPage);
   const displayTotal = total || filtered.length;
 
   const handleUpdated = useCallback((updated: Invoice) => {
@@ -663,7 +832,6 @@ export default function InvoicesScreen() {
 
   function openDetail(inv: Invoice) { setSelected(inv); setShowDetail(true); }
 
-  // Status filter dropdown options
   const STATUS_OPTIONS = [
     { key: '', label: 'All' },
     { key: 'paid', label: 'Paid' },
@@ -673,31 +841,31 @@ export default function InvoicesScreen() {
   ];
 
   return (
-    <Pressable style={{ flex: 1, backgroundColor: '#f4f6f9' }} onPress={() => { setSortOpen(false); setFilterOpen(false); }}>
+    <Pressable style={{ flex: 1, backgroundColor: c.background }} onPress={() => { setSortOpen(false); setFilterOpen(false); }}>
       {/* ── Header ── */}
       <View style={s.header}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Text style={s.headerTitle}>Invoices</Text>
           <Pressable style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]} onPress={doRefresh}>
             {refreshing
-              ? <ActivityIndicator size="small" color="#374151" />
-              : <Ionicons name="refresh-outline" size={16} color="#374151" />}
+              ? <ActivityIndicator size="small" color={c.text} />
+              : <Ionicons name="refresh-outline" size={16} color={c.text} />}
           </Pressable>
         </View>
         <View style={{ position: 'relative' }}>
-        <Pressable style={({ pressed }) => [s.exportBtn, pressed && { opacity: 0.8 }]} onPress={() => setExportOpen(o => !o)}>
-          <Ionicons name="arrow-up-circle-outline" size={14} color="#374151" />
-          <Text style={s.exportBtnTxt}>Export</Text>
-          <Ionicons name="chevron-down" size={12} color="#374151" />
-        </Pressable>
-        {exportOpen && (
-          <View style={[s.exportMenu]}>
-            <Pressable style={s.exportMenuItem} onPress={handleExport}>
-              <Ionicons name="document-text-outline" size={14} color="#374151" />
-              <Text style={s.exportMenuTxt}>Export CSV</Text>
-            </Pressable>
-          </View>
-        )}
+          <Pressable style={({ pressed }) => [s.exportBtn, pressed && { opacity: 0.8 }]} onPress={() => setExportOpen(o => !o)}>
+            <Ionicons name="arrow-up-circle-outline" size={14} color={c.text} />
+            <Text style={s.exportBtnTxt}>Export</Text>
+            <Ionicons name="chevron-down" size={12} color={c.text} />
+          </Pressable>
+          {exportOpen && (
+            <View style={s.exportMenu}>
+              <Pressable style={s.exportMenuItem} onPress={handleExport}>
+                <Ionicons name="document-text-outline" size={14} color={c.text} />
+                <Text style={s.exportMenuTxt}>Export CSV</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
       </View>
 
@@ -711,23 +879,22 @@ export default function InvoicesScreen() {
             onChangeText={v => {
               setSearch(v);
               setPage(1);
-              // Debounce: wait 400ms after user stops typing before fetching
               if ((load as any)._searchTimer) clearTimeout((load as any)._searchTimer);
               (load as any)._searchTimer = setTimeout(() => load({ pg: 1, q: v }), 400);
             }}
             placeholder="Search invoices…"
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={c.textMuted}
           />
-          <Ionicons name="search-outline" size={15} color="#9ca3af" />
+          <Ionicons name="search-outline" size={15} color={c.textMuted} />
         </View>
 
         <View style={{ flex: 1 }} />
 
         {/* Filter dropdown */}
         <View style={{ position: 'relative', zIndex: 100 }}>
-          <Pressable style={({ pressed }) => [s.filterBtn, filterOpen && { borderColor: FOREST }, pressed && { opacity: 0.8 }]}
+          <Pressable style={({ pressed }) => [s.filterBtn, filterOpen && { borderColor: c.sidebar }, pressed && { opacity: 0.8 }]}
             onPress={e => { e.stopPropagation?.(); setFilterOpen(p => !p); setSortOpen(false); }}>
-            <Ionicons name="funnel-outline" size={14} color="#374151" />
+            <Ionicons name="funnel-outline" size={14} color={c.text} />
             <Text style={s.filterBtnTxt}>Filter</Text>
             {statusFilter ? <View style={s.filterDot} /> : null}
           </Pressable>
@@ -737,11 +904,11 @@ export default function InvoicesScreen() {
                 <Pressable key={o.key} style={[s.dropItem, statusFilter === o.key && s.dropItemActive]}
                   onPress={() => { setStatusFilter(o.key); setFilterOpen(false); setPage(1); load({ pg: 1, status: o.key }); }}>
                   {o.key ? (
-                    <Text style={[s.dropItemTxt, { color: PAY_CFG[o.key]?.color ?? '#374151' }, statusFilter === o.key && { fontWeight: '700' }]}>{o.label}</Text>
+                    <Text style={[s.dropItemTxt, { color: PAY_CFG[o.key]?.color ?? c.text }, statusFilter === o.key && { fontWeight: '700' }]}>{o.label}</Text>
                   ) : (
-                    <Text style={[s.dropItemTxt, statusFilter === '' && { fontWeight: '700', color: FOREST }]}>All Statuses</Text>
+                    <Text style={[s.dropItemTxt, statusFilter === '' && { fontWeight: '700', color: c.sidebar }]}>All Statuses</Text>
                   )}
-                  {statusFilter === o.key && <Ionicons name="checkmark" size={13} color={FOREST} />}
+                  {statusFilter === o.key && <Ionicons name="checkmark" size={13} color={c.sidebar} />}
                 </Pressable>
               ))}
             </View>
@@ -750,7 +917,7 @@ export default function InvoicesScreen() {
 
         {/* Column toggle (cosmetic) */}
         <Pressable style={({ pressed }) => [s.iconBtn2, pressed && { opacity: 0.7 }]}>
-          <Ionicons name="grid-outline" size={16} color="#374151" />
+          <Ionicons name="grid-outline" size={16} color={c.text} />
         </Pressable>
 
         {/* Sort dropdown */}
@@ -758,15 +925,15 @@ export default function InvoicesScreen() {
           <Pressable style={({ pressed }) => [s.sortBtn, pressed && { opacity: 0.8 }]}
             onPress={e => { e.stopPropagation?.(); setSortOpen(p => !p); setFilterOpen(false); }}>
             <Text style={s.sortBtnTxt}>Sort by : {sortOrder === 'newest' ? 'Newest' : 'Oldest'}</Text>
-            <Ionicons name={sortOpen ? 'chevron-up' : 'chevron-down'} size={12} color="#374151" />
+            <Ionicons name={sortOpen ? 'chevron-up' : 'chevron-down'} size={12} color={c.text} />
           </Pressable>
           {sortOpen && (
             <View style={[s.dropMenu, { right: 0, left: 'auto' as any, minWidth: 140 }]}>
               {(['newest', 'oldest'] as const).map(o => (
                 <Pressable key={o} style={[s.dropItem, sortOrder === o && s.dropItemActive]}
                   onPress={() => { setSortOrder(o); setSortOpen(false); }}>
-                  <Text style={[s.dropItemTxt, sortOrder === o && { fontWeight: '700', color: FOREST }]}>{o === 'newest' ? 'Newest' : 'Oldest'}</Text>
-                  {sortOrder === o && <Ionicons name="checkmark" size={13} color={FOREST} />}
+                  <Text style={[s.dropItemTxt, sortOrder === o && { fontWeight: '700', color: c.sidebar }]}>{o === 'newest' ? 'Newest' : 'Oldest'}</Text>
+                  {sortOrder === o && <Ionicons name="checkmark" size={13} color={c.sidebar} />}
                 </Pressable>
               ))}
             </View>
@@ -777,12 +944,12 @@ export default function InvoicesScreen() {
       {/* ── Table ── */}
       {loading ? (
         <View style={s.loadWrap}>
-          <ActivityIndicator color={FOREST} size="large" />
+          <ActivityIndicator color={c.sidebar} size="large" />
           <Text style={s.loadTxt}>Loading invoices…</Text>
         </View>
       ) : isDesktop ? (
         <ScrollView style={{ flex: 1 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={doRefresh} tintColor={FOREST} />}>
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={doRefresh} tintColor={c.brand} />}>
           <View style={tr.tableWrap}>
             {/* Header */}
             <View style={tr.headerRow}>
@@ -797,7 +964,7 @@ export default function InvoicesScreen() {
             {/* Rows */}
             {filtered.length === 0 ? (
               <View style={s.emptyWrap}>
-                <Ionicons name="document-text-outline" size={36} color="#94a3b8" />
+                <Ionicons name="document-text-outline" size={36} color={c.textMuted} />
                 <Text style={s.emptyTitle}>No invoices found</Text>
               </View>
             ) : (
@@ -829,11 +996,11 @@ export default function InvoicesScreen() {
           data={filtered}
           keyExtractor={i => String(i.id)}
           contentContainerStyle={{ padding: 10, paddingBottom: 40, flexGrow: 1 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={doRefresh} tintColor={FOREST} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={doRefresh} tintColor={c.brand} />}
           renderItem={({ item }) => <InvoiceCard inv={item} onPress={() => openDetail(item)} />}
           ListEmptyComponent={
             <View style={s.emptyWrap}>
-              <Ionicons name="document-text-outline" size={36} color="#94a3b8" />
+              <Ionicons name="document-text-outline" size={36} color={c.textMuted} />
               <Text style={s.emptyTitle}>No invoices found</Text>
             </View>
           }
@@ -863,156 +1030,3 @@ export default function InvoicesScreen() {
     </Pressable>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  // Header
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  headerTitle:  { fontSize: 20, fontWeight: '800', color: '#111827' },
-  iconBtn:      { width: 32, height: 32, borderRadius: 8, backgroundColor: '#f5f6f8', borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' },
-  exportBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
-  exportBtnTxt: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  exportMenu:   { position: 'absolute', top: '100%', right: 0, marginTop: 4, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', minWidth: 140, zIndex: 50, elevation: 4 },
-  exportMenuItem:{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
-  exportMenuTxt:{ fontSize: 13, color: '#374151' },
-
-  // Filter bar
-  filterRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  searchBox:    { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#fff', minWidth: 180 },
-  searchInput:  { flex: 1, fontSize: 13, color: '#111827', minWidth: 120 },
-  filterBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
-  filterBtnTxt: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  filterDot:    { width: 7, height: 7, borderRadius: 3.5, backgroundColor: FOREST },
-  iconBtn2:     { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  sortBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
-  sortBtnTxt:   { fontSize: 13, fontWeight: '600', color: '#374151' },
-  dropMenu:     { position: 'absolute', top: 38, left: 0, minWidth: 150, zIndex: 999, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 12, elevation: 10, overflow: 'hidden' },
-  dropItem:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  dropItemActive:{ backgroundColor: '#f0fdf4' },
-  dropItemTxt:  { fontSize: 13, color: '#374151' },
-
-  // Load / empty
-  loadWrap:    { paddingTop: 80, alignItems: 'center', gap: 12 },
-  loadTxt:     { fontSize: 14, color: '#9ca3af' },
-  emptyWrap:   { paddingVertical: 60, alignItems: 'center', gap: 10 },
-  emptyTitle:  { fontSize: 15, fontWeight: '600', color: '#9ca3af' },
-
-  // Detail modal
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  modalPanel:    { width: 600, maxWidth: '95%', maxHeight: '90%', borderRadius: 16, overflow: 'hidden', backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
-});
-
-// Desktop table styles
-const tr = StyleSheet.create({
-  tableWrap:  { backgroundColor: '#fff', marginHorizontal: 12, marginTop: 12, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb' },
-  headerRow:  { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  th:         { fontSize: 11, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.3 },
-  row:        { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  rowAlt:     { backgroundColor: '#fafafa' },
-  cell:       { flexDirection: 'row', alignItems: 'center' },
-  cellTxt:    { fontSize: 13.5, color: '#374151' },
-  invNo:      { fontSize: 13.5, fontWeight: '600', color: '#111827' },
-  orderNo:    { fontSize: 11, color: '#9ca3af', marginTop: 1 },
-  amtTxt:     { fontSize: 13.5, fontWeight: '600', color: '#111827' },
-  statusTxt:  { fontSize: 13.5, fontWeight: '600' },
-  actions:    { width: 80, alignItems: 'center', justifyContent: 'center' },
-  actionBtn:  { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  paidBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, width: 'auto', backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#86efac' },
-  paidBtnTxt: { fontSize: 11, fontWeight: '700', color: '#16a34a' },
-  footer:     { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#f8fafc', borderTopWidth: 1, borderTopColor: '#e5e7eb' },
-  footerTxt:  { fontSize: 12, color: '#9ca3af' },
-});
-
-// Pagination styles
-const pg = StyleSheet.create({
-  wrap:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#e5e7eb', backgroundColor: '#fff' },
-  left:         { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  entriesInput: { width: 44, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: 13, color: '#111827', textAlign: 'center', backgroundColor: '#fff' },
-  entriesLbl:   { fontSize: 13, color: '#374151' },
-  right:        { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  navBtn:       { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
-  navBtnDisabled: { opacity: 0.4 },
-  navBtnTxt:    { fontSize: 13, fontWeight: '600', color: '#374151' },
-  pageNumRow:   { flexDirection: 'row', gap: 4 },
-  pageBtn:      { width: 32, height: 32, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  pageBtnActive:{ backgroundColor: PRIMARY, borderColor: PRIMARY },
-  pageBtnTxt:   { fontSize: 13, fontWeight: '600', color: '#374151' },
-  pageBtnTxtActive: { color: '#fff' },
-
-  bottomRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f3f4f6', backgroundColor: '#fafafa' },
-  showingTxt:   { fontSize: 12.5, color: GOLD, fontWeight: '600' },
-  numBar:       { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  numBtn:       { width: 28, height: 28, borderRadius: 5, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  numBtnArrow:  { backgroundColor: '#fff' },
-  numBtnActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  numBtnTxt:    { fontSize: 12, fontWeight: '600', color: '#374151' },
-  numBtnTxtActive: { color: '#fff' },
-});
-
-// Mobile card styles
-const cd = StyleSheet.create({
-  card:        { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, borderLeftWidth: 4, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  top:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-  invNo:       { fontSize: 15, fontWeight: '800', color: '#111827' },
-  orderNo:     { fontSize: 11, color: '#9ca3af', marginTop: 2 },
-  badge:       { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1 },
-  badgeTxt:    { fontSize: 11, fontWeight: '700' },
-  mid:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  customer:    { fontSize: 12.5, fontWeight: '600', color: '#374151' },
-  tableTag:    { fontSize: 11, fontWeight: '600', color: '#6b7280' },
-  date:        { fontSize: 11, color: '#9ca3af', flexShrink: 0 },
-  bot:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  methodChip:  { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f3f4f6', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
-  methodTxt:   { fontSize: 10, fontWeight: '600', color: '#6b7280' },
-  typeChip:    { backgroundColor: '#f0f9ff', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
-  typeChipTxt: { fontSize: 10, fontWeight: '600', color: '#0284c7' },
-  itemChip:    { backgroundColor: '#eff6ff', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
-  itemChipTxt: { fontSize: 10, fontWeight: '600', color: PRIMARY },
-  total:       { fontSize: 17, fontWeight: '800', color: GOLD },
-});
-
-// Detail panel styles
-const dt = StyleSheet.create({
-  header:       { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', borderLeftWidth: 4 },
-  invNo:        { fontSize: 17, fontWeight: '800', color: '#111827' },
-  orderNo:      { fontSize: 12, color: '#9ca3af', marginTop: 3 },
-  statusBadge:  { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1, alignSelf: 'flex-start', marginTop: 2 },
-  statusTxt:    { fontSize: 11, fontWeight: '800' },
-  closeBtn:     { width: 30, height: 30, borderRadius: 8, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  accent:       { height: 3 },
-  section:      { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  sectionLbl:   { fontSize: 10.5, fontWeight: '800', color: '#9ca3af', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 },
-  infoGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  infoItem:     { minWidth: 140 },
-  infoLbl:      { fontSize: 10.5, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 },
-  infoVal:      { fontSize: 13.5, fontWeight: '600', color: '#111827' },
-  tableHeader:  { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', marginBottom: 2 },
-  tHCell:       { fontSize: 10, fontWeight: '800', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 },
-  tableRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7 },
-  qtyBox:       { width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  qtyTxt:       { fontSize: 11, fontWeight: '800' },
-  itemName:     { fontSize: 13, fontWeight: '600', color: '#111827' },
-  cellTxt:      { fontSize: 12, color: '#6b7280' },
-  amtTxt:       { fontSize: 13, fontWeight: '700', color: '#374151' },
-  sumRow:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5 },
-  sumLbl:       { fontSize: 13, color: '#6b7280' },
-  sumVal:       { fontSize: 13, fontWeight: '600', color: '#374151' },
-  couponBadge:  { backgroundColor: '#fef9ec', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#fcd34d' },
-  couponCode:   { fontSize: 10, fontWeight: '700', color: '#d97706' },
-  totalRow:     { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 10, marginTop: 6, borderTopWidth: 1.5, borderTopColor: '#e5e7eb' },
-  totalLbl:     { fontSize: 15, fontWeight: '800', color: FOREST },
-  totalVal:     { fontSize: 18, fontWeight: '800', color: PRIMARY },
-  markPaidBtn:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#16a34a', borderRadius: 12, paddingVertical: 14 },
-  markPaidTxt:       { color: '#fff', fontWeight: '800', fontSize: 15 },
-  markPaidPanel:     { backgroundColor: '#f8fafc', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#e5e7eb' },
-  markPaidPanelTitle:{ fontSize: 13, fontWeight: '700', color: '#374151' },
-  pmChip:       { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  pmChipTxt:    { fontSize: 13, fontWeight: '600', color: '#6b7280' },
-  cancelBtn:    { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 10, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  cancelTxt:    { fontSize: 14, fontWeight: '700', color: '#6b7280' },
-  confirmPaidBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: 10, backgroundColor: '#16a34a' },
-  confirmPaidTxt: { fontSize: 14, fontWeight: '800', color: '#fff' },
-  printBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: FOREST, borderRadius: 12, paddingVertical: 14 },
-  printTxt:     { color: GOLD, fontWeight: '800', fontSize: 15 },
-});
-

@@ -23,6 +23,7 @@ interface CartState {
   addItem: (item: Omit<CartItem, 'uuid'>) => void;
   removeItem: (uuid: string) => void;
   updateQuantity: (uuid: string, quantity: number) => void;
+  updateUnitPrice: (uuid: string, unitPrice: number) => void;
   setOrderType: (type: OrderType) => void;
   /**
    * setTable — lightweight: just updates cart.table_id without any slot
@@ -93,6 +94,16 @@ export const useCartStore = create<CartState>()(
                   ? { ...i, quantity, total_price: i.unit_price * quantity }
                   : i
               ),
+      },
+    })),
+
+  updateUnitPrice: (itemUuid, unitPrice) =>
+    set((s) => ({
+      cart: {
+        ...s.cart,
+        items: s.cart.items.map((i) =>
+          i.uuid === itemUuid ? { ...i, unit_price: unitPrice, total_price: unitPrice * i.quantity } : i
+        ),
       },
     })),
 

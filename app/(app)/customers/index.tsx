@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import Toast from 'react-native-toast-message';
 import client from '@/api/client';
+import { useTheme } from '@/store/themeStore';
+import type { ThemeColors } from '@/theme/tokens';
 import type { Customer } from '@/types';
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
@@ -50,6 +52,145 @@ function balanceInfo(balance?: number | null) {
   if (b === 0) return { label: '₹0.00', color: '#9ca3af', isDue: false };
   if (b < 0)  return { label: `Due ₹${Math.abs(b).toFixed(2)}`, color: DUE_RED, isDue: true };
   return { label: `Credit ₹${b.toFixed(2)}`, color: CRE_GRN, isDue: false };
+}
+
+// ── Style factories ────────────────────────────────────────────────────────────
+
+function mkPm(c: ThemeColors) {
+  return StyleSheet.create({
+    overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+    box:       { backgroundColor: c.surface, borderRadius: 16, width: '100%', maxWidth: 440, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 12 },
+    hdr:       { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+    hdrIcon:   { width: 40, height: 40, borderRadius: 10, backgroundColor: '#f0fdf4', alignItems: 'center', justifyContent: 'center' },
+    hdrTitle:  { flex: 1, fontSize: 17, fontWeight: '800', color: c.heading },
+    closeBtn:  { padding: 4 },
+    info:      { backgroundColor: c.surfaceAlt, borderRadius: 10, padding: 14, marginBottom: 18, gap: 4 },
+    infoRow:   { fontSize: 13, color: c.textMuted },
+    infoBold:  { fontWeight: '700', color: c.heading },
+    label:     { fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6 },
+    inputWrap: { borderWidth: 1.5, borderColor: c.border, borderRadius: 10, backgroundColor: c.surfaceAlt, marginBottom: 6 },
+    input:     { padding: 12, fontSize: 14, color: c.heading },
+    hint:      { fontSize: 11.5, color: c.textMuted, lineHeight: 16, marginTop: 2 },
+    error:     { color: DUE_RED, fontSize: 12, marginTop: 10, fontWeight: '600' },
+    actions:   { flexDirection: 'row', gap: 10, marginTop: 20 },
+    cancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 10, alignItems: 'center', borderWidth: 1.5, borderColor: c.border },
+    cancelTxt: { fontSize: 14, fontWeight: '700', color: c.textMuted },
+    recordBtn: { flex: 2, paddingVertical: 13, borderRadius: 10, alignItems: 'center', backgroundColor: PRIMARY },
+    recordTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  });
+}
+
+function mkFm(c: ThemeColors) {
+  return StyleSheet.create({
+    backdrop:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+    panel:         { width: '100%', maxHeight: '90%', borderRadius: 16, overflow: 'hidden', backgroundColor: c.surface, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
+    panelDesktop:  { width: 500, maxWidth: 500 },
+    header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, backgroundColor: c.sidebar },
+    headerLeft:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    headerIcon:    { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(201,165,42,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(201,165,42,0.25)' },
+    headerTitle:   { fontSize: 15, fontWeight: '800', color: '#fff' },
+    headerSub:     { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
+    closeBtn:      { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+    field:         { gap: 6 },
+    label:         { fontSize: 13, fontWeight: '600', color: c.text },
+    inputWrap:     { borderWidth: 1.5, borderColor: c.border, borderRadius: 10, backgroundColor: c.surfaceAlt },
+    textareaWrap:  { height: 80 },
+    input:         { paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: c.heading, backgroundColor: 'transparent' },
+    textarea:      { height: 80, paddingTop: 10 },
+    segRow:        { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+    segBtn:        { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8, borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surfaceAlt },
+    segBtnActive:  { borderColor: PRIMARY, backgroundColor: '#eff6ff' },
+    segBtnDanger:  { borderColor: DUE_RED, backgroundColor: '#fef2f2' },
+    segTxt:        { fontSize: 13, fontWeight: '600', color: c.textMuted },
+    segTxtActive:  { color: PRIMARY },
+    segTxtDanger:  { color: DUE_RED },
+    footer:        { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface },
+    cancelBtn:     { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: c.border },
+    cancelTxt:     { fontWeight: '700', color: c.text, fontSize: 14 },
+    saveBtn:       { flex: 2, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: c.sidebar },
+    saveTxt:       { fontWeight: '800', color: '#fff', fontSize: 14 },
+  });
+}
+
+function mkGv(c: ThemeColors) {
+  return StyleSheet.create({
+    card:        { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: 'hidden' },
+    cardTop:     { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderBottomWidth: 1, borderBottomColor: c.border },
+    name:        { fontSize: 14, fontWeight: '700', color: c.heading },
+    id:          { fontSize: 11, color: c.textMuted, marginTop: 1 },
+    cardBody:    { padding: 12, gap: 7 },
+    infoRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    infoVal:     { fontSize: 12.5, color: c.text, flex: 1 },
+    cardActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: c.border },
+    actionBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 9, borderRightWidth: 1, borderRightColor: c.border },
+    payBtn:      { backgroundColor: '#f0fdf4' },
+    editBtn:     { backgroundColor: '#fefce8' },
+    delBtn:      { backgroundColor: '#fff1f2', borderRightWidth: 0 },
+    payTxt:      { fontSize: 12, fontWeight: '700', color: CRE_GRN },
+    editTxt:     { fontSize: 12, fontWeight: '700', color: '#b45309' },
+    delTxt:      { fontSize: 12, fontWeight: '700', color: DUE_RED },
+  });
+}
+
+function mkTbl(c: ThemeColors) {
+  return StyleSheet.create({
+    tableWrap:  { backgroundColor: c.surface },
+    headerRow:  { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceAlt, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: c.border },
+    th:         { fontSize: 11, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.3, paddingHorizontal: 12 },
+    row:        { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: c.border },
+    rowAlt:     { backgroundColor: c.surfaceAlt },
+    cell:       { fontSize: 13, color: c.text, paddingHorizontal: 12, paddingVertical: 12 },
+    cId:        { width: 72 },
+    cName:      { flex: 1.8, paddingHorizontal: 12 },
+    cPhone:     { flex: 1.1 },
+    cOrders:    { width: 76, flexDirection: 'row' },
+    cLast:      { flex: 1.2 },
+    cBal:       { flex: 1.1, paddingHorizontal: 12 },
+    cStatus:    { flex: 0.9, paddingHorizontal: 12 },
+    cAct:       { width: 116, paddingHorizontal: 10, paddingVertical: 10 },
+    custName:   { fontSize: 13.5, fontWeight: '600', color: c.heading },
+    custEmail:  { fontSize: 11, color: c.textMuted, marginTop: 1 },
+    dash:       { fontSize: 12, color: c.border },
+    actBtn:     { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+    actPay:     { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+    actEdit:    { backgroundColor: '#fef9c3', borderColor: '#fef3c7' },
+    actDel:     { backgroundColor: '#fff1f2', borderColor: '#fecaca' },
+  });
+}
+
+function mkDc(c: ThemeColors) {
+  return StyleSheet.create({
+    overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+    box:       { backgroundColor: c.surface, borderRadius: 16, width: '100%', maxWidth: 380, padding: 28, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
+    iconWrap:  { width: 64, height: 64, borderRadius: 32, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center', marginBottom: 16, borderWidth: 2, borderColor: '#fecaca' },
+    title:     { fontSize: 18, fontWeight: '800', color: c.heading, marginBottom: 8 },
+    message:   { fontSize: 14, color: c.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+    name:      { fontWeight: '700', color: c.heading },
+    actions:   { flexDirection: 'row', gap: 12, width: '100%' },
+    cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: c.border, alignItems: 'center' },
+    cancelTxt: { fontSize: 14, fontWeight: '600', color: c.text },
+    deleteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 10, backgroundColor: DUE_RED },
+    deleteTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  });
+}
+
+function mkS(c: ThemeColors) {
+  return StyleSheet.create({
+    header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, paddingVertical: 11, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    headerTitle: { fontSize: 20, fontWeight: '800', color: c.heading },
+    iconBtn:     { width: 30, height: 30, borderRadius: 7, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+    viewToggle:  { flexDirection: 'row', borderRadius: 7, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
+    toggleBtn:   { paddingHorizontal: 9, paddingVertical: 7, backgroundColor: c.surface },
+    toggleActive:{ backgroundColor: PRIMARY },
+    searchBox:   { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: c.surface, minWidth: 200 },
+    searchInput: { fontSize: 13, color: c.heading, minWidth: 140 },
+    addBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.sidebar, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
+    addBtnTxt:   { color: '#fff', fontWeight: '700', fontSize: 13 },
+    loadWrap:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    emptyWrap:   { alignItems: 'center', paddingVertical: 80, gap: 10 },
+    emptyTitle:  { fontSize: 15, fontWeight: '600', color: c.textMuted },
+  });
 }
 
 // ── Avatar ─────────────────────────────────────────────────────────────────────
@@ -110,6 +251,9 @@ function ReceivePaymentModal({
   visible: boolean; customer: Customer | null;
   onClose: () => void; onDone: (newBalance: number) => void;
 }) {
+  const { colors: c } = useTheme();
+  const pm = useMemo(() => mkPm(c), [c]);
+
   const [amount, setAmount] = useState('');
   const [notes, setNotes]   = useState('');
   const [saving, setSaving] = useState(false);
@@ -141,7 +285,7 @@ function ReceivePaymentModal({
             <View style={pm.hdr}>
               <View style={pm.hdrIcon}><Ionicons name="wallet" size={20} color={CRE_GRN} /></View>
               <Text style={pm.hdrTitle}>Receive payment</Text>
-              <Pressable style={pm.closeBtn} onPress={onClose}><Ionicons name="close" size={20} color="#6b7280" /></Pressable>
+              <Pressable style={pm.closeBtn} onPress={onClose}><Ionicons name="close" size={20} color={c.textMuted} /></Pressable>
             </View>
             <View style={pm.info}>
               <Text style={pm.infoRow}>Customer: <Text style={pm.infoBold}>{customer.name}</Text></Text>
@@ -153,13 +297,13 @@ function ReceivePaymentModal({
             <Text style={pm.label}>Amount received (₹) <Text style={{ color: DUE_RED }}>*</Text></Text>
             <View style={pm.inputWrap}>
               <TextInput style={pm.input} value={amount} onChangeText={setAmount}
-                placeholder="e.g. 100" keyboardType="decimal-pad" placeholderTextColor="#9ca3af" />
+                placeholder="e.g. 100" keyboardType="decimal-pad" placeholderTextColor={c.textMuted} />
             </View>
             <Text style={pm.hint}>Recording a payment reduces the amount due. E.g. due ₹500, pay ₹100 → remaining due ₹400.</Text>
             <Text style={[pm.label, { marginTop: 14 }]}>Notes (optional)</Text>
             <View style={pm.inputWrap}>
               <TextInput style={pm.input} value={notes} onChangeText={setNotes}
-                placeholder="e.g. Cash payment" placeholderTextColor="#9ca3af" returnKeyType="done" onSubmitEditing={submit} />
+                placeholder="e.g. Cash payment" placeholderTextColor={c.textMuted} returnKeyType="done" onSubmitEditing={submit} />
             </View>
             {!!error && <Text style={pm.error}>{error}</Text>}
             <View style={pm.actions}>
@@ -176,27 +320,6 @@ function ReceivePaymentModal({
     </Modal>
   );
 }
-const pm = StyleSheet.create({
-  overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  box:       { backgroundColor: '#fff', borderRadius: 16, width: '100%', maxWidth: 440, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 12 },
-  hdr:       { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-  hdrIcon:   { width: 40, height: 40, borderRadius: 10, backgroundColor: '#f0fdf4', alignItems: 'center', justifyContent: 'center' },
-  hdrTitle:  { flex: 1, fontSize: 17, fontWeight: '800', color: '#111827' },
-  closeBtn:  { padding: 4 },
-  info:      { backgroundColor: '#f8fafc', borderRadius: 10, padding: 14, marginBottom: 18, gap: 4 },
-  infoRow:   { fontSize: 13, color: '#6b7280' },
-  infoBold:  { fontWeight: '700', color: '#111827' },
-  label:     { fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 6 },
-  inputWrap: { borderWidth: 1.5, borderColor: '#d1d5db', borderRadius: 10, backgroundColor: '#fff', marginBottom: 6 },
-  input:     { padding: 12, fontSize: 14, color: '#111827' },
-  hint:      { fontSize: 11.5, color: '#6b7280', lineHeight: 16, marginTop: 2 },
-  error:     { color: DUE_RED, fontSize: 12, marginTop: 10, fontWeight: '600' },
-  actions:   { flexDirection: 'row', gap: 10, marginTop: 20 },
-  cancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 10, alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  cancelTxt: { fontSize: 14, fontWeight: '700', color: '#6b7280' },
-  recordBtn: { flex: 2, paddingVertical: 13, borderRadius: 10, alignItems: 'center', backgroundColor: PRIMARY },
-  recordTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
-});
 
 // ── Customer Form Modal ────────────────────────────────────────────────────────
 function CustomerFormModal({
@@ -205,6 +328,9 @@ function CustomerFormModal({
   visible: boolean; editing: Customer | null;
   onClose: () => void; onSaved: () => void;
 }) {
+  const { colors: c } = useTheme();
+  const fm = useMemo(() => mkFm(c), [c]);
+
   const [form, setForm] = useState<FormData>({
     name: '', phone: '', email: '', address: '', date_of_birth: '', gender: '', status: 'active',
   });
@@ -269,7 +395,7 @@ function CustomerFormModal({
           <View style={fm.header}>
             <View style={fm.headerLeft}>
               <View style={fm.headerIcon}>
-                <Ionicons name={editing ? 'create-outline' : 'person-add-outline'} size={16} color={GOLD} />
+                <Ionicons name={editing ? 'create-outline' : 'person-add-outline'} size={16} color={c.brand} />
               </View>
               <View>
                 <Text style={fm.headerTitle}>{editing ? 'Edit Customer' : 'New Customer'}</Text>
@@ -293,7 +419,7 @@ function CustomerFormModal({
                     onChangeText={v => set(f.key, v)}
                     placeholder={f.placeholder}
                     keyboardType={f.kb}
-                    placeholderTextColor="#9ca3af"
+                    placeholderTextColor={c.textMuted}
                     autoCapitalize={f.key === 'email' ? 'none' : 'words'}
                     multiline={f.key === 'address'}
                     numberOfLines={f.key === 'address' ? 2 : 1}
@@ -359,72 +485,45 @@ function CustomerFormModal({
   );
 }
 
-const fm = StyleSheet.create({
-  backdrop:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 16 },
-  panel:         { width: '100%', maxHeight: '90%', borderRadius: 16, overflow: 'hidden', backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
-  panelDesktop:  { width: 500, maxWidth: 500 },
-  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, backgroundColor: FOREST },
-  headerLeft:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  headerIcon:    { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(201,165,42,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(201,165,42,0.25)' },
-  headerTitle:   { fontSize: 15, fontWeight: '800', color: '#fff' },
-  headerSub:     { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
-  closeBtn:      { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
-  field:         { gap: 6 },
-  label:         { fontSize: 13, fontWeight: '600', color: '#374151' },
-  inputWrap:     { borderWidth: 1.5, borderColor: '#d1d5db', borderRadius: 10, backgroundColor: '#fff' },
-  textareaWrap:  { height: 80 },
-  input:         { paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: '#111827', backgroundColor: 'transparent' },
-  textarea:      { height: 80, paddingTop: 10 },
-  segRow:        { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  segBtn:        { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#f9fafb' },
-  segBtnActive:  { borderColor: PRIMARY, backgroundColor: '#eff6ff' },
-  segBtnDanger:  { borderColor: DUE_RED, backgroundColor: '#fef2f2' },
-  segTxt:        { fontSize: 13, fontWeight: '600', color: '#6b7280' },
-  segTxtActive:  { color: PRIMARY },
-  segTxtDanger:  { color: DUE_RED },
-  footer:        { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6', backgroundColor: '#fff' },
-  cancelBtn:     { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: '#e5e7eb' },
-  cancelTxt:     { fontWeight: '700', color: '#374151', fontSize: 14 },
-  saveBtn:       { flex: 2, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: FOREST },
-  saveTxt:       { fontWeight: '800', color: '#fff', fontSize: 14 },
-});
-
 // ── Customer Card (grid view) ──────────────────────────────────────────────────
 function CustomerCard({
-  customer: c, index, isRegistered, onEdit, onDelete, onPay, deleting,
+  customer: cust, index, isRegistered, onEdit, onDelete, onPay, deleting,
 }: {
   customer: Customer; index: number; isRegistered: boolean;
   onEdit: () => void; onDelete: () => void; onPay: () => void; deleting: boolean;
 }) {
-  const bal = balanceInfo(c.balance);
+  const { colors: c } = useTheme();
+  const gv = useMemo(() => mkGv(c), [c]);
+
+  const bal = balanceInfo(cust.balance);
   const numStr = `#${String(index + 1).padStart(4, '0')}`;
   return (
     <View style={gv.card}>
       <View style={gv.cardTop}>
-        <Avatar name={c.name} size={42} />
+        <Avatar name={cust.name} size={42} />
         <View style={{ flex: 1 }}>
-          <Text style={gv.name} numberOfLines={1}>{c.name}</Text>
+          <Text style={gv.name} numberOfLines={1}>{cust.name}</Text>
           <Text style={gv.id}>{numStr}</Text>
         </View>
-        <StatusBadge status={c.status} />
+        <StatusBadge status={cust.status} />
       </View>
       <View style={gv.cardBody}>
         <View style={gv.infoRow}>
-          <Ionicons name="call-outline" size={12} color="#9ca3af" />
-          <Text style={gv.infoVal}>{c.phone || '—'}</Text>
+          <Ionicons name="call-outline" size={12} color={c.textMuted} />
+          <Text style={gv.infoVal}>{cust.phone || '—'}</Text>
         </View>
-        {!!c.email && (
+        {!!cust.email && (
           <View style={gv.infoRow}>
-            <Ionicons name="mail-outline" size={12} color="#9ca3af" />
-            <Text style={gv.infoVal} numberOfLines={1}>{c.email}</Text>
+            <Ionicons name="mail-outline" size={12} color={c.textMuted} />
+            <Text style={gv.infoVal} numberOfLines={1}>{cust.email}</Text>
           </View>
         )}
         <View style={gv.infoRow}>
-          <Ionicons name="receipt-outline" size={12} color="#9ca3af" />
-          <Text style={gv.infoVal}>{c.orders_count ?? 0} orders · {fmtDate(c.last_order_at)}</Text>
+          <Ionicons name="receipt-outline" size={12} color={c.textMuted} />
+          <Text style={gv.infoVal}>{cust.orders_count ?? 0} orders · {fmtDate(cust.last_order_at)}</Text>
         </View>
         <View style={gv.infoRow}>
-          <Ionicons name="wallet-outline" size={12} color="#9ca3af" />
+          <Ionicons name="wallet-outline" size={12} color={c.textMuted} />
           <Text style={[gv.infoVal, { color: bal.color, fontWeight: '700' }]}>{bal.label}</Text>
         </View>
       </View>
@@ -445,32 +544,20 @@ function CustomerCard({
         </View>
       ) : (
         <View style={[gv.cardActions, { justifyContent: 'center', paddingVertical: 10 }]}>
-          <Text style={{ fontSize: 12, color: '#9ca3af' }}>From orders only — not registered</Text>
+          <Text style={{ fontSize: 12, color: c.textMuted }}>From orders only — not registered</Text>
         </View>
       )}
     </View>
   );
 }
-const gv = StyleSheet.create({
-  card:        { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden' },
-  cardTop:     { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  name:        { fontSize: 14, fontWeight: '700', color: '#111827' },
-  id:          { fontSize: 11, color: '#9ca3af', marginTop: 1 },
-  cardBody:    { padding: 12, gap: 7 },
-  infoRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  infoVal:     { fontSize: 12.5, color: '#374151', flex: 1 },
-  cardActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  actionBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 9, borderRightWidth: 1, borderRightColor: '#f3f4f6' },
-  payBtn:      { backgroundColor: '#f0fdf4' },
-  editBtn:     { backgroundColor: '#fefce8' },
-  delBtn:      { backgroundColor: '#fff1f2', borderRightWidth: 0 },
-  payTxt:      { fontSize: 12, fontWeight: '700', color: CRE_GRN },
-  editTxt:     { fontSize: 12, fontWeight: '700', color: '#b45309' },
-  delTxt:      { fontSize: 12, fontWeight: '700', color: DUE_RED },
-});
 
 // ── Main Screen ────────────────────────────────────────────────────────────────
 export default function CustomersScreen() {
+  const { colors: c } = useTheme();
+  const s   = useMemo(() => mkS(c), [c]);
+  const tbl = useMemo(() => mkTbl(c), [c]);
+  const dc  = useMemo(() => mkDc(c), [c]);
+
   const { width } = useWindowDimensions();
   const numCols = width >= 1400 ? 4 : width >= 1060 ? 3 : width >= 700 ? 2 : 1;
 
@@ -500,24 +587,23 @@ export default function CustomersScreen() {
   const filtered = useMemo(() => {
     if (!search.trim()) return customers;
     const q = search.trim().toLowerCase().replace(/\s/g, '');
-    return customers.filter(c =>
-      c.name.toLowerCase().replace(/\s/g, '').includes(q) ||
-      (c.phone ?? '').replace(/\s/g, '').includes(q) ||
-      (c.email ?? '').toLowerCase().includes(q)
+    return customers.filter(cust =>
+      cust.name.toLowerCase().replace(/\s/g, '').includes(q) ||
+      (cust.phone ?? '').replace(/\s/g, '').includes(q) ||
+      (cust.email ?? '').toLowerCase().includes(q)
     );
   }, [customers, search]);
 
-  // is_registered may be absent from older API responses — treat undefined as registered
-  function isReg(c: Customer) { return c.is_registered !== false; }
+  function isReg(cust: Customer) { return cust.is_registered !== false; }
 
-  function openAdd()              { setEditing(null); setShowForm(true); }
-  function openEdit(c: Customer)  { if (isReg(c) && c.id) { setEditing(c); setShowForm(true); } }
-  function openPay(c: Customer)   { if (isReg(c) && c.id) setPayTarget(c); }
-  function confirmDelete(c: Customer) { if (isReg(c) && c.id) setDeleteTarget(c); }
+  function openAdd()                   { setEditing(null); setShowForm(true); }
+  function openEdit(cust: Customer)    { if (isReg(cust) && cust.id) { setEditing(cust); setShowForm(true); } }
+  function openPay(cust: Customer)     { if (isReg(cust) && cust.id) setPayTarget(cust); }
+  function confirmDelete(cust: Customer) { if (isReg(cust) && cust.id) setDeleteTarget(cust); }
 
   async function doDelete() {
     if (!deleteTarget?.id) return;
-    const id = deleteTarget.id;
+    const id   = deleteTarget.id;
     const name = deleteTarget.name;
     setDeleting(id);
     setDeleteTarget(null);
@@ -545,52 +631,52 @@ export default function CustomersScreen() {
   function onPayDone(newBalance: number) {
     if (!payTarget?.id) return;
     const id = payTarget.id;
-    setCustomers(prev => prev.map(c => c.id === id ? { ...c, balance: newBalance } : c));
+    setCustomers(prev => prev.map(cust => cust.id === id ? { ...cust, balance: newBalance } : cust));
     setPayTarget(null);
   }
 
-  // ── Table row (list view) ──────────────────────────────────────────────────
-  function TableRow({ c, idx }: { c: Customer; idx: number }) {
+  // ── Table row (list view) — uses tbl/c from closure ────────────────────────
+  function TableRow({ cust, idx }: { cust: Customer; idx: number }) {
     const numStr = `#${String(idx + 1).padStart(4, '0')}`;
     return (
       <View style={[tbl.row, idx % 2 === 1 && tbl.rowAlt]}>
         <Text style={[tbl.cell, tbl.cId]}>{numStr}</Text>
         <View style={[tbl.cName, { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 }]}>
-          <Avatar name={c.name} size={30} />
+          <Avatar name={cust.name} size={30} />
           <View style={{ flex: 1 }}>
-            <Text style={tbl.custName} numberOfLines={1}>{c.name}</Text>
-            {!!c.email && <Text style={tbl.custEmail} numberOfLines={1}>{c.email}</Text>}
+            <Text style={tbl.custName} numberOfLines={1}>{cust.name}</Text>
+            {!!cust.email && <Text style={tbl.custEmail} numberOfLines={1}>{cust.email}</Text>}
           </View>
         </View>
-        <Text style={[tbl.cell, tbl.cPhone]}>{c.phone || '–'}</Text>
+        <Text style={[tbl.cell, tbl.cPhone]}>{cust.phone || '–'}</Text>
         <View style={[tbl.cOrders, { alignItems: 'center', justifyContent: 'center' }]}>
-          <OrdersBadge count={c.orders_count ?? 0} />
+          <OrdersBadge count={cust.orders_count ?? 0} />
         </View>
-        <Text style={[tbl.cell, tbl.cLast, c.last_order_at ? { color: '#d97706', fontWeight: '500' } : { color: '#9ca3af' }]}>
-          {fmtDate(c.last_order_at)}
+        <Text style={[tbl.cell, tbl.cLast, cust.last_order_at ? { color: '#d97706', fontWeight: '500' } : { color: c.textMuted }]}>
+          {fmtDate(cust.last_order_at)}
         </Text>
         <View style={[tbl.cBal, { justifyContent: 'center' }]}>
-          {c.balance != null ? <BalanceCell balance={c.balance} /> : <Text style={tbl.dash}>–</Text>}
+          {cust.balance != null ? <BalanceCell balance={cust.balance} /> : <Text style={tbl.dash}>–</Text>}
         </View>
         <View style={[tbl.cStatus, { justifyContent: 'center' }]}>
-          <StatusBadge status={c.status} />
+          <StatusBadge status={cust.status} />
         </View>
         <View style={[tbl.cAct, { flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
-          {!isReg(c) ? (
+          {!isReg(cust) ? (
             <Text style={tbl.dash}>—</Text>
           ) : (
             <>
               <Pressable style={({ pressed }) => [tbl.actBtn, tbl.actPay, pressed && { opacity: 0.7 }]}
-                onPress={() => openPay(c)}>
+                onPress={() => openPay(cust)}>
                 <Ionicons name="wallet-outline" size={14} color={CRE_GRN} />
               </Pressable>
               <Pressable style={({ pressed }) => [tbl.actBtn, tbl.actEdit, pressed && { opacity: 0.7 }]}
-                onPress={() => openEdit(c)}>
+                onPress={() => openEdit(cust)}>
                 <Ionicons name="create-outline" size={14} color="#b45309" />
               </Pressable>
               <Pressable style={({ pressed }) => [tbl.actBtn, tbl.actDel, pressed && { opacity: 0.7 }]}
-                onPress={() => confirmDelete(c)}>
-                {deleting === c.id
+                onPress={() => confirmDelete(cust)}>
+                {deleting === cust.id
                   ? <ActivityIndicator size={12} color={DUE_RED} />
                   : <Ionicons name="trash-outline" size={14} color={DUE_RED} />}
               </Pressable>
@@ -603,7 +689,7 @@ export default function CustomersScreen() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <Pressable style={{ flex: 1, backgroundColor: '#f4f6f9' }}>
+    <Pressable style={{ flex: 1, backgroundColor: c.background }}>
       {/* ── Header ── */}
       <View style={s.header}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -611,8 +697,8 @@ export default function CustomersScreen() {
           <Pressable style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]}
             onPress={() => { setRefreshing(true); load(true); }}>
             {refreshing
-              ? <ActivityIndicator size="small" color="#374151" />
-              : <Ionicons name="refresh-outline" size={16} color="#374151" />}
+              ? <ActivityIndicator size="small" color={c.text} />
+              : <Ionicons name="refresh-outline" size={16} color={c.text} />}
           </Pressable>
         </View>
         <View style={s.headerRight}>
@@ -620,11 +706,11 @@ export default function CustomersScreen() {
           <View style={s.viewToggle}>
             <Pressable style={[s.toggleBtn, viewMode === 'grid' && s.toggleActive]}
               onPress={() => setViewMode('grid')}>
-              <Ionicons name="grid-outline" size={15} color={viewMode === 'grid' ? '#fff' : '#6b7280'} />
+              <Ionicons name="grid-outline" size={15} color={viewMode === 'grid' ? '#fff' : c.textMuted} />
             </Pressable>
             <Pressable style={[s.toggleBtn, viewMode === 'list' && s.toggleActive]}
               onPress={() => setViewMode('list')}>
-              <Ionicons name="list-outline" size={16} color={viewMode === 'list' ? '#fff' : '#6b7280'} />
+              <Ionicons name="list-outline" size={16} color={viewMode === 'list' ? '#fff' : c.textMuted} />
             </Pressable>
           </View>
           {/* Search */}
@@ -634,11 +720,11 @@ export default function CustomersScreen() {
               value={search}
               onChangeText={setSearch}
               placeholder="Search by name or phone"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={c.textMuted}
             />
             {search
-              ? <Pressable onPress={() => setSearch('')}><Ionicons name="close-circle" size={15} color="#9ca3af" /></Pressable>
-              : <Ionicons name="search-outline" size={15} color="#9ca3af" />}
+              ? <Pressable onPress={() => setSearch('')}><Ionicons name="close-circle" size={15} color={c.textMuted} /></Pressable>
+              : <Ionicons name="search-outline" size={15} color={c.textMuted} />}
           </View>
           {/* Add New */}
           <Pressable style={({ pressed }) => [s.addBtn, pressed && { opacity: 0.85 }]} onPress={openAdd}>
@@ -651,12 +737,12 @@ export default function CustomersScreen() {
       {/* ── Content ── */}
       {loading ? (
         <View style={s.loadWrap}>
-          <ActivityIndicator size="large" color={FOREST} />
-          <Text style={{ marginTop: 10, color: '#6b7280', fontSize: 13 }}>Loading customers...</Text>
+          <ActivityIndicator size="large" color={c.sidebar} />
+          <Text style={{ marginTop: 10, color: c.textMuted, fontSize: 13 }}>Loading customers...</Text>
         </View>
       ) : viewMode === 'list' ? (
         <ScrollView
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={FOREST} />}>
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={c.brand} />}>
           <View style={tbl.tableWrap}>
             <View style={tbl.headerRow}>
               <Text style={[tbl.th, tbl.cId]}>#</Text>
@@ -670,35 +756,35 @@ export default function CustomersScreen() {
             </View>
             {filtered.length === 0 ? (
               <View style={s.emptyWrap}>
-                <Ionicons name="people-outline" size={40} color="#d1d5db" />
+                <Ionicons name="people-outline" size={40} color={c.textMuted} />
                 <Text style={s.emptyTitle}>{search ? 'No customers matched' : 'No customers yet'}</Text>
               </View>
             ) : (
-              filtered.map((c, idx) => <TableRow key={c.id ?? `od_${idx}`} c={c} idx={idx} />)
+              filtered.map((cust, idx) => <TableRow key={cust.id ?? `od_${idx}`} cust={cust} idx={idx} />)
             )}
           </View>
         </ScrollView>
       ) : (
         <ScrollView
           contentContainerStyle={{ padding: 12, gap: 10, flexDirection: 'row', flexWrap: 'wrap' }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={FOREST} />}>
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={c.brand} />}>
           {filtered.length === 0 ? (
             <View style={[s.emptyWrap, { flex: 1 }]}>
-              <Ionicons name="people-outline" size={44} color="#d1d5db" />
+              <Ionicons name="people-outline" size={44} color={c.textMuted} />
               <Text style={s.emptyTitle}>{search ? 'No customers matched' : 'No customers yet'}</Text>
             </View>
           ) : (
-            filtered.map((c, idx) => {
+            filtered.map((cust, idx) => {
               const cardW = Math.floor((width - 24 - 10 * (numCols - 1)) / numCols);
               return (
-                <View key={c.id ?? `od_${idx}`} style={{ width: cardW }}>
+                <View key={cust.id ?? `od_${idx}`} style={{ width: cardW }}>
                   <CustomerCard
-                    customer={c} index={idx}
-                    isRegistered={isReg(c)}
-                    onEdit={() => openEdit(c)}
-                    onDelete={() => confirmDelete(c)}
-                    onPay={() => openPay(c)}
-                    deleting={deleting === c.id}
+                    customer={cust} index={idx}
+                    isRegistered={isReg(cust)}
+                    onEdit={() => openEdit(cust)}
+                    onDelete={() => confirmDelete(cust)}
+                    onPay={() => openPay(cust)}
+                    deleting={deleting === cust.id}
                   />
                 </View>
               );
@@ -751,61 +837,3 @@ export default function CustomersScreen() {
     </Pressable>
   );
 }
-
-// ── Table styles ───────────────────────────────────────────────────────────────
-const tbl = StyleSheet.create({
-  tableWrap:  { backgroundColor: '#fff' },
-  headerRow:  { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  th:         { fontSize: 11, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.3, paddingHorizontal: 12 },
-  row:        { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  rowAlt:     { backgroundColor: '#fafafa' },
-  cell:       { fontSize: 13, color: '#374151', paddingHorizontal: 12, paddingVertical: 12 },
-  cId:        { width: 72 },
-  cName:      { flex: 1.8, paddingHorizontal: 12 },
-  cPhone:     { flex: 1.1 },
-  cOrders:    { width: 76, flexDirection: 'row' },
-  cLast:      { flex: 1.2 },
-  cBal:       { flex: 1.1, paddingHorizontal: 12 },
-  cStatus:    { flex: 0.9, paddingHorizontal: 12 },
-  cAct:       { width: 116, paddingHorizontal: 10, paddingVertical: 10 },
-  custName:   { fontSize: 13.5, fontWeight: '600', color: '#111827' },
-  custEmail:  { fontSize: 11, color: '#9ca3af', marginTop: 1 },
-  dash:       { fontSize: 12, color: '#d1d5db' },
-  actBtn:     { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  actPay:     { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
-  actEdit:    { backgroundColor: '#fef9c3', borderColor: '#fef3c7' },
-  actDel:     { backgroundColor: '#fff1f2', borderColor: '#fecaca' },
-});
-
-// ── Delete confirm styles ──────────────────────────────────────────────────────
-const dc = StyleSheet.create({
-  overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  box:       { backgroundColor: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, padding: 28, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
-  iconWrap:  { width: 64, height: 64, borderRadius: 32, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center', marginBottom: 16, borderWidth: 2, borderColor: '#fecaca' },
-  title:     { fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 8 },
-  message:   { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
-  name:      { fontWeight: '700', color: '#111827' },
-  actions:   { flexDirection: 'row', gap: 12, width: '100%' },
-  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: '#d1d5db', alignItems: 'center' },
-  cancelTxt: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  deleteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 10, backgroundColor: DUE_RED },
-  deleteTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
-});
-
-// ── Header / shell styles ──────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, paddingVertical: 11, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#111827' },
-  iconBtn:     { width: 30, height: 30, borderRadius: 7, backgroundColor: '#f5f6f8', borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  viewToggle:  { flexDirection: 'row', borderRadius: 7, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb' },
-  toggleBtn:   { paddingHorizontal: 9, paddingVertical: 7, backgroundColor: '#fff' },
-  toggleActive:{ backgroundColor: PRIMARY },
-  searchBox:   { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#fff', minWidth: 200 },
-  searchInput: { fontSize: 13, color: '#111827', minWidth: 140 },
-  addBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: FOREST, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
-  addBtnTxt:   { color: '#fff', fontWeight: '700', fontSize: 13 },
-  loadWrap:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyWrap:   { alignItems: 'center', paddingVertical: 80, gap: 10 },
-  emptyTitle:  { fontSize: 15, fontWeight: '600', color: '#9ca3af' },
-});

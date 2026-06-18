@@ -17,6 +17,8 @@ import Toast from 'react-native-toast-message';
 import { itemsApi } from '@/api/items';
 import { categoriesApi } from '@/api/categories';
 import { useAppStore } from '@/store/appStore';
+import { useTheme } from '@/store/themeStore';
+import type { ThemeColors } from '@/theme/tokens';
 import type { MenuItem, Category, Variation, Addon } from '@/types';
 import { API_BASE_URL } from '@/api/client';
 
@@ -49,6 +51,169 @@ function ftLabel(ft?: string) {
   return 'Veg';
 }
 
+// ── Style factories ───────────────────────────────────────────────────────────
+function mkF(c: ThemeColors) {
+  return StyleSheet.create({
+    header:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 18, borderBottomWidth: 1, borderBottomColor: c.border },
+    title:      { fontSize: 18, fontWeight: '800', color: c.heading },
+    subtitle:   { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    closeBtn:   { width: 34, height: 34, borderRadius: 10, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+    label:      { fontSize: 11.5, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+    input:      { borderWidth: 1.5, borderColor: c.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14.5, color: c.heading, backgroundColor: c.surfaceAlt },
+    catChip:    { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1.5, borderColor: c.border },
+    catChipTxt: { fontSize: 13, fontWeight: '600', color: c.text },
+    ftChip:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surfaceAlt },
+    ftDot:      { width: 13, height: 13, borderRadius: 3, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+    ftDotInner: { width: 6, height: 6, borderRadius: 3 },
+    ftTxt:      { fontSize: 13, fontWeight: '600' },
+    dynRow:     { flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center' },
+    addRowBtn:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, borderWidth: 1, borderColor: PRIMARY, backgroundColor: '#eff6ff' },
+    rmBtn:      { width: 28, height: 28, borderRadius: 7, backgroundColor: '#fff1f2', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fecaca' },
+    errBox:     { flexDirection: 'row', alignItems: 'flex-start', gap: 7, backgroundColor: '#fff1f2', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#fecaca' },
+    errTxt:     { flex: 1, fontSize: 13, color: '#dc2626', lineHeight: 18 },
+    footer:     { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: c.border },
+    cancelBtn:  { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 10, borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surface },
+    cancelTxt:  { fontWeight: '700', color: c.text, fontSize: 14 },
+    saveBtn:    { flex: 2, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, borderRadius: 10, backgroundColor: c.sidebar },
+    saveTxt:    { fontWeight: '800', color: c.brand, fontSize: 14 },
+  });
+}
+
+function mkMm(c: ThemeColors) {
+  return StyleSheet.create({
+    header:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 18, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: c.border },
+    title:          { fontSize: 17, fontWeight: '800', color: c.heading, marginBottom: 3 },
+    headerSub:      { fontSize: 12.5, color: '#d97706', fontWeight: '600' },
+    fieldLabel:     { fontSize: 13, fontWeight: '600', color: c.text, marginBottom: 8 },
+    priceRow:       { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: c.border, borderRadius: 10, overflow: 'hidden', backgroundColor: c.surfaceAlt },
+    pricePrefix:    { paddingHorizontal: 12, paddingVertical: 12, backgroundColor: c.surfaceAlt, borderRightWidth: 1, borderRightColor: c.border },
+    pricePrefixTxt: { fontSize: 15, fontWeight: '700', color: c.text },
+    priceInput:     { flex: 1, fontSize: 15, color: c.heading, paddingHorizontal: 12, paddingVertical: 12 },
+    useMasterBtn:   { paddingHorizontal: 12, paddingVertical: 12, borderLeftWidth: 1, borderLeftColor: c.border, backgroundColor: c.surfaceAlt },
+    useMasterTxt:   { fontSize: 13, fontWeight: '600', color: c.text },
+    priceHint:      { fontSize: 12, color: '#d97706', marginTop: 6, lineHeight: 17 },
+    toggleRow:      { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    toggleLabel:    { fontSize: 14, fontWeight: '600', color: c.heading },
+    toggleHint:     { fontSize: 12, color: c.textMuted, marginTop: 6, lineHeight: 17 },
+  });
+}
+
+function mkM(c: ThemeColors) {
+  return StyleSheet.create({
+    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+    sheet:    { width: '100%', maxWidth: 520, maxHeight: '90%', backgroundColor: c.surface, borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
+  });
+}
+
+function mkS(c: ThemeColors) {
+  return StyleSheet.create({
+    shell:         { flex: 1, backgroundColor: c.background },
+    pageHeader:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    pageTitle:     { fontSize: 20, fontWeight: '800', color: c.heading },
+    pageSub:       { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    viewToggle:    { flexDirection: 'row', borderWidth: 1.5, borderColor: c.border, borderRadius: 9, overflow: 'hidden', backgroundColor: c.surfaceAlt, padding: 2, gap: 2 },
+    viewBtn:       { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
+    viewBtnActive: { backgroundColor: c.sidebar },
+    addBtn:        { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.sidebar, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
+    addBtnTxt:     { color: c.brand, fontWeight: '800', fontSize: 13 },
+    filterBar:     { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, paddingHorizontal: 14, paddingVertical: 10 },
+    filterBarRow:  { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
+    filterBarLabel:{ fontSize: 14, fontWeight: '700', color: c.text, marginRight: 4 },
+    ftChipsRow:    { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 },
+    ftChip:        { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'transparent', backgroundColor: 'transparent' },
+    ftChipTxt:     { fontSize: 13, color: c.text, fontWeight: '500' },
+    ftCheck:       { width: 17, height: 17, borderRadius: 4, backgroundColor: c.border, alignItems: 'center', justifyContent: 'center' },
+    ftCheckActive: { backgroundColor: PRIMARY },
+    ftDot:         { width: 13, height: 13, borderRadius: 3, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+    ftDotInner:    { width: 6, height: 6, borderRadius: 3 },
+    searchRow:     { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto' },
+    searchBox:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: c.border, minWidth: 180 },
+    searchInput:   { flex: 1, fontSize: 13, color: c.heading },
+    iconBtn:       { width: 34, height: 34, borderRadius: 8, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+    ribbonScroll:  { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    ribbonContent: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
+    catCard:       { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 150, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: c.surface, borderWidth: 1.5, borderColor: c.border },
+    catCardActive: { borderColor: PRIMARY, shadowColor: PRIMARY, shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
+    catIcon:       { width: 32, height: 32, borderRadius: 16, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+    catIconActive: { backgroundColor: 'rgba(37,99,235,0.12)' },
+    catName:       { fontSize: 11.5, fontWeight: '800', color: c.text, textTransform: 'uppercase', letterSpacing: 0.3 },
+    catCount:      { fontSize: 10.5, color: c.textMuted, marginTop: 1 },
+    activeFiltersRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 8 },
+    activePills:   { flexDirection: 'row', flexWrap: 'wrap', gap: 5, flex: 1 },
+    pill:          { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: 'rgba(37,99,235,0.08)' },
+    pillTxt:       { fontSize: 12, color: PRIMARY, fontWeight: '500' },
+    pillX:         { fontSize: 14, color: PRIMARY, fontWeight: '700', lineHeight: 16 },
+    clearAll:      { fontSize: 12, color: c.textMuted, textDecorationLine: 'underline' },
+    resultCount:   { fontSize: 12, color: c.textMuted, fontWeight: '600' },
+    loadWrap:      { paddingTop: 80, alignItems: 'center', gap: 12 },
+    loadTxt:       { fontSize: 14, color: c.textMuted },
+    emptyWrap:     { paddingTop: 80, alignItems: 'center', gap: 12 },
+    emptyIcon:     { width: 72, height: 72, borderRadius: 36, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+    emptyTitle:    { fontSize: 16, fontWeight: '700', color: c.text },
+    emptySub:      { fontSize: 13, color: c.textMuted, textAlign: 'center', paddingHorizontal: 40 },
+    clearFiltersBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.sidebar, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10, marginTop: 4 },
+    clearFiltersBtnTxt: { color: c.brand, fontWeight: '800', fontSize: 13 },
+    grid:    { padding: 6 },
+    listWrap:{ margin: 12, backgroundColor: c.surface, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: c.border, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
+  });
+}
+
+function mkIc(c: ThemeColors) {
+  return StyleSheet.create({
+    wrap:        { backgroundColor: c.surface, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: c.border, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+    wrapHidden:  { borderColor: '#fde68a' },
+    imgWrap:     { height: 110, position: 'relative', backgroundColor: c.surfaceAlt },
+    img:         { width: '100%', height: '100%' },
+    imgPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    ftDot:       { width: 18, height: 18, borderRadius: 4, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+    ftDotInner:  { width: 8, height: 8, borderRadius: 4 },
+    badge:       { position: 'absolute', top: 6, right: 6, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
+    badgeLeft:   { position: 'absolute', top: 6, left: 6, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
+    badgeTxt:    { fontSize: 10, fontWeight: '800' },
+    body:        { padding: 10 },
+    name:        { fontSize: 13, fontWeight: '700', color: c.heading, lineHeight: 17 },
+    price:       { fontSize: 15, fontWeight: '800', color: c.sidebar },
+    ftBadgeDot:  { width: 7, height: 7, borderRadius: 3.5 },
+    ftLabel:     { fontSize: 11, fontWeight: '700' },
+    catBadge:    { backgroundColor: c.sidebar, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, alignSelf: 'flex-start', marginTop: 5 },
+    catBadgeTxt: { fontSize: 10, fontWeight: '800', color: c.brand },
+    metaChip:    { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: c.surfaceAlt, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
+    metaChipTxt: { fontSize: 10, color: c.textMuted, fontWeight: '600' },
+    taxLine:     { fontSize: 10.5, color: c.textMuted, marginTop: 3 },
+    overrideTxt: { fontSize: 10, color: '#16a34a', fontWeight: '700', marginTop: 1 },
+    actions:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: c.border },
+    iconBtn:     { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  });
+}
+
+function mkLl(c: ThemeColors) {
+  return StyleSheet.create({
+    header:     { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceAlt, paddingVertical: 9, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    hThumb:     { width: 52, marginRight: 10 },
+    hCell:      { fontSize: 11, fontWeight: '800', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+    row:        { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    thumb:      { width: 44, height: 44, borderRadius: 8, overflow: 'hidden', marginRight: 10, flexShrink: 0 },
+    img:        { width: '100%', height: '100%' },
+    imgPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    ftDot:      { width: 12, height: 12, borderRadius: 3, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+    ftDotInner: { width: 6, height: 6, borderRadius: 3 },
+    c1: { flex: 3, paddingRight: 8 },
+    c2: { flex: 2, paddingRight: 8 },
+    c3: { flex: 1, paddingRight: 8 },
+    c4: { width: 90, paddingRight: 8, alignItems: 'flex-end' },
+    c5: { width: 130, alignItems: 'flex-end', gap: 6 },
+    name:        { fontSize: 13, fontWeight: '700', color: c.heading },
+    desc:        { fontSize: 11, color: c.textMuted, marginTop: 2 },
+    badge:       { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
+    badgeTxt:    { fontSize: 10, fontWeight: '800' },
+    cellTxt:     { fontSize: 12.5, color: c.text },
+    price:       { fontSize: 13, fontWeight: '800', color: c.sidebar },
+    overrideTxt: { fontSize: 10, color: '#16a34a', fontWeight: '700', marginTop: 1 },
+    tax:         { fontSize: 10.5, color: c.textMuted },
+    iconBtn:     { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  });
+}
+
 // ── Variation / Addon row for form ────────────────────────────────────────────
 interface DynRow { name: string; price: string; }
 
@@ -56,6 +221,9 @@ function DynRows({ label, rows, onChange }: {
   label: string; rows: DynRow[];
   onChange: (rows: DynRow[]) => void;
 }) {
+  const { colors: c } = useTheme();
+  const f = useMemo(() => mkF(c), [c]);
+
   function update(idx: number, field: keyof DynRow, val: string) {
     const next = rows.map((r, i) => i === idx ? { ...r, [field]: val } : r);
     onChange(next);
@@ -75,9 +243,9 @@ function DynRows({ label, rows, onChange }: {
       {rows.map((r, i) => (
         <View key={i} style={f.dynRow}>
           <TextInput style={[f.input, { flex: 2 }]} value={r.name} onChangeText={v => update(i, 'name', v)}
-            placeholder={label === 'Variations' ? 'e.g. Small' : 'e.g. Extra Cheese'} placeholderTextColor="#9ca3af" />
+            placeholder={label === 'Variations' ? 'e.g. Small' : 'e.g. Extra Cheese'} placeholderTextColor={c.textMuted} />
           <TextInput style={[f.input, { flex: 1, textAlign: 'right' }]} value={r.price}
-            onChangeText={v => update(i, 'price', v)} placeholder="₹0" placeholderTextColor="#9ca3af"
+            onChangeText={v => update(i, 'price', v)} placeholder="₹0" placeholderTextColor={c.textMuted}
             keyboardType="decimal-pad" />
           <TouchableOpacity style={f.rmBtn} onPress={() => remove(i)}>
             <Ionicons name="close" size={14} color="#dc2626" />
@@ -85,7 +253,7 @@ function DynRows({ label, rows, onChange }: {
         </View>
       ))}
       {rows.length === 0 && (
-        <Text style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>None added</Text>
+        <Text style={{ fontSize: 12, color: c.textMuted, fontStyle: 'italic' }}>None added</Text>
       )}
     </View>
   );
@@ -100,6 +268,9 @@ interface FormProps {
 }
 
 function ItemForm({ item, categories, onSave, onClose }: FormProps) {
+  const { colors: c } = useTheme();
+  const f = useMemo(() => mkF(c), [c]);
+
   const [name,       setName]       = useState(item?.name ?? '');
   const [desc,       setDesc]       = useState(item?.description ?? '');
   const [price,      setPrice]      = useState(item ? String(item.price) : '');
@@ -137,14 +308,14 @@ function ItemForm({ item, categories, onSave, onClose }: FormProps) {
   }
 
   return (
-    <View style={{ flexShrink: 1, backgroundColor: '#fff' }}>
+    <View style={{ flexShrink: 1, backgroundColor: c.surface }}>
       <View style={f.header}>
         <View>
           <Text style={f.title}>{item ? 'Edit Item' : 'New Item'}</Text>
           <Text style={f.subtitle}>{item ? item.name : 'Add a restaurant-owned item'}</Text>
         </View>
         <TouchableOpacity onPress={onClose} style={f.closeBtn}>
-          <Ionicons name="close" size={20} color="#374151" />
+          <Ionicons name="close" size={20} color={c.text} />
         </TouchableOpacity>
       </View>
 
@@ -152,14 +323,14 @@ function ItemForm({ item, categories, onSave, onClose }: FormProps) {
         {/* Name */}
         <View>
           <Text style={f.label}>Item Name <Text style={{ color: '#dc2626' }}>*</Text></Text>
-          <TextInput style={f.input} value={name} onChangeText={setName} placeholder="e.g. Masala Chai" placeholderTextColor="#9ca3af" />
+          <TextInput style={f.input} value={name} onChangeText={setName} placeholder="e.g. Masala Chai" placeholderTextColor={c.textMuted} />
         </View>
 
         {/* Description */}
         <View>
           <Text style={f.label}>Description</Text>
           <TextInput style={[f.input, { height: 70, textAlignVertical: 'top', paddingTop: 10 }]}
-            value={desc} onChangeText={setDesc} placeholder="Optional" placeholderTextColor="#9ca3af" multiline />
+            value={desc} onChangeText={setDesc} placeholder="Optional" placeholderTextColor={c.textMuted} multiline />
         </View>
 
         {/* Price row */}
@@ -167,12 +338,12 @@ function ItemForm({ item, categories, onSave, onClose }: FormProps) {
           <View style={{ flex: 1 }}>
             <Text style={f.label}>Price (₹) <Text style={{ color: '#dc2626' }}>*</Text></Text>
             <TextInput style={f.input} value={price} onChangeText={setPrice}
-              placeholder="0.00" placeholderTextColor="#9ca3af" keyboardType="decimal-pad" />
+              placeholder="0.00" placeholderTextColor={c.textMuted} keyboardType="decimal-pad" />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={f.label}>Net/Cost Price (₹)</Text>
             <TextInput style={f.input} value={netPrice} onChangeText={setNetPrice}
-              placeholder="0.00" placeholderTextColor="#9ca3af" keyboardType="decimal-pad" />
+              placeholder="0.00" placeholderTextColor={c.textMuted} keyboardType="decimal-pad" />
           </View>
         </View>
 
@@ -181,13 +352,13 @@ function ItemForm({ item, categories, onSave, onClose }: FormProps) {
           <Text style={f.label}>Category <Text style={{ color: '#dc2626' }}>*</Text></Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}
             contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
-            {categories.map(c => {
-              const active = catId === c.id;
+            {categories.map(cat => {
+              const active = catId === cat.id;
               return (
-                <TouchableOpacity key={c.id}
-                  style={[f.catChip, active && { backgroundColor: FOREST, borderColor: FOREST }]}
-                  onPress={() => setCatId(c.id)}>
-                  <Text style={[f.catChipTxt, active && { color: GOLD }]}>{c.name}</Text>
+                <TouchableOpacity key={cat.id}
+                  style={[f.catChip, active && { backgroundColor: c.sidebar, borderColor: c.sidebar }]}
+                  onPress={() => setCatId(cat.id)}>
+                  <Text style={[f.catChipTxt, active && { color: c.brand }]}>{cat.name}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -205,7 +376,7 @@ function ItemForm({ item, categories, onSave, onClose }: FormProps) {
                   style={[f.ftChip, active && { backgroundColor: ft.bg, borderColor: ft.border }]}
                   onPress={() => setFoodType(ft.key as FoodType)}>
                   <View style={[f.ftDot, { borderColor: ft.color, backgroundColor: active ? ft.color : 'transparent' }]} />
-                  <Text style={[f.ftTxt, { color: active ? ft.color : '#374151' }, active && { fontWeight: '800' }]}>
+                  <Text style={[f.ftTxt, { color: active ? ft.color : c.text }, active && { fontWeight: '800' }]}>
                     {ft.label}
                   </Text>
                   {active && <Ionicons name="checkmark" size={13} color={ft.color} />}
@@ -252,6 +423,10 @@ interface MyMenuModalProps {
 }
 
 function MyMenuModal({ item, onSave, onClose }: MyMenuModalProps) {
+  const { colors: c } = useTheme();
+  const mm = useMemo(() => mkMm(c), [c]);
+  const f  = useMemo(() => mkF(c),  [c]);
+
   const [priceOverride, setPriceOverride] = useState(
     item.price_override != null ? String(item.price_override) : ''
   );
@@ -288,7 +463,7 @@ function MyMenuModal({ item, onSave, onClose }: MyMenuModalProps) {
   }
 
   return (
-    <View style={{ flexShrink: 1, backgroundColor: '#fff' }}>
+    <View style={{ flexShrink: 1, backgroundColor: c.surface }}>
       {/* Header — "My menu — {item name}" */}
       <View style={mm.header}>
         <View style={{ flex: 1, paddingRight: 8 }}>
@@ -296,7 +471,7 @@ function MyMenuModal({ item, onSave, onClose }: MyMenuModalProps) {
           <Text style={mm.headerSub}>Per-outlet price + active flag for this item</Text>
         </View>
         <TouchableOpacity onPress={onClose} style={f.closeBtn}>
-          <Ionicons name="close" size={20} color="#374151" />
+          <Ionicons name="close" size={20} color={c.text} />
         </TouchableOpacity>
       </View>
 
@@ -315,7 +490,7 @@ function MyMenuModal({ item, onSave, onClose }: MyMenuModalProps) {
               value={priceOverride}
               onChangeText={setPriceOverride}
               placeholder={Number(masterPrice).toFixed(2)}
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={c.textMuted}
               keyboardType="decimal-pad"
             />
             <TouchableOpacity style={mm.useMasterBtn} onPress={() => setPriceOverride('')}>
@@ -360,7 +535,7 @@ function MyMenuModal({ item, onSave, onClose }: MyMenuModalProps) {
           {loading
             ? <ActivityIndicator color="#fff" size="small" />
             : <>
-                <Ionicons name="save-outline" size={15} color={GOLD} />
+                <Ionicons name="save-outline" size={15} color={c.brand} />
                 <Text style={f.saveTxt}>Save</Text>
               </>}
         </TouchableOpacity>
@@ -381,6 +556,9 @@ function ItemCard({ item, onToggle, onEdit, onDelete, onMyMenu, toggling, isSupe
   canManageItems: boolean;
   canManageMyMenu: boolean;
 }) {
+  const { colors: c } = useTheme();
+  const ic = useMemo(() => mkIc(c), [c]);
+
   const ft      = ftCfg(item.food_type ?? (item.is_veg === false ? 'non_veg' : 'veg'));
   const imgUrl  = itemImage(item.image);
   const varCount = item.variations?.filter(v => v.name)?.length ?? 0;
@@ -444,13 +622,13 @@ function ItemCard({ item, onToggle, onEdit, onDelete, onMyMenu, toggling, isSupe
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 5 }}>
             {varCount > 0 && (
               <View style={ic.metaChip}>
-                <Ionicons name="layers-outline" size={10} color="#64748b" />
+                <Ionicons name="layers-outline" size={10} color={c.textMuted} />
                 <Text style={ic.metaChipTxt}>{varCount} var</Text>
               </View>
             )}
             {addCount > 0 && (
               <View style={ic.metaChip}>
-                <Ionicons name="add-circle-outline" size={10} color="#64748b" />
+                <Ionicons name="add-circle-outline" size={10} color={c.textMuted} />
                 <Text style={ic.metaChipTxt}>{addCount} addon</Text>
               </View>
             )}
@@ -468,7 +646,7 @@ function ItemCard({ item, onToggle, onEdit, onDelete, onMyMenu, toggling, isSupe
             {/* Availability toggle — super admin all items; restaurant admin own non-master */}
             {(isSuperAdmin || (canManageItems && !isMaster)) && (
               toggling ? (
-                <ActivityIndicator size="small" color={FOREST} />
+                <ActivityIndicator size="small" color={c.sidebar} />
               ) : (
                 <Switch value={!!item.is_available} onValueChange={() => onToggle(item)}
                   trackColor={{ true: '#16a34a', false: '#e5e7eb' }} thumbColor="#fff"
@@ -513,13 +691,16 @@ function ItemListRow({ item, onToggle, onEdit, onDelete, onMyMenu, toggling, isS
   canManageItems: boolean;
   canManageMyMenu: boolean;
 }) {
+  const { colors: c } = useTheme();
+  const ll = useMemo(() => mkLl(c), [c]);
+
   const ft         = ftCfg(item.food_type ?? (item.is_veg === false ? 'non_veg' : 'veg'));
   const imgUrl     = itemImage(item.image);
   const isMaster   = !!item.is_master;
   const hasOverride = item.price_override != null;
 
   return (
-    <View style={[ll.row, !item.is_available && { backgroundColor: '#fffbeb' }]}>
+    <View style={[ll.row, !item.is_available && { backgroundColor: c.surfaceAlt }]}>
       {/* Thumb */}
       <View style={ll.thumb}>
         {imgUrl ? (
@@ -580,7 +761,7 @@ function ItemListRow({ item, onToggle, onEdit, onDelete, onMyMenu, toggling, isS
         {/* Toggle — super admin all; restaurant admin own non-master */}
         {(isSuperAdmin || (canManageItems && !isMaster)) && (
           toggling ? (
-            <ActivityIndicator size="small" color={FOREST} />
+            <ActivityIndicator size="small" color={c.sidebar} />
           ) : (
             <Switch value={!!item.is_available} onValueChange={() => onToggle(item)}
               trackColor={{ true: '#16a34a', false: '#e5e7eb' }} thumbColor="#fff"
@@ -614,6 +795,11 @@ function ItemListRow({ item, onToggle, onEdit, onDelete, onMyMenu, toggling, isS
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function ItemsScreen() {
+  const { colors: c } = useTheme();
+  const s  = useMemo(() => mkS(c),  [c]);
+  const ll = useMemo(() => mkLl(c), [c]);
+  const m  = useMemo(() => mkM(c),  [c]);
+
   const [items,          setItems]          = useState<MenuItem[]>([]);
   const [categories,     setCategories]     = useState<Category[]>([]);
   const [loading,        setLoading]        = useState(true);
@@ -683,16 +869,16 @@ export default function ItemsScreen() {
 
   // ── Derived counts ────────────────────────────────────────────────────────
   const catCounts = useMemo(() => {
-    const c: Record<number | string, number> = { all: 0 };
+    const cc: Record<number | string, number> = { all: 0 };
     for (const i of items) {
-      c.all++;
-      if (i.category_id) c[i.category_id] = (c[i.category_id] ?? 0) + 1;
+      cc.all++;
+      if (i.category_id) cc[i.category_id] = (cc[i.category_id] ?? 0) + 1;
     }
-    return c;
+    return cc;
   }, [items]);
 
   const usedCatIds = useMemo(() => new Set(items.map(i => i.category_id).filter(Boolean)), [items]);
-  const usedCats   = useMemo(() => categories.filter(c => usedCatIds.has(c.id)), [categories, usedCatIds]);
+  const usedCats   = useMemo(() => categories.filter(cat => usedCatIds.has(cat.id)), [categories, usedCatIds]);
 
   const filtered = useMemo(() => items.filter(i => {
     const ft = (i.food_type ?? (i.is_veg === false ? 'non_veg' : 'veg')) as FoodType;
@@ -719,7 +905,7 @@ export default function ItemsScreen() {
   return (
     <View style={s.shell}>
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={GOLD} />}>
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={c.brand} />}>
 
         {/* ── Page header ── */}
         <View style={s.pageHeader}>
@@ -733,18 +919,18 @@ export default function ItemsScreen() {
               <View style={s.viewToggle}>
                 <TouchableOpacity style={[s.viewBtn, viewMode === 'grid' && s.viewBtnActive]}
                   onPress={() => setViewMode('grid')}>
-                  <Ionicons name="grid-outline" size={14} color={viewMode === 'grid' ? '#fff' : '#64748b'} />
+                  <Ionicons name="grid-outline" size={14} color={viewMode === 'grid' ? '#fff' : c.textMuted} />
                 </TouchableOpacity>
                 <TouchableOpacity style={[s.viewBtn, viewMode === 'list' && s.viewBtnActive]}
                   onPress={() => setViewMode('list')}>
-                  <Ionicons name="list-outline" size={14} color={viewMode === 'list' ? '#fff' : '#64748b'} />
+                  <Ionicons name="list-outline" size={14} color={viewMode === 'list' ? '#fff' : c.textMuted} />
                 </TouchableOpacity>
               </View>
             )}
             {/* Add Item — restaurant admin + super admin */}
             {canManageItems && (
               <TouchableOpacity style={s.addBtn} onPress={() => { setEditing(null); setFormVisible(true); }}>
-                <Ionicons name="add" size={16} color={GOLD} />
+                <Ionicons name="add" size={16} color={c.brand} />
                 <Text style={s.addBtnTxt}>Add Item</Text>
               </TouchableOpacity>
             )}
@@ -779,11 +965,11 @@ export default function ItemsScreen() {
             <View style={s.searchRow}>
               <View style={s.searchBox}>
                 <TextInput style={s.searchInput} value={search} onChangeText={setSearch}
-                  placeholder="Search menu" placeholderTextColor="#9ca3af" />
-                <Ionicons name="search-outline" size={14} color="#9ca3af" />
+                  placeholder="Search menu" placeholderTextColor={c.textMuted} />
+                <Ionicons name="search-outline" size={14} color={c.textMuted} />
               </View>
               <TouchableOpacity style={s.iconBtn} onPress={() => load(true)}>
-                <Ionicons name="refresh-outline" size={16} color="#64748b" />
+                <Ionicons name="refresh-outline" size={16} color={c.textMuted} />
               </TouchableOpacity>
             </View>
           </View>
@@ -797,24 +983,24 @@ export default function ItemsScreen() {
             <TouchableOpacity style={[s.catCard, catFilter === 'all' && s.catCardActive]}
               onPress={() => setCatFilter('all')}>
               <View style={[s.catIcon, catFilter === 'all' && s.catIconActive]}>
-                <Ionicons name="grid-outline" size={15} color={catFilter === 'all' ? PRIMARY : '#64748b'} />
+                <Ionicons name="grid-outline" size={15} color={catFilter === 'all' ? PRIMARY : c.textMuted} />
               </View>
               <View>
                 <Text style={[s.catName, catFilter === 'all' && { color: PRIMARY }]}>All Menus</Text>
                 <Text style={s.catCount}>{catCounts.all ?? 0} items</Text>
               </View>
             </TouchableOpacity>
-            {usedCats.map(c => {
-              const active = catFilter === c.id;
-              const cnt    = catCounts[c.id] ?? 0;
+            {usedCats.map(cat => {
+              const active = catFilter === cat.id;
+              const cnt    = catCounts[cat.id] ?? 0;
               return (
-                <TouchableOpacity key={c.id} style={[s.catCard, active && s.catCardActive]}
-                  onPress={() => setCatFilter(c.id)}>
+                <TouchableOpacity key={cat.id} style={[s.catCard, active && s.catCardActive]}
+                  onPress={() => setCatFilter(cat.id)}>
                   <View style={[s.catIcon, active && s.catIconActive]}>
-                    <Ionicons name="folder-outline" size={15} color={active ? PRIMARY : '#64748b'} />
+                    <Ionicons name="folder-outline" size={15} color={active ? PRIMARY : c.textMuted} />
                   </View>
                   <View>
-                    <Text style={[s.catName, active && { color: PRIMARY }]} numberOfLines={1}>{c.name}</Text>
+                    <Text style={[s.catName, active && { color: PRIMARY }]} numberOfLines={1}>{cat.name}</Text>
                     <Text style={s.catCount}>{cnt} items</Text>
                   </View>
                 </TouchableOpacity>
@@ -835,7 +1021,7 @@ export default function ItemsScreen() {
               )}
               {catFilter !== 'all' && (
                 <View style={s.pill}>
-                  <Text style={s.pillTxt}>{categories.find(c => c.id === catFilter)?.name}</Text>
+                  <Text style={s.pillTxt}>{categories.find(cat => cat.id === catFilter)?.name}</Text>
                   <TouchableOpacity onPress={() => setCatFilter('all')}><Text style={s.pillX}>×</Text></TouchableOpacity>
                 </View>
               )}
@@ -856,13 +1042,13 @@ export default function ItemsScreen() {
         {/* ── Loading ── */}
         {loading ? (
           <View style={s.loadWrap}>
-            <ActivityIndicator color={FOREST} size="large" />
+            <ActivityIndicator color={c.sidebar} size="large" />
             <Text style={s.loadTxt}>Loading items…</Text>
           </View>
         ) : filtered.length === 0 ? (
           <View style={s.emptyWrap}>
             <View style={s.emptyIcon}>
-              <Ionicons name="fast-food-outline" size={36} color="#94a3b8" />
+              <Ionicons name="fast-food-outline" size={36} color={c.textMuted} />
             </View>
             <Text style={s.emptyTitle}>No items found</Text>
             <Text style={s.emptySub}>
@@ -876,7 +1062,7 @@ export default function ItemsScreen() {
             {!hasActiveFilter && canManageItems && (
               <TouchableOpacity style={s.clearFiltersBtn}
                 onPress={() => { setEditing(null); setFormVisible(true); }}>
-                <Ionicons name="add" size={14} color={GOLD} />
+                <Ionicons name="add" size={14} color={c.brand} />
                 <Text style={s.clearFiltersBtnTxt}>Add First Item</Text>
               </TouchableOpacity>
             )}
@@ -913,7 +1099,7 @@ export default function ItemsScreen() {
                   )}
                 </View>
                 {filtered.map((item, idx) => (
-                  <View key={item.id} style={idx % 2 === 1 ? { backgroundColor: '#f9fafb' } : {}}>
+                  <View key={item.id} style={idx % 2 === 1 ? { backgroundColor: c.surfaceAlt } : {}}>
                     <ItemListRow item={item}
                       onToggle={handleToggle}
                       onEdit={i => { setEditing(i); setFormVisible(true); }}
@@ -964,178 +1150,3 @@ export default function ItemsScreen() {
     </View>
   );
 }
-
-// ── Modal overlay ─────────────────────────────────────────────────────────────
-const m = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  sheet:    { width: '100%', maxWidth: 520, maxHeight: '90%', backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
-});
-
-// ── My Menu modal local styles ────────────────────────────────────────────────
-const mm = StyleSheet.create({
-  // Header
-  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 18, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  title:       { fontSize: 17, fontWeight: '800', color: '#0f172a', marginBottom: 3 },
-  headerSub:   { fontSize: 12.5, color: '#d97706', fontWeight: '600' },
-
-  // Selling price field
-  fieldLabel:  { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 8 },
-  priceRow:    { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 10, overflow: 'hidden', backgroundColor: '#fafafa' },
-  pricePrefix: { paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#f3f4f6', borderRightWidth: 1, borderRightColor: '#e5e7eb' },
-  pricePrefixTxt: { fontSize: 15, fontWeight: '700', color: '#374151' },
-  priceInput:  { flex: 1, fontSize: 15, color: '#111827', paddingHorizontal: 12, paddingVertical: 12 },
-  useMasterBtn:{ paddingHorizontal: 12, paddingVertical: 12, borderLeftWidth: 1, borderLeftColor: '#e5e7eb', backgroundColor: '#f9fafb' },
-  useMasterTxt:{ fontSize: 13, fontWeight: '600', color: '#374151' },
-  priceHint:   { fontSize: 12, color: '#d97706', marginTop: 6, lineHeight: 17 },
-
-  // Toggle
-  toggleRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  toggleLabel: { fontSize: 14, fontWeight: '600', color: '#111827' },
-  toggleHint:  { fontSize: 12, color: '#6b7280', marginTop: 6, lineHeight: 17 },
-});
-
-// ── StyleSheets ───────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  shell:         { flex: 1, backgroundColor: '#f0f2f7' },
-
-  // Page header
-  pageHeader:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  pageTitle:     { fontSize: 20, fontWeight: '800', color: '#0f172a' },
-  pageSub:       { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  viewToggle:    { flexDirection: 'row', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 9, overflow: 'hidden', backgroundColor: '#f8fafc', padding: 2, gap: 2 },
-  viewBtn:       { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
-  viewBtnActive: { backgroundColor: FOREST },
-  addBtn:        { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
-  addBtnTxt:     { color: GOLD, fontWeight: '800', fontSize: 13 },
-
-  // Filter bar
-  filterBar:     { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', paddingHorizontal: 14, paddingVertical: 10 },
-  filterBarRow:  { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
-  filterBarLabel:{ fontSize: 14, fontWeight: '700', color: '#374151', marginRight: 4 },
-  ftChipsRow:    { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 },
-  ftChip:        { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'transparent', backgroundColor: 'transparent' },
-  ftChipTxt:     { fontSize: 13, color: '#374151', fontWeight: '500' },
-  ftCheck:       { width: 17, height: 17, borderRadius: 4, backgroundColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' },
-  ftCheckActive: { backgroundColor: PRIMARY },
-  ftDot:         { width: 13, height: 13, borderRadius: 3, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  ftDotInner:    { width: 6, height: 6, borderRadius: 3 },
-  searchRow:     { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto' },
-  searchBox:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: '#e2e8f0', minWidth: 180 },
-  searchInput:   { flex: 1, fontSize: 13, color: '#111827' },
-  iconBtn:       { width: 34, height: 34, borderRadius: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' },
-
-  // Category ribbon
-  ribbonScroll:  { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  ribbonContent: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
-  catCard:       { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 150, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  catCardActive: { borderColor: PRIMARY, shadowColor: PRIMARY, shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
-  catIcon:       { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
-  catIconActive: { backgroundColor: 'rgba(37,99,235,0.12)' },
-  catName:       { fontSize: 11.5, fontWeight: '800', color: '#374151', textTransform: 'uppercase', letterSpacing: 0.3 },
-  catCount:      { fontSize: 10.5, color: '#9ca3af', marginTop: 1 },
-
-  // Active filter pills
-  activeFiltersRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 8 },
-  activePills:   { flexDirection: 'row', flexWrap: 'wrap', gap: 5, flex: 1 },
-  pill:          { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: 'rgba(37,99,235,0.08)' },
-  pillTxt:       { fontSize: 12, color: PRIMARY, fontWeight: '500' },
-  pillX:         { fontSize: 14, color: PRIMARY, fontWeight: '700', lineHeight: 16 },
-  clearAll:      { fontSize: 12, color: '#6b7280', textDecorationLine: 'underline' },
-  resultCount:   { fontSize: 12, color: '#6b7280', fontWeight: '600' },
-
-  // Load / empty states
-  loadWrap:  { paddingTop: 80, alignItems: 'center', gap: 12 },
-  loadTxt:   { fontSize: 14, color: '#9ca3af' },
-  emptyWrap: { paddingTop: 80, alignItems: 'center', gap: 12 },
-  emptyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
-  emptyTitle:{ fontSize: 16, fontWeight: '700', color: '#374151' },
-  emptySub:  { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 40 },
-  clearFiltersBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: FOREST, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10, marginTop: 4 },
-  clearFiltersBtnTxt: { color: GOLD, fontWeight: '800', fontSize: 13 },
-
-  // Grid
-  grid: { padding: 6 },
-
-  // List
-  listWrap: { margin: 12, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
-});
-
-// Item card styles
-const ic = StyleSheet.create({
-  wrap:        { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#e8edf2', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  wrapHidden:  { borderColor: '#fde68a' },
-  imgWrap:     { height: 110, position: 'relative', backgroundColor: '#f8fafc' },
-  img:         { width: '100%', height: '100%' },
-  imgPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  ftDot:       { width: 18, height: 18, borderRadius: 4, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  ftDotInner:  { width: 8, height: 8, borderRadius: 4 },
-  badge:       { position: 'absolute', top: 6, right: 6, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
-  badgeLeft:   { position: 'absolute', top: 6, left: 6, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
-  badgeTxt:    { fontSize: 10, fontWeight: '800' },
-  body:        { padding: 10 },
-  name:        { fontSize: 13, fontWeight: '700', color: '#111827', lineHeight: 17 },
-  price:       { fontSize: 15, fontWeight: '800', color: FOREST },
-  ftBadgeDot:  { width: 7, height: 7, borderRadius: 3.5 },
-  ftLabel:     { fontSize: 11, fontWeight: '700' },
-  catBadge:    { backgroundColor: FOREST, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, alignSelf: 'flex-start', marginTop: 5 },
-  catBadgeTxt: { fontSize: 10, fontWeight: '800', color: GOLD },
-  metaChip:    { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#f1f5f9', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
-  metaChipTxt: { fontSize: 10, color: '#64748b', fontWeight: '600' },
-  taxLine:     { fontSize: 10.5, color: '#9ca3af', marginTop: 3 },
-  overrideTxt: { fontSize: 10, color: '#16a34a', fontWeight: '700', marginTop: 1 },
-  actions:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
-  iconBtn:     { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
-});
-
-// List row styles
-const ll = StyleSheet.create({
-  header:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', paddingVertical: 9, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  hThumb:    { width: 52, marginRight: 10 },
-  hCell:     { fontSize: 11, fontWeight: '800', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 },
-  row:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  thumb:     { width: 44, height: 44, borderRadius: 8, overflow: 'hidden', marginRight: 10, flexShrink: 0 },
-  img:       { width: '100%', height: '100%' },
-  imgPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  ftDot:     { width: 12, height: 12, borderRadius: 3, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  ftDotInner:{ width: 6, height: 6, borderRadius: 3 },
-  c1: { flex: 3, paddingRight: 8 },
-  c2: { flex: 2, paddingRight: 8 },
-  c3: { flex: 1, paddingRight: 8 },
-  c4: { width: 90, paddingRight: 8, alignItems: 'flex-end' },
-  c5: { width: 130, alignItems: 'flex-end', gap: 6 },
-  name:      { fontSize: 13, fontWeight: '700', color: '#111827' },
-  desc:      { fontSize: 11, color: '#9ca3af', marginTop: 2 },
-  badge:     { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
-  badgeTxt:  { fontSize: 10, fontWeight: '800' },
-  cellTxt:   { fontSize: 12.5, color: '#374151' },
-  price:       { fontSize: 13, fontWeight: '800', color: FOREST },
-  overrideTxt: { fontSize: 10, color: '#16a34a', fontWeight: '700', marginTop: 1 },
-  tax:         { fontSize: 10.5, color: '#9ca3af' },
-  iconBtn:     { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-});
-
-// Form styles
-const f = StyleSheet.create({
-  header:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 18, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  title:      { fontSize: 18, fontWeight: '800', color: '#0f172a' },
-  subtitle:   { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  closeBtn:   { width: 34, height: 34, borderRadius: 10, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
-  label:      { fontSize: 11.5, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
-  input:      { borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14.5, color: '#111827', backgroundColor: '#fafafa' },
-  catChip:    { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  catChipTxt: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  ftChip:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#f8fafc' },
-  ftDot:      { width: 13, height: 13, borderRadius: 3, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  ftDotInner: { width: 6, height: 6, borderRadius: 3 },
-  ftTxt:      { fontSize: 13, fontWeight: '600' },
-  dynRow:     { flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center' },
-  addRowBtn:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, borderWidth: 1, borderColor: PRIMARY, backgroundColor: '#eff6ff' },
-  rmBtn:      { width: 28, height: 28, borderRadius: 7, backgroundColor: '#fff1f2', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fecaca' },
-  errBox:     { flexDirection: 'row', alignItems: 'flex-start', gap: 7, backgroundColor: '#fff1f2', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#fecaca' },
-  errTxt:     { flex: 1, fontSize: 13, color: '#dc2626', lineHeight: 18 },
-  footer:     { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
-  cancelBtn:  { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 10, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#fff' },
-  cancelTxt:  { fontWeight: '700', color: '#374151', fontSize: 14 },
-  saveBtn:    { flex: 2, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, borderRadius: 10, backgroundColor: FOREST },
-  saveTxt:    { fontWeight: '800', color: GOLD, fontSize: 14 },
-});

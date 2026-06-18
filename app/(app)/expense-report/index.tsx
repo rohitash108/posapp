@@ -2,7 +2,7 @@
  * Expense Report — CSPos Restaurant Admin match
  * Stats · Date range · Daily/Monthly trend charts · Category + Payment breakdown
  */
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Pressable, StyleSheet,
   ActivityIndicator, RefreshControl, TextInput, Platform,
@@ -11,11 +11,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { format, subDays, startOfMonth } from 'date-fns';
 import { reportsApi } from '@/api/reports';
+import { useTheme } from '@/store/themeStore';
+import type { ThemeColors } from '@/theme/tokens';
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
-const FOREST  = '#1A2B1A';
 const PRIMARY = '#2563eb';
-const GOLD    = '#C9A52A';
 
 const PERIODS = [
   { label: 'Today',    days: 0  },
@@ -44,17 +44,100 @@ interface Report  {
   entries?: { category?: string; amount: number; tax_amount?: number; payment_method?: string; description?: string; date?: string }[];
 }
 
+// ── Chart style factory ───────────────────────────────────────────────────────
+function mkCh(c: ThemeColors) {
+  return StyleSheet.create({
+    wrap:    { minHeight: 160, paddingTop: 8 },
+    bars:    { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 4, minHeight: 140, paddingBottom: 28 },
+    barCol:  { flex: 1, alignItems: 'center', gap: 2 },
+    barVal:  { fontSize: 8, color: c.textMuted, textAlign: 'center' },
+    barBg:   { width: '100%', flex: 1, backgroundColor: c.surfaceAlt, borderRadius: 3, justifyContent: 'flex-end', overflow: 'hidden' },
+    barFill: { width: '100%', borderRadius: 3 },
+    barLbl:  { fontSize: 8, color: c.textMuted, textAlign: 'center', width: '100%' },
+    empty:   { minHeight: 140, alignItems: 'center', justifyContent: 'center', gap: 8 },
+    emptyTxt:{ fontSize: 12, color: c.textMuted },
+  });
+}
+
+// ── Screen style factory ──────────────────────────────────────────────────────
+function mkS(c: ThemeColors) {
+  return StyleSheet.create({
+    screen: { flex: 1, backgroundColor: c.background },
+
+    // Page header
+    pageHeader:   { flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, backgroundColor: c.surface, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    pageTitle:    { fontSize: 20, fontWeight: '800', color: c.heading },
+    dateRange:    { fontSize: 12, color: c.brand, marginTop: 2, fontWeight: '600' },
+    datePickers:  { flexDirection: 'row', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' },
+    dateField:    { gap: 4 },
+    dateFieldLbl: { fontSize: 10.5, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase' },
+    dateInput:    { borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 12, color: c.heading, backgroundColor: c.surface, minWidth: 110 },
+    applyBtn:     { backgroundColor: c.sidebar, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 },
+    applyTxt:     { color: '#fff', fontWeight: '700', fontSize: 13 },
+
+    // Stats
+    statsRow: { flexDirection: 'row', backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    statCard: { flex: 1, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 8, borderRightWidth: 1, borderRightColor: c.border },
+    statLbl:  { fontSize: 10, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+    statAmt:  { fontSize: 18, fontWeight: '800' },
+    statCount:{ fontSize: 22, fontWeight: '800', color: c.heading },
+
+    // Period chips
+    chipsRow:      { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    chip:          { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1.5, borderColor: c.border },
+    chipActive:    { backgroundColor: c.sidebar, borderColor: c.sidebar },
+    chipTxt:       { fontSize: 12, fontWeight: '600', color: c.text },
+    chipTxtActive: { color: '#fff', fontWeight: '700' },
+
+    // Load / empty
+    loadWrap: { paddingTop: 80, alignItems: 'center', gap: 12 },
+    loadTxt:  { fontSize: 13, color: c.textMuted },
+    emptyWrap:{ alignItems: 'center', paddingVertical: 48, gap: 8 },
+    emptyTxt: { fontSize: 14, fontWeight: '700', color: c.text },
+    emptySub: { fontSize: 12, color: c.textMuted },
+
+    // Body
+    body:      { padding: 12, gap: 12 },
+    chartsRow: { gap: 12 },
+    tablesRow: { gap: 12 },
+
+    // Cards
+    chartCard:  { backgroundColor: c.surface, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: c.border, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
+    tableCard:  { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
+    cardTitle:  { fontSize: 13, fontWeight: '700', color: c.heading },
+    tableHeader:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: c.border },
+    badge:      { backgroundColor: c.surfaceAlt, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
+    badgeTxt:   { fontSize: 11, fontWeight: '700', color: c.textMuted },
+
+    // Table
+    tHead:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: c.surfaceAlt, borderBottomWidth: 1, borderBottomColor: c.border },
+    tHCell:   { fontSize: 10, fontWeight: '800', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+    tRow:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border, gap: 8 },
+    tRowAlt:  { backgroundColor: c.surfaceAlt },
+    tCell:    { fontSize: 13, color: c.text },
+    tFoot:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: c.surfaceAlt, borderTopWidth: 1, borderTopColor: c.border },
+    tFootTxt: { fontSize: 12, fontWeight: '800', color: c.heading },
+    tEmpty:   { paddingVertical: 32, alignItems: 'center' },
+    tEmptyTxt:{ fontSize: 13, color: c.textMuted },
+    catDot:   { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+    pmIcon:   { width: 22, height: 22, borderRadius: 6, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  });
+}
+
 // ── Mini bar chart (View-based, works on both platforms) ─────────────────────
 function TrendChart({ data, label, color = PRIMARY }: {
   data: { label: string; value: number }[];
   label: string;
   color?: string;
 }) {
+  const { colors: c } = useTheme();
+  const ch = useMemo(() => mkCh(c), [c]);
+
   const max = Math.max(...data.map(d => d.value), 1);
   if (data.length === 0) {
     return (
       <View style={ch.empty}>
-        <Ionicons name="bar-chart-outline" size={32} color="#e5e7eb" />
+        <Ionicons name="bar-chart-outline" size={32} color={c.border} />
         <Text style={ch.emptyTxt}>No data for this period</Text>
       </View>
     );
@@ -83,6 +166,9 @@ function TrendChart({ data, label, color = PRIMARY }: {
 export default function ExpenseReportScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 860;
+
+  const { colors: c } = useTheme();
+  const s = useMemo(() => mkS(c), [c]);
 
   const [data,       setData]       = useState<Report | null>(null);
   const [loading,    setLoading]    = useState(true);
@@ -148,7 +234,7 @@ export default function ExpenseReportScreen() {
       style={s.screen}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={refreshing} tintColor={FOREST}
+        <RefreshControl refreshing={refreshing} tintColor={c.sidebar}
           onRefresh={() => { setRefreshing(true); load(); }} />
       }>
 
@@ -170,10 +256,10 @@ export default function ExpenseReportScreen() {
                 type="date"
                 value={dateFrom}
                 onChange={e => { setDateFrom(e.target.value); setShowCustom(true); }}
-                style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '5px 8px', fontSize: 12, color: '#111827', backgroundColor: '#fff', cursor: 'pointer' }}
+                style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: '5px 8px', fontSize: 12, color: c.heading, backgroundColor: c.surface, cursor: 'pointer' } as any}
               />
             ) : (
-              <TextInput style={s.dateInput} value={dateFrom} onChangeText={v => { setDateFrom(v); setShowCustom(true); }} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" />
+              <TextInput style={s.dateInput} value={dateFrom} onChangeText={v => { setDateFrom(v); setShowCustom(true); }} placeholder="YYYY-MM-DD" placeholderTextColor={c.textMuted} />
             )}
           </View>
           <View style={s.dateField}>
@@ -183,10 +269,10 @@ export default function ExpenseReportScreen() {
                 type="date"
                 value={dateTo}
                 onChange={e => { setDateTo(e.target.value); setShowCustom(true); }}
-                style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '5px 8px', fontSize: 12, color: '#111827', backgroundColor: '#fff', cursor: 'pointer' }}
+                style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: '5px 8px', fontSize: 12, color: c.heading, backgroundColor: c.surface, cursor: 'pointer' } as any}
               />
             ) : (
-              <TextInput style={s.dateInput} value={dateTo} onChangeText={v => { setDateTo(v); setShowCustom(true); }} placeholder="YYYY-MM-DD" placeholderTextColor="#9ca3af" />
+              <TextInput style={s.dateInput} value={dateTo} onChangeText={v => { setDateTo(v); setShowCustom(true); }} placeholder="YYYY-MM-DD" placeholderTextColor={c.textMuted} />
             )}
           </View>
           <Pressable style={({ pressed }) => [s.applyBtn, pressed && { opacity: 0.85 }]} onPress={applyCustom}>
@@ -198,12 +284,12 @@ export default function ExpenseReportScreen() {
       {/* ── Stats ── */}
       <View style={s.statsRow}>
         <View style={s.statCard}>
-          <Text style={[s.statLbl, { color: GOLD }]}>Total Spent</Text>
-          <Text style={[s.statAmt, { color: GOLD }]}>{fmtAmt(totalSpent)}</Text>
+          <Text style={[s.statLbl, { color: c.brand }]}>Total Spent</Text>
+          <Text style={[s.statAmt, { color: c.brand }]}>{fmtAmt(totalSpent)}</Text>
         </View>
         <View style={s.statCard}>
-          <Text style={[s.statLbl, { color: GOLD }]}>Tax Paid</Text>
-          <Text style={[s.statAmt, { color: GOLD }]}>{fmtAmt(taxPaid)}</Text>
+          <Text style={[s.statLbl, { color: c.brand }]}>Tax Paid</Text>
+          <Text style={[s.statAmt, { color: c.brand }]}>{fmtAmt(taxPaid)}</Text>
         </View>
         <View style={s.statCard}>
           <Text style={s.statLbl}>Categories</Text>
@@ -232,7 +318,7 @@ export default function ExpenseReportScreen() {
           <Pressable
             style={({ pressed }) => [s.chip, showCustom && s.chipActive, pressed && { opacity: 0.8 }]}
             onPress={() => setShowCustom(true)}>
-            <Ionicons name="calendar-outline" size={12} color={showCustom ? '#fff' : '#374151'} />
+            <Ionicons name="calendar-outline" size={12} color={showCustom ? '#fff' : c.text} />
             <Text style={[s.chipTxt, showCustom && s.chipTxtActive]}>Custom</Text>
           </Pressable>
         </ScrollView>
@@ -240,7 +326,7 @@ export default function ExpenseReportScreen() {
 
       {loading ? (
         <View style={s.loadWrap}>
-          <ActivityIndicator color={FOREST} size="large" />
+          <ActivityIndicator color={c.sidebar} size="large" />
           <Text style={s.loadTxt}>Generating report…</Text>
         </View>
       ) : (
@@ -278,13 +364,13 @@ export default function ExpenseReportScreen() {
                 <View style={s.tEmpty}>
                   <Text style={s.tEmptyTxt}>No category data</Text>
                 </View>
-              ) : byCategory.map((c, idx) => (
-                <View key={c.category} style={[s.tRow, idx % 2 === 1 && s.tRowAlt]}>
+              ) : byCategory.map((row, idx) => (
+                <View key={row.category} style={[s.tRow, idx % 2 === 1 && s.tRowAlt]}>
                   <View style={[s.catDot, { backgroundColor: CAT_COLORS[idx % CAT_COLORS.length] }]} />
-                  <Text style={[s.tCell, { flex: 1 }]}>{c.category}</Text>
-                  <Text style={[s.tCell, { width: 56, textAlign: 'center', color: '#6b7280' }]}>{c.count}</Text>
-                  <Text style={[s.tCell, { width: 90, textAlign: 'right', fontWeight: '700', color: '#111827' }]}>
-                    ₹{Number(c.total).toFixed(2)}
+                  <Text style={[s.tCell, { flex: 1 }]}>{row.category}</Text>
+                  <Text style={[s.tCell, { width: 56, textAlign: 'center', color: c.textMuted }]}>{row.count}</Text>
+                  <Text style={[s.tCell, { width: 90, textAlign: 'right', fontWeight: '700', color: c.heading }]}>
+                    ₹{Number(row.total).toFixed(2)}
                   </Text>
                 </View>
               ))}
@@ -292,7 +378,7 @@ export default function ExpenseReportScreen() {
                 <View style={s.tFoot}>
                   <Text style={[s.tFootTxt, { flex: 1 }]}>Total</Text>
                   <Text style={[s.tFootTxt, { width: 90, textAlign: 'right' }]}>
-                    ₹{byCategory.reduce((sum, c) => sum + Number(c.total), 0).toFixed(2)}
+                    ₹{byCategory.reduce((sum, row) => sum + Number(row.total), 0).toFixed(2)}
                   </Text>
                 </View>
               )}
@@ -317,11 +403,11 @@ export default function ExpenseReportScreen() {
                   <View style={s.pmIcon}>
                     <Ionicons
                       name={p.method === 'cash' ? 'cash-outline' : p.method === 'card' ? 'card-outline' : p.method === 'upi' ? 'phone-portrait-outline' : 'business-outline'}
-                      size={13} color="#6b7280" />
+                      size={13} color={c.textMuted} />
                   </View>
                   <Text style={[s.tCell, { flex: 1 }]}>{PM_LABELS[p.method] ?? p.method}</Text>
-                  <Text style={[s.tCell, { width: 56, textAlign: 'center', color: '#6b7280' }]}>{p.count}</Text>
-                  <Text style={[s.tCell, { width: 90, textAlign: 'right', fontWeight: '700', color: '#111827' }]}>
+                  <Text style={[s.tCell, { width: 56, textAlign: 'center', color: c.textMuted }]}>{p.count}</Text>
+                  <Text style={[s.tCell, { width: 90, textAlign: 'right', fontWeight: '700', color: c.heading }]}>
                     ₹{Number(p.total).toFixed(2)}
                   </Text>
                 </View>
@@ -357,10 +443,10 @@ export default function ExpenseReportScreen() {
                 <View key={idx} style={[s.tRow, idx % 2 === 1 && s.tRowAlt]}>
                   <View style={[s.catDot, { backgroundColor: CAT_COLORS[idx % CAT_COLORS.length] }]} />
                   <Text style={[s.tCell, { flex: 1 }]} numberOfLines={1}>{e.description || '—'}</Text>
-                  <Text style={[s.tCell, { width: 90, color: '#6b7280' }]} numberOfLines={1}>{e.category || '—'}</Text>
-                  <Text style={[s.tCell, { width: 70, color: '#6b7280' }]}>{PM_LABELS[e.payment_method ?? ''] ?? (e.payment_method || '—')}</Text>
-                  <Text style={[s.tCell, { width: 80, textAlign: 'right', color: '#6b7280' }]}>₹{Number(e.tax_amount ?? 0).toFixed(2)}</Text>
-                  <Text style={[s.tCell, { width: 90, textAlign: 'right', fontWeight: '700', color: '#111827' }]}>₹{Number(e.amount).toFixed(2)}</Text>
+                  <Text style={[s.tCell, { width: 90, color: c.textMuted }]} numberOfLines={1}>{e.category || '—'}</Text>
+                  <Text style={[s.tCell, { width: 70, color: c.textMuted }]}>{PM_LABELS[e.payment_method ?? ''] ?? (e.payment_method || '—')}</Text>
+                  <Text style={[s.tCell, { width: 80, textAlign: 'right', color: c.textMuted }]}>₹{Number(e.tax_amount ?? 0).toFixed(2)}</Text>
+                  <Text style={[s.tCell, { width: 90, textAlign: 'right', fontWeight: '700', color: c.heading }]}>₹{Number(e.amount).toFixed(2)}</Text>
                 </View>
               ))}
             </View>
@@ -369,7 +455,7 @@ export default function ExpenseReportScreen() {
           {/* ── Empty ── */}
           {!data || (entries.length === 0 && byCategory.length === 0 && byPM.length === 0) ? (
             <View style={s.emptyWrap}>
-              <Ionicons name="receipt-outline" size={44} color="#e5e7eb" />
+              <Ionicons name="receipt-outline" size={44} color={c.border} />
               <Text style={s.emptyTxt}>No expense data for this period</Text>
               <Text style={s.emptySub}>Try adjusting the date range</Text>
             </View>
@@ -380,79 +466,3 @@ export default function ExpenseReportScreen() {
     </ScrollView>
   );
 }
-
-// ── Chart styles ──────────────────────────────────────────────────────────────
-const ch = StyleSheet.create({
-  wrap:    { minHeight: 160, paddingTop: 8 },
-  bars:    { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 4, minHeight: 140, paddingBottom: 28 },
-  barCol:  { flex: 1, alignItems: 'center', gap: 2 },
-  barVal:  { fontSize: 8, color: '#9ca3af', textAlign: 'center' },
-  barBg:   { width: '100%', flex: 1, backgroundColor: '#f3f4f6', borderRadius: 3, justifyContent: 'flex-end', overflow: 'hidden' },
-  barFill: { width: '100%', borderRadius: 3 },
-  barLbl:  { fontSize: 8, color: '#9ca3af', textAlign: 'center', width: '100%' },
-  empty:   { minHeight: 140, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  emptyTxt:{ fontSize: 12, color: '#9ca3af' },
-});
-
-// ── Screen styles ─────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#f0f2f7' },
-
-  // Page header
-  pageHeader:   { flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  pageTitle:    { fontSize: 20, fontWeight: '800', color: '#111827' },
-  dateRange:    { fontSize: 12, color: GOLD, marginTop: 2, fontWeight: '600' },
-  datePickers:  { flexDirection: 'row', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' },
-  dateField:    { gap: 4 },
-  dateFieldLbl: { fontSize: 10.5, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase' },
-  dateInput:    { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 12, color: '#111827', backgroundColor: '#fff', minWidth: 110 },
-  applyBtn:     { backgroundColor: FOREST, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 },
-  applyTxt:     { color: '#fff', fontWeight: '700', fontSize: 13 },
-
-  // Stats
-  statsRow: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  statCard: { flex: 1, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 8, borderRightWidth: 1, borderRightColor: '#e5e7eb' },
-  statLbl:  { fontSize: 10, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
-  statAmt:  { fontSize: 18, fontWeight: '800' },
-  statCount:{ fontSize: 22, fontWeight: '800', color: '#111827' },
-
-  // Period chips
-  chipsRow: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  chip:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1.5, borderColor: '#e5e7eb' },
-  chipActive: { backgroundColor: FOREST, borderColor: FOREST },
-  chipTxt:  { fontSize: 12, fontWeight: '600', color: '#374151' },
-  chipTxtActive: { color: '#fff', fontWeight: '700' },
-
-  // Load / empty
-  loadWrap: { paddingTop: 80, alignItems: 'center', gap: 12 },
-  loadTxt:  { fontSize: 13, color: '#9ca3af' },
-  emptyWrap:{ alignItems: 'center', paddingVertical: 48, gap: 8 },
-  emptyTxt: { fontSize: 14, fontWeight: '700', color: '#374151' },
-  emptySub: { fontSize: 12, color: '#9ca3af' },
-
-  // Body
-  body: { padding: 12, gap: 12 },
-  chartsRow: { gap: 12 },
-  tablesRow: { gap: 12 },
-
-  // Cards
-  chartCard:  { backgroundColor: '#fff', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
-  tableCard:  { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
-  cardTitle:  { fontSize: 13, fontWeight: '700', color: '#111827' },
-  tableHeader:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  badge:      { backgroundColor: '#f0f2f7', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
-  badgeTxt:   { fontSize: 11, fontWeight: '700', color: '#6b7280' },
-
-  // Table
-  tHead:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  tHCell:   { fontSize: 10, fontWeight: '800', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.4 },
-  tRow:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f9fafb', gap: 8 },
-  tRowAlt:  { backgroundColor: '#fafafa' },
-  tCell:    { fontSize: 13, color: '#374151' },
-  tFoot:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#f0f2f7', borderTopWidth: 1, borderTopColor: '#e5e7eb' },
-  tFootTxt: { fontSize: 12, fontWeight: '800', color: '#111827' },
-  tEmpty:   { paddingVertical: 32, alignItems: 'center' },
-  tEmptyTxt:{ fontSize: 13, color: '#9ca3af' },
-  catDot:   { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
-  pmIcon:   { width: 22, height: 22, borderRadius: 6, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-});

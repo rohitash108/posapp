@@ -2,13 +2,17 @@
  * Reports — pixel-matched to csPos Restaurant Admin Web panel
  * restaurant.softwar.in/earning-report
  */
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet,
   ActivityIndicator, TextInput, RefreshControl, Modal, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import {
+  format, parse, addMonths, subMonths,
+  startOfMonth, endOfMonth, eachDayOfInterval,
+  getDay, isToday, isSameDay,
+} from 'date-fns';
 import { ordersApi } from '@/api/orders';
 import client from '@/api/client';
 import { useTheme } from '@/store/themeStore';
@@ -238,27 +242,154 @@ function mk(c: ThemeColors) {
     periodLbl:   { fontSize: 13, color: c.textMuted },
     periodVal:   { fontSize: 13.5, fontWeight: '800', color: c.heading },
 
-    // ── Dropdown modal ────────────────────────────────────────────────────
-    overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
-                 justifyContent: 'center', padding: 28 },
-    modal:     { backgroundColor: c.surface, borderRadius: 14,
-                 overflow: 'hidden', maxHeight: 360,
-                 borderWidth: 1, borderColor: c.border },
-    modalHd:   { paddingHorizontal: 16, paddingVertical: 13,
-                 borderBottomWidth: 1, borderBottomColor: c.border },
-    modalTtl:  { fontSize: 14, fontWeight: '800', color: c.heading },
+    // ── Calendar picker ───────────────────────────────────────────────────
+    calPopup:   { position: 'absolute', backgroundColor: c.surface,
+                  borderRadius: 12, borderWidth: 1, borderColor: c.border,
+                  width: 280, overflow: 'hidden',
+                  shadowColor: '#000', shadowOpacity: 0.14,
+                  shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+                  elevation: 10, zIndex: 999 },
+    calHead:    { flexDirection: 'row', alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 14, paddingVertical: 12,
+                  borderBottomWidth: 1, borderBottomColor: c.border },
+    calTitle:   { fontSize: 14, fontWeight: '700', color: c.heading },
+    calNavBtn:  { padding: 4 },
+    calWeekRow: { flexDirection: 'row', paddingHorizontal: 8, paddingVertical: 6 },
+    calWeekDay: { flex: 1, textAlign: 'center', fontSize: 11,
+                  fontWeight: '700', color: c.textMuted, textTransform: 'uppercase' },
+    calGrid:    { flexDirection: 'row', flexWrap: 'wrap',
+                  paddingHorizontal: 8, paddingBottom: 10 },
+    calCell:    { width: `${100 / 7}%` as any, aspectRatio: 1,
+                  alignItems: 'center', justifyContent: 'center', borderRadius: 100 },
+    calCellSel: { backgroundColor: c.primary },
+    calCellTod: { borderWidth: 1.5, borderColor: c.primary },
+    calDayTxt:  { fontSize: 13, color: c.text },
+    calDaySel:  { color: '#fff', fontWeight: '700' },
+    calDayTod:  { color: c.primary, fontWeight: '700' },
+    calDayOut:  { color: c.border },
+
+    // ── Dropdown — floating popup below the trigger ───────────────────────
+    ddOverlay: { flex: 1 },                              // transparent, just catches taps
+    ddPopup:   { position: 'absolute', backgroundColor: c.surface,
+                 borderRadius: 10, borderWidth: 1, borderColor: c.border,
+                 maxHeight: 280, overflow: 'hidden',
+                 shadowColor: '#000', shadowOpacity: 0.14,
+                 shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+                 elevation: 10, zIndex: 999 },
     dRow:      { flexDirection: 'row', justifyContent: 'space-between',
                  alignItems: 'center',
-                 paddingHorizontal: 16, paddingVertical: 13,
+                 paddingHorizontal: 14, paddingVertical: 12,
                  borderBottomWidth: 1, borderBottomColor: c.border },
-    dRowA:     { backgroundColor: c.primary + '15' },
-    dTxt:      { fontSize: 14, color: c.text },
+    dRowA:     { backgroundColor: c.primary + '12' },
+    dTxt:      { fontSize: 13.5, color: c.text },
     dTxtA:     { color: c.primary, fontWeight: '700' },
 
     // ── Loading / empty ───────────────────────────────────────────────────
     center:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 48 },
     emptyTxt:  { fontSize: 14, color: c.textMuted, marginTop: 12, fontWeight: '500' },
   });
+}
+
+// ─── DateField ────────────────────────────────────────────────────────────────
+
+const WEEK_DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+function DateField({ value, onChange, label, c, s }:
+  { value: string; onChange: (v: string) => void;
+    label: string; c: ThemeColors; s: ReturnType<typeof mk> }) {
+
+  const [open, setOpen]         = useState(false);
+  const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
+  const triggerRef              = useRef<View>(null);
+
+  // current calendar month shown
+  const selected  = value ? parse(value, 'yyyy-MM-dd', new Date()) : new Date();
+  const [month, setMonth] = useState(() => {
+    return value ? parse(value, 'yyyy-MM-dd', new Date()) : new Date();
+  });
+
+  function openCalendar() {
+    triggerRef.current?.measureInWindow((x, y, _w, h) => {
+      setPopupPos({ top: y + h + 4, left: x });
+      setOpen(true);
+    });
+  }
+
+  function pickDay(d: Date) {
+    onChange(format(d, 'yyyy-MM-dd'));
+    setOpen(false);
+  }
+
+  const firstDay  = startOfMonth(month);
+  const lastDay   = endOfMonth(month);
+  const days      = eachDayOfInterval({ start: firstDay, end: lastDay });
+  const leading   = getDay(firstDay); // blank cells before 1st
+
+  const displayVal = value
+    ? format(parse(value, 'yyyy-MM-dd', new Date()), 'dd MMM yyyy')
+    : '';
+
+  return (
+    <View style={s.col}>
+      <Text style={s.fieldLbl}>{label}</Text>
+
+      <Pressable ref={triggerRef} style={s.fieldBox} onPress={openCalendar}>
+        <Ionicons name="calendar-outline" size={14} color={c.textMuted} />
+        {displayVal
+          ? <Text style={s.fieldTxt} numberOfLines={1}>{displayVal}</Text>
+          : <Text style={s.fieldPh}  numberOfLines={1}>Select date</Text>}
+      </Pressable>
+
+      <Modal visible={open} transparent animationType="none" onRequestClose={() => setOpen(false)}>
+        <Pressable style={s.ddOverlay} onPress={() => setOpen(false)}>
+          <View style={[s.calPopup, { top: popupPos.top, left: popupPos.left }]}
+            // Prevent backdrop tap from firing when tapping inside calendar
+            onStartShouldSetResponder={() => true}
+            onTouchEnd={e => e.stopPropagation()}>
+
+            {/* Month navigation */}
+            <View style={s.calHead}>
+              <Pressable style={s.calNavBtn} onPress={() => setMonth(m => subMonths(m, 1))}>
+                <Ionicons name="chevron-back" size={18} color={c.text} />
+              </Pressable>
+              <Text style={s.calTitle}>{format(month, 'MMMM yyyy')}</Text>
+              <Pressable style={s.calNavBtn} onPress={() => setMonth(m => addMonths(m, 1))}>
+                <Ionicons name="chevron-forward" size={18} color={c.text} />
+              </Pressable>
+            </View>
+
+            {/* Weekday headers */}
+            <View style={s.calWeekRow}>
+              {WEEK_DAYS.map(d => (
+                <Text key={d} style={s.calWeekDay}>{d}</Text>
+              ))}
+            </View>
+
+            {/* Day grid */}
+            <View style={s.calGrid}>
+              {/* Leading blanks */}
+              {Array.from({ length: leading }).map((_, i) => (
+                <View key={`b${i}`} style={s.calCell} />
+              ))}
+              {days.map(d => {
+                const sel = isSameDay(d, selected);
+                const tod = isToday(d);
+                return (
+                  <Pressable key={d.toISOString()} style={[s.calCell, sel && s.calCellSel, !sel && tod && s.calCellTod]}
+                    onPress={() => pickDay(d)}>
+                    <Text style={[s.calDayTxt, sel && s.calDaySel, !sel && tod && s.calDayTod]}>
+                      {format(d, 'd')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+    </View>
+  );
 }
 
 // ─── Dropdown ─────────────────────────────────────────────────────────────────
@@ -268,28 +399,49 @@ function Dropdown({ value, onChange, options, label, placeholder, c, s }:
     options: { label: string; value: string }[];
     label: string; placeholder: string;
     c: ThemeColors; s: ReturnType<typeof mk> }) {
-  const [open, setOpen] = useState(false);
+
+  const [open, setOpen]       = useState(false);
+  const [popupPos, setPopupPos] = useState({ top: 0, left: 0, width: 200 });
+  const triggerRef = useRef<View>(null);
   const sel = options.find(o => o.value === value);
+
+  function openMenu() {
+    triggerRef.current?.measureInWindow((x, y, w, h) => {
+      setPopupPos({ top: y + h + 4, left: x, width: w });
+      setOpen(true);
+    });
+  }
+
   return (
     <View style={s.col}>
       <Text style={s.fieldLbl}>{label}</Text>
-      <Pressable style={s.fieldBox} onPress={() => setOpen(true)}>
+
+      {/* Trigger button */}
+      <Pressable ref={triggerRef} style={s.fieldBox} onPress={openMenu}>
         {sel?.value
           ? <Text style={s.fieldTxt} numberOfLines={1}>{sel.label}</Text>
           : <Text style={s.fieldPh}  numberOfLines={1}>{placeholder}</Text>}
-        <Ionicons name="chevron-down" size={13} color={c.textMuted} />
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={13} color={c.textMuted} />
       </Pressable>
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={s.overlay} onPress={() => setOpen(false)}>
-          <View style={s.modal}>
-            <View style={s.modalHd}><Text style={s.modalTtl}>{label}</Text></View>
-            <ScrollView bounces={false}>
+
+      {/* Floating popup — rendered in a transparent full-screen Modal */}
+      <Modal visible={open} transparent animationType="none" onRequestClose={() => setOpen(false)}>
+        {/* Invisible full-screen backdrop — tap to dismiss */}
+        <Pressable style={s.ddOverlay} onPress={() => setOpen(false)}>
+          {/* Floating card below the trigger */}
+          <View style={[s.ddPopup, {
+            top:   popupPos.top,
+            left:  popupPos.left,
+            width: popupPos.width,
+          }]}>
+            <ScrollView bounces={false} keyboardShouldPersistTaps="handled">
               {options.map(o => (
-                <Pressable key={o.value} style={[s.dRow, o.value === value && s.dRowA]}
+                <Pressable key={o.value}
+                  style={[s.dRow, o.value === value && s.dRowA]}
                   onPress={() => { onChange(o.value); setOpen(false); }}>
                   <Text style={[s.dTxt, o.value === value && s.dTxtA]}>{o.label}</Text>
                   {o.value === value &&
-                    <Ionicons name="checkmark-circle" size={18} color={c.primary} />}
+                    <Ionicons name="checkmark" size={16} color={c.primary} />}
                 </Pressable>
               ))}
             </ScrollView>
@@ -452,26 +604,10 @@ export default function ReportsScreen() {
             Row 2: Customer ▼ | Payment Method ▼
             Row 3: Apply · Reset                                              */}
       <View style={s.filterSection}>
-        {/* Row 1 — dates */}
+        {/* Row 1 — dates (calendar picker) */}
         <View style={s.row2}>
-          <View style={s.col}>
-            <Text style={s.fieldLbl}>Start Date</Text>
-            <View style={s.fieldBox}>
-              <Ionicons name="calendar-outline" size={14} color={c.textMuted} />
-              <TextInput style={s.fieldTxt} value={startDate}
-                onChangeText={setStartDate} placeholder="YYYY-MM-DD"
-                placeholderTextColor={c.textMuted} />
-            </View>
-          </View>
-          <View style={s.col}>
-            <Text style={s.fieldLbl}>End Date</Text>
-            <View style={s.fieldBox}>
-              <Ionicons name="calendar-outline" size={14} color={c.textMuted} />
-              <TextInput style={s.fieldTxt} value={endDate}
-                onChangeText={setEndDate} placeholder="YYYY-MM-DD"
-                placeholderTextColor={c.textMuted} />
-            </View>
-          </View>
+          <DateField value={startDate} onChange={setStartDate} label="Start Date" c={c} s={s} />
+          <DateField value={endDate}   onChange={setEndDate}   label="End Date"   c={c} s={s} />
         </View>
 
         {/* Row 2 — dropdowns */}

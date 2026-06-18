@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@react-native-community/datetimepicker": "^9.1.0",
     "@react-native-community/netinfo": "11.4.1",
     "axios": "^1.7.7",
     "date-fns": "^3.6.0",
@@ -54,15 +55,30 @@
       "output": "electron-dist",
       "buildResources": "assets"
     },
-    "files": ["main.js", "package.json"],
+    "files": [
+      "main.js",
+      "package.json"
+    ],
     "extraResources": [
-      { "from": "dist", "to": "dist" },
-      { "from": "assets/global-tea-cafe-logo.png", "to": "assets/global-tea-cafe-logo.png" },
-      { "from": "assets/icon.ico",                 "to": "assets/icon.ico" }
+      {
+        "from": "dist",
+        "to": "dist"
+      },
+      {
+        "from": "assets/global-tea-cafe-logo.png",
+        "to": "assets/global-tea-cafe-logo.png"
+      },
+      {
+        "from": "assets/icon.ico",
+        "to": "assets/icon.ico"
+      }
     ],
     "win": {
       "icon": "assets/icon.ico",
-      "target": ["nsis", "portable"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "requestedExecutionLevel": "asInvoker",
       "publisherName": "Global Tea Cafe",
