@@ -1417,7 +1417,7 @@ export default function DashboardScreen() {
 
       {/* ── Date-range filter — segmented chips matching web "Today" button style ── */}
       <View style={[s.filterBar, { backgroundColor: D.white, borderBottomColor: isDark ? D.border : '#E8E3DA' }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7, alignItems: 'center', paddingVertical: 2 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ gap: 7, alignItems: 'center', paddingVertical: 2, paddingRight: 4 }}>
           {PRESETS.map(p => {
             const isActive = preset === p.key;
             const chipLabel = p.key === 'custom' && preset === 'custom' && customFrom && customTo
