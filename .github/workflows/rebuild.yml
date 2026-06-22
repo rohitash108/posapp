@@ -1,88 +1,72 @@
 name: Rebuild Windows App
 
-# Manually triggered rebuild — useful after dependency updates, hotfixes,
-# or any time you need a clean portable EXE without waiting for a push.
 on:
   workflow_dispatch:
     inputs:
       version_label:
-        description: 'Version label for the artifact (e.g. v1.2.3 or hotfix-login). Leave blank to use package.json version.'
+        description: 'Version label (e.g. v1.2.3). Leave blank to use package.json version.'
         required: false
         default: ''
       clean_install:
-        description: 'Delete node_modules and do a fresh install (slower but guarantees no stale deps)'
+        description: 'Fresh npm install (removes node_modules first)'
         required: false
         type: boolean
         default: false
-      skip_cache:
-        description: 'Bypass the npm cache (forces all packages to be re-downloaded)'
+      target:
+        description: 'Build target'
         required: false
-        type: boolean
-        default: false
+        type: choice
+        default: 'both'
+        options:
+          - both
+          - installer-only
+          - portable-only
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   rebuild-windows:
-    name: Rebuild Windows Portable EXE
+    name: Rebuild Windows App
     runs-on: windows-latest
 
     steps:
-      # ── 1. Checkout ──────────────────────────────────────────────────────────
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Node setup (with optional cache bypass) ───────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: ${{ inputs.skip_cache == false && 'npm' || '' }}
+          cache: 'npm'
 
-      # ── 3. Clean node_modules (optional) ────────────────────────────────────
       - name: Clean node_modules
         if: ${{ inputs.clean_install == true }}
         shell: pwsh
         run: |
-          if (Test-Path node_modules) {
-            Write-Host "Removing node_modules for a clean install..."
-            Remove-Item -Recurse -Force node_modules
-          }
+          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
 
-      # ── 4. Install dependencies ──────────────────────────────────────────────
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      # ── 5. Clean previous dist output ───────────────────────────────────────
       - name: Clean previous dist
         shell: pwsh
         run: |
-          if (Test-Path dist) {
-            Write-Host "Removing previous dist folder..."
-            Remove-Item -Recurse -Force dist
-          }
+          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
 
-      # ── 6. Build Expo web app ────────────────────────────────────────────────
       - name: Build Expo web app
         run: npx expo export -p web
 
-      # ── 7. Copy PWA / public assets into dist ───────────────────────────────
       - name: Copy PWA assets
         shell: pwsh
         run: |
           $files = @('manifest.json', 'sw.js', 'icon-192.png', 'icon-512.png', 'global-tea-cafe-logo.png')
           foreach ($f in $files) {
             $src = "public\$f"
-            if (Test-Path $src) {
-              Copy-Item $src dist\
-              Write-Host "Copied $f"
-            } else {
-              Write-Warning "Skipping $f — not found in public\"
-            }
+            if (Test-Path $src) { Copy-Item $src dist\; Write-Host "Copied $f" }
+            else { Write-Warning "Skipping $f — not found in public\" }
           }
 
-      # ── 8. Resolve artifact version label ────────────────────────────────────
       - name: Resolve version label
         id: version
         shell: pwsh
@@ -92,27 +76,43 @@ jobs:
             $pkg = Get-Content package.json | ConvertFrom-Json
             $label = "v$($pkg.version)"
           }
-          Write-Host "Artifact label: $label"
+          Write-Host "Label: $label"
           echo "label=$label" >> $env:GITHUB_OUTPUT
 
-      # ── 9. Build Windows portable EXE ───────────────────────────────────────
-      - name: Build Windows portable EXE
-        run: npx electron-builder --win portable
+      - name: Build installer only
+        if: ${{ inputs.target == 'installer-only' }}
+        run: npx electron-builder --win nsis --x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── 10. List built artifacts (for debugging) ─────────────────────────────
+      - name: Build portable only
+        if: ${{ inputs.target == 'portable-only' }}
+        run: npx electron-builder --win portable --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build both (installer + portable)
+        if: ${{ inputs.target == 'both' || inputs.target == '' }}
+        run: npx electron-builder --win nsis portable --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: List output files
         shell: pwsh
-        run: |
-          Write-Host "Files in electron-dist:"
-          Get-ChildItem electron-dist -Recurse | Select-Object FullName, Length
+        run: Get-ChildItem electron-dist -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object FullName, Length
 
-      # ── 11. Upload artifact ──────────────────────────────────────────────────
-      - name: Upload Windows EXE
+      - name: Upload Setup installer
         uses: actions/upload-artifact@v4
         with:
-          name: GTC-POS-Windows-${{ steps.version.outputs.label }}
-          path: electron-dist/*.exe
+          name: GTC-POS-Setup-${{ steps.version.outputs.label }}
+          path: electron-dist/*Setup*.exe
           retention-days: 30
-          if-no-files-found: error
+          if-no-files-found: warn
+
+      - name: Upload Portable EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: GTC-POS-Portable-${{ steps.version.outputs.label }}
+          path: electron-dist/*Portable*.exe
+          retention-days: 30
+          if-no-files-found: warn

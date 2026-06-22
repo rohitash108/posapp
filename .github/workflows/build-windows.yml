@@ -1,7 +1,5 @@
 name: Build Windows App
 
-# Runs automatically on every push to main / master,
-# and can also be triggered manually via the Actions tab.
 on:
   push:
     branches: [main, master]
@@ -12,61 +10,61 @@ env:
 
 jobs:
   build-windows:
-    name: Build Windows Portable EXE
+    name: Build Windows Installer + Portable
     runs-on: windows-latest
 
     steps:
-      # ── 1. Checkout ──────────────────────────────────────────────────────────
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Node setup ────────────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
-      # ── 3. Install dependencies ──────────────────────────────────────────────
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      # ── 4. Clean previous dist ───────────────────────────────────────────────
       - name: Clean previous dist
         shell: pwsh
         run: |
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
 
-      # ── 5. Build Expo web app ────────────────────────────────────────────────
       - name: Build Expo web app
         run: npx expo export -p web
 
-      # ── 6. Copy PWA / public assets into dist ───────────────────────────────
       - name: Copy PWA assets
         shell: pwsh
         run: |
           $files = @('manifest.json', 'sw.js', 'icon-192.png', 'icon-512.png', 'global-tea-cafe-logo.png')
           foreach ($f in $files) {
             $src = "public\$f"
-            if (Test-Path $src) {
-              Copy-Item $src dist\
-              Write-Host "Copied $f"
-            } else {
-              Write-Warning "Skipping $f — not found in public\"
-            }
+            if (Test-Path $src) { Copy-Item $src dist\; Write-Host "Copied $f" }
+            else { Write-Warning "Skipping $f — not found in public\" }
           }
 
-      # ── 7. Build Windows portable EXE ───────────────────────────────────────
-      - name: Build Windows portable EXE
-        run: npx electron-builder --win portable
+      - name: Build Windows installer + portable
+        run: npx electron-builder --win nsis portable --x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── 8. Upload artifact ───────────────────────────────────────────────────
-      - name: Upload Windows EXE
+      - name: List output files
+        shell: pwsh
+        run: Get-ChildItem electron-dist -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object FullName, Length
+
+      - name: Upload Setup installer
         uses: actions/upload-artifact@v4
         with:
-          name: GTC-POS-Windows
-          path: electron-dist/*.exe
+          name: GTC-POS-Setup-x64
+          path: electron-dist/*Setup*.exe
           retention-days: 30
-          if-no-files-found: error
+          if-no-files-found: warn
+
+      - name: Upload Portable EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: GTC-POS-Portable
+          path: electron-dist/*Portable*.exe
+          retention-days: 30
+          if-no-files-found: warn
