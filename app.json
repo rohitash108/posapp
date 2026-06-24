@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "csPos Mobile",
+    "name": "GTC POS",
     "slug": "cspos-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "icon": "./assets/gtc-logo.png",
     "splash": {
       "image": "./assets/gtc-logo.png",
@@ -21,7 +21,15 @@
         "foregroundImage": "./assets/gtc-logo.png",
         "backgroundColor": "#1A2B1A"
       },
-      "package": "com.cspos.mobile"
+      "package": "com.cspos.mobile",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "bundler": "metro",

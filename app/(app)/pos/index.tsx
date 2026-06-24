@@ -13,8 +13,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import uuid from 'react-native-uuid';
-import { getCategories, getItems, addToSyncQueue, createLocalOrder } from '@/database/repositories';
+import { getCategories, getItems, upsertCategories, upsertItems, addToSyncQueue, createLocalOrder } from '@/database/repositories';
 import {
   webGetItems, webSaveOrder, webAddSyncQueue, webHasData,
   webSaveCategories, webSaveItems, webGetCategories, webSaveTables,
@@ -210,7 +211,8 @@ function SyncStatusDot() {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function POSScreen() {
-  const t = useThemedScreen();
+  const t      = useThemedScreen();
+  const insets = useSafeAreaInsets();
   const sh  = useMemo(() => mkSh(t.colors),  [t.colors]);
   const ic  = useMemo(() => mkIc(t.colors),  [t.colors]);
   const cp  = useMemo(() => mkCp(t.colors),  [t.colors]);
@@ -341,23 +343,21 @@ export default function POSScreen() {
   }, []);
   const openTablePicker = useCallback(() => {
     if (Platform.OS === 'web') {
-      // On web: use document.getElementById for reliable coords even inside
-      // conditional JSX where React ref getBoundingClientRect can be unreliable.
+      // On web: use document.getElementById for reliable coords
       const el = (typeof document !== 'undefined')
         ? document.getElementById('pos-table-field')
         : null;
       if (el) {
         const rect = el.getBoundingClientRect();
         setTableDropPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 280) });
-        setShowTablePicker(true);
-        return;
+      } else {
+        measureFieldPos(tableFieldRef, (top, left, width) => {
+          setTableDropPos({ top, left, width });
+        });
       }
     }
-    // Native fallback
-    measureFieldPos(tableFieldRef, (top, left, width) => {
-      setTableDropPos({ top, left, width });
-      setShowTablePicker(true);
-    });
+    // On mobile: bottom-sheet, no position needed
+    setShowTablePicker(true);
   }, []);
   const { isOnline, taxes, restaurant } = useAppStore();
   const taxRate = taxes[0]?.rate ?? 0;
@@ -394,15 +394,34 @@ export default function POSScreen() {
         }
       }
     } else {
-      const cats = await getCategories();
-      setCategories(cats);
+      // Native: try server sync first, fallback to SQLite cache
+      try {
+        const res = await client.get('/sync/pull');
+        const cats: Category[]       = res.data.categories ?? [];
+        const items: Item[]           = res.data.items ?? [];
+        const tbls: RestaurantTable[] = res.data.tables ?? [];
+        // Persist to SQLite for offline use
+        await upsertCategories(cats);
+        await upsertItems(items);
+        useAppStore.getState().setTaxes(res.data.taxes ?? []);
+        setCategories(cats);
+        setAllItems(items);
+        setTables(tbls);
+      } catch {
+        // Offline fallback: read from SQLite
+        const cats  = await getCategories();
+        const items = await getItems(undefined);
+        setCategories(cats);
+        setAllItems(items);
+      }
     }
 
     // ── Phase 2: Load secondary data in parallel (non-blocking) ──────────────
-    const [custRes, staffRes, ordersRes] = await Promise.allSettled([
+    const [custRes, staffRes, ordersRes, tablesRes] = await Promise.allSettled([
       client.get('/customers'),
       client.get('/staff'),
       ordersApi.list({ per_page: 10 }),
+      client.get('/tables'),
     ]);
     if (custRes.status === 'fulfilled') {
       const data = custRes.value.data?.data ?? custRes.value.data ?? [];
@@ -416,12 +435,18 @@ export default function POSScreen() {
       const data = ordersRes.value.data?.data ?? ordersRes.value.data ?? [];
       setRecentOrders(Array.isArray(data) ? data.slice(0, 8) : []);
     }
+    if (tablesRes.status === 'fulfilled') {
+      const data = tablesRes.value.data?.data ?? tablesRes.value.data ?? [];
+      setTables(Array.isArray(data) ? data : []);
+    }
   }, []);
 
   const loadItems = useCallback(async () => {
-    if (Platform.OS !== 'web') {
+    // On native, filter already-loaded items by category (no extra DB call needed
+    // since loadData sets allItems from server). Only re-query SQLite as fallback.
+    if (Platform.OS !== 'web' && activeCatId !== null) {
       const items = await getItems(activeCatId ?? undefined);
-      setAllItems(items);
+      if (items.length > 0) setAllItems(items);
     }
   }, [activeCatId]);
 
@@ -629,9 +654,7 @@ export default function POSScreen() {
 
       if (isOnline) {
         try {
-          console.log('[POS] Placing order online...', { total, items: payload.items.length });
           const res = await ordersApi.create(payload);
-          console.log('[POS] Order API response:', JSON.stringify(res.data));
           const orderNum   = res.data?.order_number ?? res.data?.data?.order_number ?? localUuid.slice(0, 8);
           const orderId    = res.data?.id ?? res.data?.data?.id ?? null;
           const tableName  = tables.find(t => t.id === cart.table_id)?.name ?? null;
@@ -1629,16 +1652,19 @@ export default function POSScreen() {
     <Modal
       visible={showTablePicker}
       transparent
-      animationType="fade"
+      animationType={Platform.OS === 'web' ? 'fade' : 'slide'}
       onRequestClose={() => { setShowTablePicker(false); setTableSearch(''); }}
     >
       {/* Tap-outside backdrop */}
       <Pressable
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' }}
         onPress={() => { setShowTablePicker(false); setTableSearch(''); }}
       />
-      {/* Anchored dropdown panel */}
-      <View style={[cpm.dropPanel, { top: tableDropPos.top, left: tableDropPos.left, width: tableDropPos.width }]}>
+      {/* On web: anchored dropdown. On mobile: centered bottom sheet */}
+      <View style={Platform.OS === 'web'
+        ? [cpm.dropPanel, { top: tableDropPos.top, left: tableDropPos.left, width: tableDropPos.width }]
+        : { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: t.colors.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: '80%', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, elevation: 24 }
+      }>
         {/* Compact header */}
         <View style={cpm.dropHeader}>
           <Ionicons name="grid-outline" size={13} color="#C9A52A" />
@@ -1920,7 +1946,7 @@ export default function POSScreen() {
       {tablePickerModal}
       {customItemModal}
 
-      <View style={mb.topBar}>
+      <View style={[mb.topBar, { paddingTop: insets.top + 8 }]}>
         <Pressable style={mb.backBtn} onPress={() => router.replace('/(app)/dashboard')}>
           <Ionicons name="arrow-back" size={18} color={t.colors.text} />
         </Pressable>
@@ -1966,14 +1992,17 @@ export default function POSScreen() {
         </Pressable>
       )}
 
-      <Modal visible={showCart} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={showCart} animationType="slide" onRequestClose={() => setShowCart(false)}>
         <View style={{ flex: 1, backgroundColor: t.colors.surface }}>
-          <View style={[sh.cartHeader, t.chrome]}>
-            <Ionicons name="receipt-outline" size={16} color="#C9A52A" />
+          <View style={[sh.cartHeader, t.chrome, { paddingTop: insets.top + 11 }]}>
+            <Ionicons name="receipt-outline" size={17} color="#C9A52A" />
             <Text style={sh.cartHeaderTitle}>Order Summary</Text>
             {cartCount > 0 && <View style={sh.cartBadge}><Text style={[sh.cartBadgeText, { color: t.colors.brandDark }]}>{cartCount}</Text></View>}
-            <Pressable style={{ marginLeft: 'auto' }} onPress={() => setShowCart(false)}>
-              <Ionicons name="close" size={22} color="#fff" />
+            <Pressable
+              style={{ marginLeft: 'auto', width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }}
+              onPress={() => setShowCart(false)}
+            >
+              <Ionicons name="close" size={20} color="#fff" />
             </Pressable>
           </View>
           {cartPanel}
