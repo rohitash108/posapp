@@ -219,6 +219,7 @@ export default function POSScreen() {
   const vm  = useMemo(() => mkVm(t.colors),  [t.colors]);
   const cpm = useMemo(() => mkCpm(t.colors), [t.colors]);
   const mb  = useMemo(() => mkMb(t.colors),  [t.colors]);
+  const mc  = useMemo(() => mkMc(t.colors),  [t.colors]);
   const su  = useMemo(() => mkSu(t.colors),  [t.colors]);
   const tam = useMemo(() => mkTam(t.colors), [t.colors]);
   const [categories, setCategories]       = useState<Category[]>([]);
@@ -278,6 +279,7 @@ export default function POSScreen() {
   const [lastOrderId, setLastOrderId]     = useState<number | null>(null);
   const [customPctInput, setCustomPctInput] = useState('');
   const [quickPct, setQuickPct]           = useState<number | null>(null);
+  const [showDiscountSection, setShowDiscountSection] = useState(false);
 
   const {
     cart, addItem, updateQuantity, updateUnitPrice, clearCart, getSubtotal, getTotal, getTaxAmount,
@@ -330,12 +332,14 @@ export default function POSScreen() {
     }
   }
   const openCustPicker = useCallback(() => {
+    if (Platform.OS !== 'web') { setShowCustPicker(true); return; }
     measureFieldPos(custFieldRef, (top, left, width) => {
       setCustDropPos({ top, left, width });
       setShowCustPicker(true);
     });
   }, []);
   const openWaiterPicker = useCallback(() => {
+    if (Platform.OS !== 'web') { setShowWaiterPicker(true); return; }
     measureFieldPos(waiterFieldRef, (top, left, width) => {
       setWaiterDropPos({ top, left, width });
       setShowWaiterPicker(true);
@@ -617,12 +621,15 @@ export default function POSScreen() {
       const total      = getTotal(taxRate, taxType);
       const custName   = walkInName.trim() || cart.customer_name || 'Walk-in';
       const received   = parseFloat(receivedInput) || 0;
+      const orderCreatedAt = new Date().toISOString();
 
       const payload: any = {
         local_uuid:           localUuid,
         order_type:           cart.order_type,
         status:               asDraft ? 'draft' : 'pending',
         is_draft:             asDraft,
+        created_at:           orderCreatedAt,
+        updated_at:           orderCreatedAt,
         payment_status:       received >= total ? 'paid' : 'unpaid',
         payment_method:       paymentMethod,
         restaurant_table_id:  cart.table_id ?? null,
@@ -703,12 +710,15 @@ export default function POSScreen() {
       }
 
       // Offline save
+      const { rememberOfflineOrderTime } = await import('@/utils/offlineOrderTimes');
+      await rememberOfflineOrderTime(localUuid, orderCreatedAt);
+
       if (Platform.OS === 'web') {
-        await webSaveOrder({ ...payload });
-        await webAddSyncQueue({ id: localUuid, action: 'create_order', payload: JSON.stringify(payload), created_at: new Date().toISOString() });
+        await webSaveOrder({ ...payload, local_uuid: localUuid });
+        await webAddSyncQueue({ id: localUuid, action: 'create_order', payload: JSON.stringify(payload), created_at: orderCreatedAt });
       } else {
         await createLocalOrder({ ...payload, items: payload.items as any } as any);
-        await addToSyncQueue({ id: localUuid, action: 'create_order', payload: JSON.stringify(payload), created_at: new Date().toISOString() });
+        await addToSyncQueue({ id: localUuid, action: 'create_order', payload: JSON.stringify(payload), created_at: orderCreatedAt });
       }
       const tableNameOffline = tables.find(t => t.id === cart.table_id)?.name ?? null;
       const offlineOrderData = { ...payload, order_number: localUuid.slice(0, 8), table_name: tableNameOffline };
@@ -740,7 +750,9 @@ export default function POSScreen() {
 
   async function handleCompleteOrder() {
     if (lastOrderId) {
-      try { await ordersApi.updateStatus(lastOrderId, 'completed'); } catch { /* ignore */ }
+      try {
+        await ordersApi.complete(lastOrderId, lastOrderData?.payment_method ?? 'cash');
+      } catch { /* ignore */ }
     }
     handleNewOrder();
   }
@@ -1435,14 +1447,16 @@ export default function POSScreen() {
     <Modal
       visible={showCustPicker}
       transparent
-      animationType="fade"
+      animationType={Platform.OS !== 'web' ? 'slide' : 'fade'}
       onRequestClose={() => { setShowCustPicker(false); setCustSearch(''); }}
     >
       <Pressable
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: Platform.OS !== 'web' ? 'rgba(0,0,0,0.45)' : 'transparent' }}
         onPress={() => { setShowCustPicker(false); setCustSearch(''); }}
       />
-      <View style={[cpm.dropPanel, { top: custDropPos.top, left: custDropPos.left, width: custDropPos.width }]}>
+      <View style={Platform.OS !== 'web'
+        ? { position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '85%', backgroundColor: t.colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 20, elevation: 24 }
+        : [cpm.dropPanel, { top: custDropPos.top, left: custDropPos.left, width: custDropPos.width }]}>
         {/* Compact header */}
         <View style={cpm.dropHeader}>
           <Ionicons name="person-outline" size={13} color="#C9A52A" />
@@ -1563,14 +1577,16 @@ export default function POSScreen() {
     <Modal
       visible={showWaiterPicker}
       transparent
-      animationType="fade"
+      animationType={Platform.OS !== 'web' ? 'slide' : 'fade'}
       onRequestClose={() => { setShowWaiterPicker(false); setWaiterSearch(''); }}
     >
       <Pressable
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: Platform.OS !== 'web' ? 'rgba(0,0,0,0.45)' : 'transparent' }}
         onPress={() => { setShowWaiterPicker(false); setWaiterSearch(''); }}
       />
-      <View style={[cpm.dropPanel, { top: waiterDropPos.top, left: waiterDropPos.left, width: waiterDropPos.width }]}>
+      <View style={Platform.OS !== 'web'
+        ? { position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '80%', backgroundColor: t.colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 20, elevation: 24 }
+        : [cpm.dropPanel, { top: waiterDropPos.top, left: waiterDropPos.left, width: waiterDropPos.width }]}>
         {/* Compact header */}
         <View style={cpm.dropHeader}>
           <Ionicons name="person-circle-outline" size={13} color="#C9A52A" />
@@ -1935,6 +1951,269 @@ export default function POSScreen() {
     );
   }
 
+  // ── Mobile cart content (Android-optimised, replaces cartPanel in mobile modal) ─
+  const mobileCartContent = (
+    <View style={{ flex: 1, backgroundColor: t.colors.surface }}>
+
+      {/* Scrollable body — starts immediately below the sticky header */}
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+        {/* Items header */}
+        <View style={mc.itemsHeader}>
+          <Text style={mc.itemsHeaderTitle}>Items ({cart.items.length})</Text>
+          <Pressable style={mc.addCustomMiniBtn} onPress={() => setShowCustomItem(true)}>
+            <Ionicons name="add" size={13} color={t.colors.text} />
+            <Text style={mc.addCustomMiniText}>Custom</Text>
+          </Pressable>
+        </View>
+
+        {cart.items.length === 0 ? (
+          <View style={mc.emptyCart}>
+            <Ionicons name="cart-outline" size={40} color="#d1d5db" />
+            <Text style={mc.emptyCartText}>Cart is empty</Text>
+            <Text style={mc.emptyCartSub}>Go back and tap items to add</Text>
+          </View>
+        ) : cart.items.map(item => {
+          const needsPrice = !(item.unit_price > 0);
+          const inputVal   = priceInputs[item.uuid] ?? (needsPrice ? '' : item.unit_price.toFixed(2));
+          const livePrice  = parseFloat(inputVal) || item.unit_price;
+          const itemTotal  = livePrice * item.quantity;
+          return (
+            <View key={item.uuid} style={[mc.cartItem, needsPrice && mc.cartItemWarn]}>
+              <View style={mc.cartItemTop}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={mc.cartItemName} numberOfLines={1}>{item.name}</Text>
+                  {item.variation && <Text style={mc.cartItemVar}>{item.variation}</Text>}
+                </View>
+                <View style={mc.qtyControl}>
+                  <Pressable style={mc.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity - 1)}>
+                    <Ionicons name="remove" size={12} color="#374151" />
+                  </Pressable>
+                  <Text style={mc.qtyText}>{item.quantity}</Text>
+                  <Pressable style={mc.qtyBtn} onPress={() => updateQuantity(item.uuid, item.quantity + 1)}>
+                    <Ionicons name="add" size={12} color="#374151" />
+                  </Pressable>
+                </View>
+                <Text style={mc.cartItemTotal}>₹{itemTotal.toFixed(0)}</Text>
+                <Pressable style={mc.removeBtn} onPress={() => updateQuantity(item.uuid, 0)}>
+                  <Ionicons name="close" size={14} color="#9ca3af" />
+                </Pressable>
+              </View>
+              {needsPrice && (
+                <View style={mc.priceInputRow}>
+                  <Ionicons name="warning-outline" size={12} color="#d97706" />
+                  <TextInput
+                    style={mc.priceInput}
+                    placeholder="Enter price ₹"
+                    placeholderTextColor="#d97706"
+                    keyboardType="decimal-pad"
+                    value={inputVal}
+                    onChangeText={(v) => { if (/^\d*\.?\d*$/.test(v)) setPriceInputs(p => ({ ...p, [item.uuid]: v })); }}
+                    onEndEditing={() => {
+                      const v = parseFloat(inputVal);
+                      if (!isNaN(v) && v > 0) {
+                        updateUnitPrice(item.uuid, v);
+                        setPriceInputs(p => { const n = { ...p }; delete n[item.uuid]; return n; });
+                      }
+                    }}
+                  />
+                </View>
+              )}
+            </View>
+          );
+        })}
+
+        {/* Payment method */}
+        {cart.items.length > 0 && (
+          <View style={mc.section}>
+            <Text style={mc.sectionLabel}>Payment Method</Text>
+            <View style={mc.payRow}>
+              {PAYMENT_METHODS.map(pm => (
+                <Pressable key={pm.key}
+                  style={[mc.payBtn, paymentMethod === pm.key && mc.payBtnActive]}
+                  onPress={() => setPaymentMethod(pm.key)}
+                >
+                  <Ionicons name={pm.icon} size={14} color={paymentMethod === pm.key ? '#fff' : '#6b7280'} />
+                  <Text style={[mc.payBtnText, paymentMethod === pm.key && mc.payBtnTextActive]}>{pm.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Condensed payment summary */}
+        {cart.items.length > 0 && (
+          <View style={mc.summarySection}>
+            <View style={mc.summaryRow}>
+              <Text style={mc.summaryLabel}>Subtotal</Text>
+              <Text style={mc.summaryVal}>₹{liveSubtotal.toFixed(2)}</Text>
+            </View>
+            {taxRate > 0 && (
+              <View style={mc.summaryRow}>
+                <Text style={mc.summaryLabel}>Tax ({taxRate}%)</Text>
+                <Text style={mc.summaryVal}>₹{liveTaxAmount.toFixed(2)}</Text>
+              </View>
+            )}
+            {(cart.discount_amount ?? 0) > 0 && (
+              <View style={mc.summaryRow}>
+                <Text style={mc.summaryLabel}>Discount</Text>
+                <Text style={[mc.summaryVal, { color: '#16a34a' }]}>-₹{(cart.discount_amount ?? 0).toFixed(2)}</Text>
+              </View>
+            )}
+            {(cart.coupon_discount ?? 0) > 0 && (
+              <View style={mc.summaryRow}>
+                <Text style={mc.summaryLabel}>Coupon ({cart.coupon_code})</Text>
+                <Text style={[mc.summaryVal, { color: '#16a34a' }]}>-₹{(cart.coupon_discount ?? 0).toFixed(2)}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Coupon & Discount accordion */}
+        {cart.items.length > 0 && (
+          <Pressable style={mc.accordionHeader} onPress={() => setShowDiscountSection(v => !v)}>
+            <Ionicons name={showDiscountSection ? 'chevron-up' : 'chevron-down'} size={14} color={t.colors.textMuted} />
+            <Text style={mc.accordionLabel}>
+              {showDiscountSection ? 'Hide' : 'Add'} Coupon & Discount
+              {(discount > 0 || (cart.coupon_discount ?? 0) > 0) ? '  ✓' : ''}
+            </Text>
+          </Pressable>
+        )}
+        {showDiscountSection && (
+          <View style={mc.accordionBody}>
+            {cart.coupon_code ? (
+              <View style={mc.couponActive}>
+                <Ionicons name="ticket-outline" size={13} color="#16a34a" />
+                <Text style={mc.couponActiveText}>{cart.coupon_code} (-₹{(cart.coupon_discount ?? 0).toFixed(2)})</Text>
+                <Pressable onPress={handleRemoveCoupon}><Ionicons name="close-circle" size={15} color="#16a34a" /></Pressable>
+              </View>
+            ) : (
+              <View style={mc.couponRow}>
+                <View style={mc.couponInput}>
+                  <TextInput style={mc.couponInputText} placeholder="Coupon code" value={couponInput} onChangeText={setCouponInput} autoCapitalize="characters" placeholderTextColor="#9ca3af" />
+                </View>
+                <Pressable style={[mc.couponApplyBtn, (!couponInput.trim() || couponLoading) && { opacity: 0.5 }]} onPress={handleApplyCoupon} disabled={couponLoading || !couponInput.trim()}>
+                  {couponLoading ? <ActivityIndicator size={11} color="#fff" /> : <Text style={mc.couponApplyText}>Apply</Text>}
+                </Pressable>
+              </View>
+            )}
+            <Text style={mc.discLabel}>Quick Discount</Text>
+            <View style={mc.quickDiscRow}>
+              {[5, 10, 15, 20].map(pct => (
+                <Pressable key={pct} style={[mc.quickDiscBtn, quickPct === pct && mc.quickDiscBtnActive]} onPress={() => handleQuickDiscount(pct)}>
+                  <Text style={[mc.quickDiscText, quickPct === pct && mc.quickDiscTextActive]}>{pct}%</Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={mc.discInputRow}>
+              <View style={mc.discInputBox}>
+                <TextInput style={mc.discInputText} placeholder="Custom %" value={customPctInput} onChangeText={setCustomPctInput} keyboardType="decimal-pad" placeholderTextColor="#9ca3af" />
+                <Text style={mc.discInputSuffix}>%</Text>
+              </View>
+              <Pressable style={[mc.discApplyBtn, t.chromeBtn]} onPress={handleCustomPctApply}>
+                <Text style={mc.discApplyText}>Apply</Text>
+              </Pressable>
+              <Pressable style={mc.discClearBtn} onPress={handleDiscountClear}>
+                <Text style={mc.discClearText}>Clear</Text>
+              </Pressable>
+            </View>
+            <View style={mc.discInputRow}>
+              <Text style={[mc.discLabel, { flex: 1 }]}>Discount (₹)</Text>
+              <View style={[mc.discInputBox, { flex: 0, minWidth: 90 }]}>
+                <TextInput
+                  style={[mc.discInputText, { textAlign: 'right' }]}
+                  value={discountInput}
+                  onChangeText={v => { setDiscountInput(v); setQuickPct(null); setCustomPctInput(''); }}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Cash received + change */}
+        {cart.items.length > 0 && (
+          <View style={mc.receivedSection}>
+            <Text style={mc.sectionLabel}>Cash Received</Text>
+            <View style={mc.receivedInput}>
+              <Text style={mc.receivedPrefix}>₹</Text>
+              <TextInput style={mc.receivedText} placeholder="0.00" value={receivedInput} onChangeText={setReceivedInput} keyboardType="decimal-pad" placeholderTextColor="#9ca3af" />
+            </View>
+            {received > 0 && (
+              <Text style={[mc.changeText, { color: change >= 0 ? '#16a34a' : '#dc2626' }]}>
+                {change >= 0 ? `Change: ₹${change.toFixed(2)}` : `Balance due: ₹${(liveTotal - received).toFixed(2)}`}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Kitchen notes */}
+        <View style={mc.notesSection}>
+          <Text style={mc.sectionLabel}>Kitchen Notes</Text>
+          <TextInput
+            style={mc.notesInput}
+            placeholder="E.g. less spicy, no onion, allergies..."
+            value={notesInput}
+            onChangeText={setNotesInput}
+            placeholderTextColor="#9ca3af"
+            multiline
+            numberOfLines={2}
+            textAlignVertical="top"
+          />
+        </View>
+
+        {/* Draft + Cancel row */}
+        {cart.items.length > 0 && (
+          <View style={mc.secondaryBtnRow}>
+            <Pressable style={mc.draftBtn} onPress={() => handlePlaceOrder(true)} disabled={placing || cartCount === 0}>
+              <Ionicons name="save-outline" size={14} color={t.colors.textMuted} />
+              <Text style={mc.draftBtnText}>Save Draft</Text>
+            </Pressable>
+            <Pressable style={mc.cancelOrderBtn} onPress={() => {
+              if (cartCount === 0) return;
+              Alert.alert('Cancel Order', 'Clear all items from this order?', [
+                { text: 'No', style: 'cancel' },
+                { text: 'Yes, Cancel', style: 'destructive', onPress: () => {
+                    clearCart(); setWalkInName(''); setDiscountInput(''); setCustomPctInput('');
+                    setQuickPct(null); setCouponInput(''); setNotesInput(''); setReceivedInput('');
+                  }
+                },
+              ]);
+            }}>
+              <Ionicons name="close" size={14} color="#dc2626" />
+              <Text style={mc.cancelOrderBtnText}>Cancel Order</Text>
+            </Pressable>
+          </View>
+        )}
+
+        <View style={{ height: 16 }} />
+      </ScrollView>
+
+      {/* Sticky bottom CTA */}
+      <View style={[mc.stickyBottom, { paddingBottom: insets.bottom + 8 }]}>
+        <View style={mc.stickyTotalRow}>
+          <Text style={mc.stickyTotalLabel}>Amount to Pay</Text>
+          <Text style={mc.stickyTotalVal}>₹{liveTotal.toFixed(2)}</Text>
+        </View>
+        <Pressable
+          style={({ pressed }) => [mc.placeOrderBtn, t.chromeBtn, (placing || cartCount === 0) && { opacity: 0.5 }, pressed && { opacity: 0.85 }]}
+          onPress={() => handlePlaceOrder(false)}
+          disabled={placing || cartCount === 0}
+        >
+          {placing
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <>
+                <Text style={mc.placeOrderBtnText}>{isOnline ? 'Place Order' : 'Save Offline'}</Text>
+                <Ionicons name="arrow-forward" size={16} color="#C9A52A" />
+              </>
+          }
+        </Pressable>
+      </View>
+    </View>
+  );
+
   // ── Mobile layout ──────────────────────────────────────────────────────────
   return (
     <View style={[mb.shell, t.shell]}>
@@ -1946,32 +2225,59 @@ export default function POSScreen() {
       {tablePickerModal}
       {customItemModal}
 
-      <View style={[mb.topBar, { paddingTop: insets.top + 8 }]}>
+      {/* Top bar */}
+      <View style={[mb.topBar, { paddingTop: insets.top + 4 }]}>
         <Pressable style={mb.backBtn} onPress={() => router.replace('/(app)/dashboard')}>
           <Ionicons name="arrow-back" size={18} color={t.colors.text} />
         </Pressable>
-        <Text style={mb.topTitle}>Point of Sale</Text>
-        <View style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={mb.topTitle}>Point of Sale</Text>
+          {categories.length > 0 && (
+            <Text style={mb.topSub}>{displayItems.length} items</Text>
+          )}
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <ThemeToggle variant="header" size={16} />
           <SyncStatusDot />
         </View>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={mb.catBar} contentContainerStyle={{ paddingHorizontal: 10, gap: 7, alignItems: 'center', height: 54 }}>
+
+      {/* Search bar */}
+      <View style={mb.searchRow}>
+        <Ionicons name="search" size={15} color="#9ca3af" />
+        <TextInput
+          style={mb.searchInput}
+          placeholder="Search items..."
+          value={search}
+          onChangeText={setSearch}
+          placeholderTextColor="#9ca3af"
+        />
+        {search.length > 0 && (
+          <Pressable onPress={() => setSearch('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color="#9ca3af" />
+          </Pressable>
+        )}
+      </View>
+
+      {/* Category chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={mb.catBar}
+        contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 6, alignItems: 'center' }}
+      >
         {[{ id: null as null, name: 'All' }, ...categories.map(c => ({ id: c.id, name: c.name }))].map(c => (
           <Pressable
             key={String(c.id ?? 'all')}
             style={[mb.catChip, activeCatId === c.id && mb.catChipActive]}
             onPress={() => setActiveCatId(c.id)}
           >
-            <Text style={[mb.catChipText, activeCatId === c.id && mb.catChipTextActive]}>{c.name}</Text>
+            <Text style={[mb.catChipText, activeCatId === c.id && mb.catChipTextActive]} numberOfLines={1}>
+              {c.name}
+            </Text>
           </Pressable>
         ))}
       </ScrollView>
-
-      <View style={mb.searchRow}>
-        <Ionicons name="search" size={14} color="#9ca3af" />
-        <TextInput style={mb.searchInput} placeholder="Search..." value={search} onChangeText={setSearch} placeholderTextColor="#9ca3af" />
-      </View>
 
       <FlatList
         data={displayItems}
@@ -1993,19 +2299,114 @@ export default function POSScreen() {
       )}
 
       <Modal visible={showCart} animationType="slide" onRequestClose={() => setShowCart(false)}>
-        <View style={{ flex: 1, backgroundColor: t.colors.surface }}>
-          <View style={[sh.cartHeader, t.chrome, { paddingTop: insets.top + 11 }]}>
-            <Ionicons name="receipt-outline" size={17} color="#C9A52A" />
-            <Text style={sh.cartHeaderTitle}>Order Summary</Text>
-            {cartCount > 0 && <View style={sh.cartBadge}><Text style={[sh.cartBadgeText, { color: t.colors.brandDark }]}>{cartCount}</Text></View>}
-            <Pressable
-              style={{ marginLeft: 'auto', width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }}
-              onPress={() => setShowCart(false)}
-            >
-              <Ionicons name="close" size={20} color="#fff" />
-            </Pressable>
+        <View style={{ flex: 1, flexDirection: 'column', backgroundColor: t.colors.surface }}>
+
+          {/* ── STICKY HEADER (never scrolls) ── */}
+          <View style={[t.chrome, { paddingTop: insets.top, elevation: 8, zIndex: 100 }]}>
+
+            {/* Drag handle */}
+            <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 2 }}>
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)' }} />
+            </View>
+
+            {/* Row 1: close btn | title + item count | total */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10, gap: 12 }}>
+              <Pressable
+                onPress={() => setShowCart(false)}
+                style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Ionicons name="chevron-down" size={20} color="#fff" />
+              </Pressable>
+
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: '#fff', letterSpacing: 0.3 }}>New Order</Text>
+                <Text style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>
+                  {cartCount > 0 ? `${cartCount} item${cartCount !== 1 ? 's' : ''} in cart` : 'No items yet'}
+                </Text>
+              </View>
+
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 0.7, textTransform: 'uppercase' }}>Total</Text>
+                <Text style={{ fontSize: 22, fontWeight: '800', color: '#C9A52A' }}>₹{liveTotal.toFixed(0)}</Text>
+              </View>
+            </View>
+
+            {/* Row 2: order type switcher pills */}
+            <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 10, gap: 8 }}>
+              {ORDER_TYPES.map(ot => {
+                const active = cart.order_type === ot.key;
+                return (
+                  <Pressable
+                    key={ot.key}
+                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderRadius: 22, borderWidth: 1, backgroundColor: active ? '#C9A52A' : 'rgba(255,255,255,0.08)', borderColor: active ? '#C9A52A' : 'rgba(255,255,255,0.18)' }}
+                    onPress={() => setOrderType(ot.key as any)}
+                  >
+                    <Ionicons name={ot.icon} size={12} color={active ? '#1A2B1A' : 'rgba(255,255,255,0.65)'} />
+                    <Text style={{ fontSize: 11.5, fontWeight: '700', color: active ? '#1A2B1A' : 'rgba(255,255,255,0.65)' }}>{ot.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Row 3: context chips — table / waiter / customer */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, paddingBottom: 14, gap: 6 }}>
+              {/* Table chip (dine-in only) */}
+              {cart.order_type === 'dine_in' && (
+                <Pressable
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, backgroundColor: cart.table_id ? 'rgba(13,118,225,0.25)' : 'rgba(253,230,138,0.12)', borderColor: cart.table_id ? 'rgba(147,197,253,0.45)' : 'rgba(253,230,138,0.45)' }}
+                  onPress={openTablePicker}
+                >
+                  <Ionicons name="grid-outline" size={12} color={cart.table_id ? '#93c5fd' : '#fde68a'} />
+                  <Text style={{ fontSize: 11.5, fontWeight: '600', color: cart.table_id ? '#93c5fd' : '#fde68a' }}>
+                    {cart.table_id ? (tables.find(tb => tb.id === cart.table_id)?.name ?? 'Table') : 'Select Table *'}
+                  </Text>
+                  {!!cart.table_id && (
+                    <Pressable hitSlop={10} onPress={() => { switchTable(undefined); syncLocalFromCart(); }}>
+                      <Ionicons name="close-circle" size={14} color="#93c5fd" />
+                    </Pressable>
+                  )}
+                </Pressable>
+              )}
+
+              {/* Waiter chip */}
+              <Pressable
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, backgroundColor: cart.waiter_id ? 'rgba(124,58,237,0.25)' : 'rgba(255,255,255,0.07)', borderColor: cart.waiter_id ? 'rgba(196,181,253,0.45)' : 'rgba(255,255,255,0.18)' }}
+                onPress={() => openWaiterPicker()}
+              >
+                <Ionicons name="person-circle-outline" size={12} color={cart.waiter_id ? '#c4b5fd' : 'rgba(255,255,255,0.5)'} />
+                <Text style={{ fontSize: 11.5, fontWeight: '600', color: cart.waiter_id ? '#c4b5fd' : 'rgba(255,255,255,0.5)' }} numberOfLines={1}>
+                  {cart.waiter_id ? cart.waiter_name : 'Waiter'}
+                </Text>
+                {!!cart.waiter_id && (
+                  <Pressable hitSlop={10} onPress={() => setWaiter(undefined, undefined)}>
+                    <Ionicons name="close-circle" size={14} color="#c4b5fd" />
+                  </Pressable>
+                )}
+              </Pressable>
+
+              {/* Customer chip */}
+              <Pressable
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, backgroundColor: cart.customer_id ? 'rgba(201,165,42,0.2)' : 'rgba(255,255,255,0.07)', borderColor: cart.customer_id ? 'rgba(201,165,42,0.45)' : 'rgba(255,255,255,0.18)' }}
+                onPress={() => openCustPicker()}
+              >
+                <Ionicons name="person-outline" size={12} color={cart.customer_id ? '#C9A52A' : 'rgba(255,255,255,0.5)'} />
+                <Text style={{ fontSize: 11.5, fontWeight: '600', color: cart.customer_id ? '#C9A52A' : 'rgba(255,255,255,0.5)' }} numberOfLines={1}>
+                  {cart.customer_id ? cart.customer_name : (walkInName || 'Customer')}
+                </Text>
+                {!!cart.customer_id && (
+                  <Pressable hitSlop={10} onPress={() => { setWalkInName(''); setCustomer(undefined, undefined, undefined); }}>
+                    <Ionicons name="close-circle" size={14} color="#C9A52A" />
+                  </Pressable>
+                )}
+              </Pressable>
+            </View>
           </View>
-          {cartPanel}
+
+          {/* ── SCROLLABLE CONTENT (fills remaining space below header) ── */}
+          <View style={{ flex: 1 }}>
+            {mobileCartContent}
+          </View>
+
         </View>
       </Modal>
     </View>
@@ -2334,20 +2735,29 @@ function mkCpm(c: _TC) { return StyleSheet.create({
 // Mobile layout
 function mkMb(c: _TC) { return StyleSheet.create({
   shell:      { flex: 1, backgroundColor: c.background },
-  catBar:     { height: 54, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-  catChip:    { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
-  catChipActive: { backgroundColor: '#0D76E1', borderColor: '#0D76E1' },
-  catChipText:   { fontSize: 12.5, fontWeight: '600', color: c.text },
-  catChipTextActive: { color: '#fff' },
-  searchRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surface, marginHorizontal: 10, marginTop: 8, marginBottom: 2, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: c.border },
-  searchInput:{ flex: 1, fontSize: 13.5, color: c.heading },
-  fab:        { position: 'absolute', bottom: 12, left: 12, right: 12, backgroundColor: c.sidebar, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 8, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
-  fabBadge:   { backgroundColor: c.brand, borderRadius: 999, minWidth: 20, height: 20, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
+
+  // Top bar
+  topBar:     { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.surface, paddingHorizontal: 14, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: c.border },
+  backBtn:    { width: 34, height: 34, borderRadius: 9, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+  topTitle:   { fontSize: 16, fontWeight: '800', color: c.heading, lineHeight: 20 },
+  topSub:     { fontSize: 11, color: c.textMuted, marginTop: 1 },
+
+  // Search bar — sits between topBar and catBar
+  searchRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surface, marginHorizontal: 12, marginVertical: 8, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: c.border, elevation: 1 },
+  searchInput:{ flex: 1, fontSize: 13.5, color: c.heading, padding: 0 },
+
+  // Category chip bar — NO fixed height so chips never clip
+  catBar:     { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+  catChip:    { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+  catChipActive:    { backgroundColor: '#0D76E1', borderColor: '#0D76E1' },
+  catChipText:      { fontSize: 12.5, fontWeight: '600', color: c.text },
+  catChipTextActive:{ fontSize: 12.5, fontWeight: '700', color: '#fff' },
+
+  // Cart FAB
+  fab:        { position: 'absolute', bottom: 14, left: 12, right: 12, backgroundColor: c.sidebar, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 8, shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 5 }, elevation: 10 },
+  fabBadge:   { backgroundColor: c.brand, borderRadius: 999, minWidth: 22, height: 22, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
   fabBadgeText: { color: c.brandDark, fontSize: 11, fontWeight: '800' },
   fabTotal:   { color: c.brand, fontWeight: '800', fontSize: 15 },
-  topBar:     { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.surface, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border },
-  backBtn:    { width: 32, height: 32, borderRadius: 8, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  topTitle:   { fontSize: 16, fontWeight: '800', color: c.heading },
 }); }
 
 // SweetAlert-style table-required modal styles
@@ -2361,6 +2771,98 @@ function mkTam(c: _TC) { return StyleSheet.create({
   primaryBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
   ghostBtn:      { paddingVertical: 10, paddingHorizontal: 20 },
   ghostBtnTxt:   { color: c.textMuted, fontSize: 14, fontWeight: '600' },
+}); }
+
+// Mobile cart (Android-optimised layout)
+function mkMc(c: _TC) { return StyleSheet.create({
+  contextStrip:         { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, paddingBottom: 8 },
+  orderTypePills:       { flexDirection: 'row', paddingHorizontal: 10, paddingTop: 8, gap: 6 },
+  orderTypePill:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 7, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+  orderTypePillActive:  { backgroundColor: '#0D76E1', borderColor: '#0D76E1' },
+  orderTypePillText:    { fontSize: 11.5, fontWeight: '600', color: c.textMuted },
+  orderTypePillTextActive: { color: '#fff', fontWeight: '700' },
+  ctxChipsRow:          { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 10, paddingTop: 6, gap: 6 },
+  ctxChip:              { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, maxWidth: 150 },
+  ctxChipRequired:      { backgroundColor: 'rgba(253,230,138,0.15)', borderColor: '#fde68a' },
+  ctxChipTable:         { backgroundColor: 'rgba(13,118,225,0.08)', borderColor: '#93c5fd' },
+  ctxChipWaiter:        { backgroundColor: 'rgba(124,58,237,0.08)', borderColor: '#c4b5fd' },
+  ctxChipCustomer:      { backgroundColor: 'rgba(13,118,225,0.08)', borderColor: '#93c5fd' },
+  ctxChipText:          { fontSize: 11.5, fontWeight: '500', color: c.textMuted, maxWidth: 100 },
+  ctxChipTextTable:     { color: '#0D76E1', fontWeight: '600' },
+  ctxChipTextWaiter:    { color: '#7c3aed', fontWeight: '600' },
+  ctxChipTextRequired:  { color: '#d97706', fontWeight: '600' },
+  itemsHeader:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: c.surfaceAlt, borderBottomWidth: 1, borderBottomColor: c.border },
+  itemsHeaderTitle:     { fontSize: 11.5, fontWeight: '800', color: c.heading, textTransform: 'uppercase', letterSpacing: 0.5 },
+  addCustomMiniBtn:     { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
+  addCustomMiniText:    { fontSize: 11, fontWeight: '600', color: c.text },
+  emptyCart:            { alignItems: 'center', paddingVertical: 48, gap: 8 },
+  emptyCartText:        { fontSize: 15, fontWeight: '700', color: c.text },
+  emptyCartSub:         { fontSize: 12.5, color: c.textMuted },
+  cartItem:             { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border },
+  cartItemWarn:         { backgroundColor: 'rgba(217,119,6,0.06)', borderLeftWidth: 2, borderLeftColor: '#d97706' },
+  cartItemTop:          { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cartItemName:         { fontSize: 13, fontWeight: '600', color: c.heading },
+  cartItemVar:          { fontSize: 10.5, color: c.brand, marginTop: 1 },
+  qtyControl:           { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  qtyBtn:               { width: 26, height: 26, backgroundColor: c.surfaceAlt, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.border },
+  qtyText:              { fontSize: 13, fontWeight: '700', color: c.heading, minWidth: 24, textAlign: 'center' },
+  cartItemTotal:        { fontSize: 13, fontWeight: '800', color: '#0D76E1', minWidth: 52, textAlign: 'right' },
+  removeBtn:            { width: 28, height: 28, borderRadius: 6, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  priceInputRow:        { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: 'rgba(253,230,138,0.1)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5 },
+  priceInput:           { flex: 1, fontSize: 13, fontWeight: '600', color: '#d97706', borderBottomWidth: 1, borderBottomColor: '#d97706', padding: 0 },
+  section:              { paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border },
+  sectionLabel:         { fontSize: 11, fontWeight: '800', color: c.textMuted, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 7 },
+  payRow:               { flexDirection: 'row', gap: 6 },
+  payBtn:               { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 10, borderRadius: 9, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+  payBtnActive:         { backgroundColor: c.sidebar, borderColor: c.sidebar },
+  payBtnText:           { fontSize: 12, fontWeight: '600', color: c.text },
+  payBtnTextActive:     { color: c.brand, fontWeight: '700' },
+  summarySection:       { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6, borderTopWidth: 1, borderTopColor: c.border, gap: 5 },
+  summaryRow:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  summaryLabel:         { fontSize: 12.5, color: c.textMuted },
+  summaryVal:           { fontSize: 12.5, fontWeight: '600', color: c.text },
+  accordionHeader:      { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border },
+  accordionLabel:       { fontSize: 12.5, fontWeight: '600', color: c.textMuted },
+  accordionBody:        { paddingHorizontal: 12, paddingBottom: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: c.border },
+  couponActive:         { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f0fdf4', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#86efac' },
+  couponActiveText:     { flex: 1, fontSize: 12.5, fontWeight: '700', color: '#16a34a' },
+  couponRow:            { flexDirection: 'row', gap: 6 },
+  couponInput:          { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: c.border },
+  couponInputText:      { flex: 1, fontSize: 12.5, color: c.heading },
+  couponApplyBtn:       { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: '#0D76E1', alignItems: 'center', justifyContent: 'center' },
+  couponApplyText:      { fontSize: 12, fontWeight: '700', color: '#fff' },
+  discLabel:            { fontSize: 11, fontWeight: '700', color: c.textMuted, letterSpacing: 0.5 },
+  quickDiscRow:         { flexDirection: 'row', gap: 5 },
+  quickDiscBtn:         { flex: 1, paddingVertical: 8, borderRadius: 7, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, alignItems: 'center' },
+  quickDiscBtnActive:   { backgroundColor: '#0D76E1', borderColor: '#0D76E1' },
+  quickDiscText:        { fontSize: 13, fontWeight: '700', color: c.text },
+  quickDiscTextActive:  { color: '#fff' },
+  discInputRow:         { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  discInputBox:         { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceAlt, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 6, borderWidth: 1, borderColor: c.border },
+  discInputText:        { flex: 1, fontSize: 12.5, color: c.heading },
+  discInputSuffix:      { fontSize: 13, fontWeight: '700', color: c.textMuted },
+  discApplyBtn:         { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  discApplyText:        { fontSize: 12, fontWeight: '700', color: c.brand },
+  discClearBtn:         { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 7, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+  discClearText:        { fontSize: 12, fontWeight: '600', color: c.textMuted },
+  receivedSection:      { paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border, gap: 7 },
+  receivedInput:        { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceAlt, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 9, borderWidth: 1, borderColor: c.border },
+  receivedPrefix:       { fontSize: 15, fontWeight: '700', color: c.textMuted, marginRight: 4 },
+  receivedText:         { flex: 1, fontSize: 15, fontWeight: '600', color: c.heading },
+  changeText:           { fontSize: 13, fontWeight: '700' },
+  notesSection:         { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 8, borderTopWidth: 1, borderTopColor: c.border, gap: 7 },
+  notesInput:           { backgroundColor: c.surfaceAlt, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 9, borderWidth: 1, borderColor: c.border, fontSize: 12.5, color: c.heading, minHeight: 56 },
+  secondaryBtnRow:      { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border },
+  draftBtn:             { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 11, borderRadius: 9, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+  draftBtnText:         { fontSize: 12.5, fontWeight: '600', color: c.textMuted },
+  cancelOrderBtn:       { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 11, borderRadius: 9, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fca5a5' },
+  cancelOrderBtnText:   { fontSize: 12.5, fontWeight: '600', color: '#dc2626' },
+  stickyBottom:         { backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.border, paddingHorizontal: 12, paddingTop: 10, gap: 8 },
+  stickyTotalRow:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  stickyTotalLabel:     { fontSize: 13, fontWeight: '700', color: c.heading },
+  stickyTotalVal:       { fontSize: 20, fontWeight: '800', color: '#0D76E1' },
+  placeOrderBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12 },
+  placeOrderBtnText:    { fontSize: 15, fontWeight: '800', color: c.brand },
 }); }
 
 // Order placed success modal

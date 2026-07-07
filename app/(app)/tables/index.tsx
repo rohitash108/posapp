@@ -7,6 +7,7 @@ import {
 import { Share } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getTables, upsertTables, updateTableStatus, deleteTableLocal } from '@/database/repositories';
 import { webGetTables, webSaveTables, webUpdateTableStatus, webPutTable, webDeleteTable } from '@/utils/webDb';
 import { syncService } from '@/sync/SyncService';
@@ -38,6 +39,8 @@ export default function TablesScreen() {
   const { isOnline, user, restaurant } = useAppStore();
   const restaurantName = restaurant?.name?.toUpperCase() ?? 'RESTAURANT';
   const isSuperAdmin   = user?.role === 'super_admin' || user?.role === 'restaurant_admin';
+  const insets         = useSafeAreaInsets();
+  const isMobileOS     = Platform.OS !== 'web';
 
   const [tables,      setTables]      = useState<RestaurantTable[]>([]);
   const [refreshing,  setRefreshing]  = useState(false);
@@ -200,39 +203,77 @@ export default function TablesScreen() {
     <View style={[s.root, t.shell]}>
 
       {/* ── Page header ── */}
-      <View style={s.pageHeader}>
-        <View style={s.pageHeaderLeft}>
-          <Text style={s.pageTitle}>Tables</Text>
-          {restaurant?.name ? <Text style={s.pageRestaurant}>– {restaurant.name}</Text> : null}
-        </View>
-        <View style={s.pageHeaderRight}>
-          {/* Stats pills */}
-          <View style={s.statsPills}>
+      {isMobileOS ? (
+        /* Mobile: two-row header */
+        <View style={[s.mHeader, { paddingTop: insets.top + 12 }]}>
+          {/* Row 1: Title + controls */}
+          <View style={s.mHeaderRow1}>
+            <View style={s.mHeaderTitleGroup}>
+              <Text style={s.mHeaderTitle}>Tables</Text>
+              {restaurant?.name ? <Text style={s.mHeaderSub}>{restaurant.name}</Text> : null}
+            </View>
+            <View style={s.mHeaderControls}>
+              {tables.length > 0 && (
+                <View style={s.viewToggle}>
+                  <TouchableOpacity style={[s.viewBtn, viewMode === 'grid' && s.viewBtnOn]} onPress={() => setViewMode('grid')}>
+                    <Ionicons name="grid-outline" size={16} color={viewMode === 'grid' ? '#fff' : '#64748b'} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.viewBtn, viewMode === 'list' && s.viewBtnOn]} onPress={() => setViewMode('list')}>
+                    <Ionicons name="list-outline" size={16} color={viewMode === 'list' ? '#fff' : '#64748b'} />
+                  </TouchableOpacity>
+                </View>
+              )}
+              {isSuperAdmin && (
+                <TouchableOpacity style={s.addBtn} onPress={openAdd}>
+                  <Ionicons name="add-circle-outline" size={17} color="#fff" />
+                  <Text style={s.addBtnTxt}>Add New</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+          {/* Row 2: Stats pills */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.mStatsRow} contentContainerStyle={s.mStatsContent}>
             {(Object.entries(stats) as [keyof typeof stats, number][]).map(([key, n]) => (
               <View key={key} style={[s.pill, { backgroundColor: STATUS_CFG[key].badge }]}>
                 <Text style={[s.pillText, { color: STATUS_CFG[key].text }]}>{n} {STATUS_CFG[key].label}</Text>
               </View>
             ))}
-          </View>
-          {/* View toggle */}
-          {tables.length > 0 && (
-            <View style={s.viewToggle}>
-              <TouchableOpacity style={[s.viewBtn, viewMode === 'grid' && s.viewBtnOn]} onPress={() => setViewMode('grid')}>
-                <Ionicons name="grid-outline" size={16} color={viewMode === 'grid' ? '#fff' : '#64748b'} />
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.viewBtn, viewMode === 'list' && s.viewBtnOn]} onPress={() => setViewMode('list')}>
-                <Ionicons name="list-outline" size={16} color={viewMode === 'list' ? '#fff' : '#64748b'} />
-              </TouchableOpacity>
-            </View>
-          )}
-          {isSuperAdmin && (
-            <TouchableOpacity style={s.addBtn} onPress={openAdd}>
-              <Ionicons name="add-circle-outline" size={16} color="#fff" />
-              <Text style={s.addBtnTxt}>Add New</Text>
-            </TouchableOpacity>
-          )}
+          </ScrollView>
         </View>
-      </View>
+      ) : (
+        /* Web: original single-row header */
+        <View style={s.pageHeader}>
+          <View style={s.pageHeaderLeft}>
+            <Text style={s.pageTitle}>Tables</Text>
+            {restaurant?.name ? <Text style={s.pageRestaurant}>– {restaurant.name}</Text> : null}
+          </View>
+          <View style={s.pageHeaderRight}>
+            <View style={s.statsPills}>
+              {(Object.entries(stats) as [keyof typeof stats, number][]).map(([key, n]) => (
+                <View key={key} style={[s.pill, { backgroundColor: STATUS_CFG[key].badge }]}>
+                  <Text style={[s.pillText, { color: STATUS_CFG[key].text }]}>{n} {STATUS_CFG[key].label}</Text>
+                </View>
+              ))}
+            </View>
+            {tables.length > 0 && (
+              <View style={s.viewToggle}>
+                <TouchableOpacity style={[s.viewBtn, viewMode === 'grid' && s.viewBtnOn]} onPress={() => setViewMode('grid')}>
+                  <Ionicons name="grid-outline" size={16} color={viewMode === 'grid' ? '#fff' : '#64748b'} />
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.viewBtn, viewMode === 'list' && s.viewBtnOn]} onPress={() => setViewMode('list')}>
+                  <Ionicons name="list-outline" size={16} color={viewMode === 'list' ? '#fff' : '#64748b'} />
+                </TouchableOpacity>
+              </View>
+            )}
+            {isSuperAdmin && (
+              <TouchableOpacity style={s.addBtn} onPress={openAdd}>
+                <Ionicons name="add-circle-outline" size={16} color="#fff" />
+                <Text style={s.addBtnTxt}>Add New</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* ── Grid View ── */}
       {viewMode === 'grid' ? (
@@ -606,11 +647,37 @@ function TableFormModal({ visible, isEdit, form, saving, onChange, onSave, onClo
   onChange: (f: FormField, v: string) => void;
   onSave: () => void; onClose: () => void;
 }) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={s.dialogOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
-        <View style={s.dialog}>
+  const insets = useSafeAreaInsets();
+
+  const formFields = (
+    <>
+      <FField label="Table Number" hint="Used for sorting. Optional." kbd="numeric" value={form.table_number} ph="e.g. 1, 2, 10" onCh={v => onChange('table_number', v)} />
+      <FField label="Table Name *" value={form.name} ph="e.g. T1, Window Table" onCh={v => onChange('name', v)} />
+      <FField label="Floor" value={form.floor} ph="e.g. 1st, 2nd" onCh={v => onChange('floor', v)} />
+      <FField label="Capacity" kbd="numeric" value={form.capacity} ph="4" onCh={v => onChange('capacity', v)} />
+      <Text style={s.fLabel}>Status</Text>
+      <View style={s.segRow}>
+        {(['available', 'occupied', 'reserved'] as const).map(st => (
+          <TouchableOpacity
+            key={st}
+            style={[s.segBtn, form.status === st && {
+              backgroundColor: st === 'available' ? '#16a34a' : st === 'occupied' ? '#d97706' : '#dc2626',
+              borderColor: 'transparent',
+            }]}
+            onPress={() => onChange('status', st)}
+          >
+            <Text style={[s.segTxt, form.status === st && { color: '#fff' }]}>{STATUS_CFG[st].label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </>
+  );
+
+  if (Platform.OS !== 'web') {
+    /* Mobile: full-screen slide modal — ScrollView gets flex:1 so no empty gap */
+    return (
+      <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+        <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#fff', paddingTop: insets.top }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           {/* Header */}
           <View style={s.dialogHead}>
             <Text style={s.dialogTitle}>{isEdit ? 'Edit Table' : 'Add Table'}</Text>
@@ -618,32 +685,39 @@ function TableFormModal({ visible, isEdit, form, saving, onChange, onSave, onClo
               <Ionicons name="close" size={18} color="#6b7280" />
             </TouchableOpacity>
           </View>
-
-          {/* Body */}
-          <ScrollView keyboardShouldPersistTaps="handled" style={s.dialogBody} showsVerticalScrollIndicator={false}>
-            <FField label="Table Number" hint="Used for sorting. Optional." kbd="numeric" value={form.table_number} ph="e.g. 1, 2, 10" onCh={v => onChange('table_number', v)} />
-            <FField label="Table Name *" value={form.name} ph="e.g. T1, Window Table" onCh={v => onChange('name', v)} />
-            <FField label="Floor" value={form.floor} ph="e.g. 1st, 2nd" onCh={v => onChange('floor', v)} />
-            <FField label="Capacity" kbd="numeric" value={form.capacity} ph="4" onCh={v => onChange('capacity', v)} />
-
-            <Text style={s.fLabel}>Status</Text>
-            <View style={s.segRow}>
-              {(['available', 'occupied', 'reserved'] as const).map(st => (
-                <TouchableOpacity
-                  key={st}
-                  style={[s.segBtn, form.status === st && {
-                    backgroundColor: st === 'available' ? '#16a34a' : st === 'occupied' ? '#d97706' : '#dc2626',
-                    borderColor: 'transparent',
-                  }]}
-                  onPress={() => onChange('status', st)}
-                >
-                  <Text style={[s.segTxt, form.status === st && { color: '#fff' }]}>{STATUS_CFG[st].label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          {/* Body — flex:1 fills the space between header and footer */}
+          <ScrollView keyboardShouldPersistTaps="handled" style={[s.dialogBody, { flex: 1 }]} showsVerticalScrollIndicator={false}>
+            {formFields}
           </ScrollView>
+          {/* Footer */}
+          <View style={[s.dialogFoot, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <TouchableOpacity style={s.dialogCancel} onPress={onClose}>
+              <Text style={s.dialogCancelTxt}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.dialogSave, saving && { opacity: 0.6 }]} onPress={onSave} disabled={saving}>
+              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.dialogSaveTxt}>Save</Text>}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    );
+  }
 
-          {/* Footer buttons */}
+  /* Web: original centered overlay */
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={s.dialogOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+        <View style={s.dialog}>
+          <View style={s.dialogHead}>
+            <Text style={s.dialogTitle}>{isEdit ? 'Edit Table' : 'Add Table'}</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={10} style={s.dialogClose}>
+              <Ionicons name="close" size={18} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView keyboardShouldPersistTaps="handled" style={s.dialogBody} showsVerticalScrollIndicator={false}>
+            {formFields}
+          </ScrollView>
           <View style={s.dialogFoot}>
             <TouchableOpacity style={s.dialogCancel} onPress={onClose}>
               <Text style={s.dialogCancelTxt}>Cancel</Text>
@@ -687,7 +761,23 @@ function EmptyState() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f8f5f0' },
 
-  // ── Page header
+  // ── Mobile header
+  mHeader: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 3,
+  },
+  mHeaderRow1:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  mHeaderTitleGroup:{ flex: 1 },
+  mHeaderTitle:     { fontSize: 22, fontWeight: '800', color: '#1e293b' },
+  mHeaderSub:       { fontSize: 12, color: '#64748b', marginTop: 1 },
+  mHeaderControls:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  mStatsRow:        { flexGrow: 0 },
+  mStatsContent:    { flexDirection: 'row', gap: 8 },
+
+  // ── Web Page header
   pageHeader: {
     flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10,
     backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 14,
@@ -699,12 +789,12 @@ const s = StyleSheet.create({
   pageRestaurant: { fontSize: 13, color: '#64748b', fontWeight: '400' },
   pageHeaderRight:{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   statsPills:     { flexDirection: 'row', gap: 6 },
-  pill:           { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  pill:           { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   pillText:       { fontSize: 11, fontWeight: '700' },
   viewToggle:     { flexDirection: 'row', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, overflow: 'hidden', backgroundColor: '#f8fafc' },
   viewBtn:        { paddingHorizontal: 10, paddingVertical: 6 },
   viewBtnOn:      { backgroundColor: '#334155' },
-  addBtn:         { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#16a34a', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7 },
+  addBtn:         { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#16a34a', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
   addBtnTxt:      { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   // ── Grid

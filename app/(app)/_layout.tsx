@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { Tabs, usePathname, router } from 'expo-router';
 import { useTokenRefresh } from '@/hooks/useTokenRefresh';
+import { useGlobalOrderPolling } from '@/hooks/useGlobalOrderPolling';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Pressable, useWindowDimensions, ScrollView, StyleSheet, Platform, Modal, Animated, TouchableWithoutFeedback } from 'react-native';
 import { useAppStore } from '@/store/appStore';
@@ -416,6 +417,7 @@ export default function AppLayout() {
   // Proactively refresh the Sanctum token when the app returns to foreground
   // after a long absence, preventing the first API call from hitting a 401.
   useTokenRefresh();
+  useGlobalOrderPolling();
   const store = useAppStore();
   const { colors } = useTheme();
   const pathname = usePathname();

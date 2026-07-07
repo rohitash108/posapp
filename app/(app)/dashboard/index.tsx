@@ -32,10 +32,11 @@ import {
   RefreshControl, useWindowDimensions, ActivityIndicator, Platform,
   Modal, TextInput,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { format, subDays, startOfMonth, startOfWeek, subMonths } from 'date-fns';
-import { ordersApi } from '@/api/orders';
+import { ordersApi, normalizeOrder } from '@/api/orders';
 import { reportsApi } from '@/api/reports';
 import client from '@/api/client';
 import { useAppStore } from '@/store/appStore';
@@ -1003,6 +1004,7 @@ export default function DashboardScreen() {
 
   const { restaurant, isOnline } = useAppStore();
   const { colors, isDark }       = useTheme();
+  const insets                   = useSafeAreaInsets();
   const D                        = colors.dashboard;
   const { width }                = useWindowDimensions();
   const contentW = width >= 640 ? width - SIDEBAR : width;
@@ -1097,7 +1099,7 @@ export default function DashboardScreen() {
         try {
           const toArr = (r: any): Order[] => {
             const d = r.data?.data ?? r.data ?? [];
-            return Array.isArray(d) ? d : [];
+            return (Array.isArray(d) ? d : []).map(normalizeOrder);
           };
           const prevMEnd   = format(subMonths(new Date(), 1), 'yyyy-MM-dd');
           const prevMStart = format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
@@ -1178,12 +1180,24 @@ export default function DashboardScreen() {
 
       // ── 4. Top items ──────────────────────────────────────────────────────
       if (topItemsRes.status === 'fulfilled') {
-        const raw  = topItemsRes.value.data ?? {};
-        const rows: TopItem[] = Array.isArray(raw.data) ? raw.data : (Array.isArray(raw) ? raw : []);
-        setTopItems(rows.slice(0, 6).map(r => ({
+        const raw = topItemsRes.value.data ?? {};
+        // Handle multiple possible response shapes from the API
+        const rows: TopItem[] =
+          Array.isArray(raw.data?.data)   ? raw.data.data   :   // { data: { data: [...] } }
+          Array.isArray(raw.data?.items)  ? raw.data.items  :   // { data: { items: [...] } }
+          Array.isArray(raw.data)         ? raw.data         :   // { data: [...] }
+          Array.isArray(raw.items)        ? raw.items        :   // { items: [...] }
+          Array.isArray(raw.top_items)    ? raw.top_items    :   // { top_items: [...] }
+          Array.isArray(raw)              ? raw               :   // [...]
+          [];
+        const parsed = rows.slice(0, 10).map(r => ({
           name: r.item_name ?? r.name ?? 'Unknown',
           qty:  Number(r.quantity ?? r.qty ?? 0),
-        })));
+        })).filter(r => r.qty > 0);
+
+        if (parsed.length > 0) {
+          setTopItems(parsed.slice(0, 6));
+        }
       }
 
       // ── 5. Payment methods ────────────────────────────────────────────────
@@ -1214,7 +1228,7 @@ export default function DashboardScreen() {
       if (aoRes.status === 'fulfilled') {
         const aoArr: Order[] = Array.isArray(aoRes.value.data?.data) ? aoRes.value.data.data
           : (Array.isArray(aoRes.value.data) ? aoRes.value.data : []);
-        setActiveOrders(aoArr.slice(0, 10));
+        setActiveOrders(aoArr.map(normalizeOrder).slice(0, 10));
         if (dashFirstLoad.current) {
           aoArr.forEach(o => dashKnownIds.current.add(o.id));
           dashFirstLoad.current = false;
@@ -1229,7 +1243,7 @@ export default function DashboardScreen() {
       if (rrRes.status === 'fulfilled') {
         const rrArr: Order[] = Array.isArray(rrRes.value.data?.data) ? rrRes.value.data.data
           : (Array.isArray(rrRes.value.data) ? rrRes.value.data : []);
-        setRecentOrders(rrArr.slice(0, 5));
+        setRecentOrders(rrArr.map(normalizeOrder).slice(0, 5));
       }
 
       // ── 9. Reservations ───────────────────────────────────────────────────
@@ -1397,7 +1411,7 @@ export default function DashboardScreen() {
       showsVerticalScrollIndicator={false}
     >
       {/* ── Dashboard header — matches web design ── */}
-      <View style={[s.dashHeader, { backgroundColor: D.white, borderBottomColor: isDark ? D.border : '#E8E3DA' }]}>
+      <View style={[s.dashHeader, { backgroundColor: D.white, borderBottomColor: isDark ? D.border : '#E8E3DA', paddingTop: (insets.top || 0) + 14 }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Text style={[s.dashTitle, { color: D.text }]}>Dashboard</Text>
           <TouchableOpacity onPress={() => load(true, preset)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>

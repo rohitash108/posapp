@@ -5,6 +5,7 @@ import {
   upsertOrders, getSyncQueue, removeSyncQueueItem, incrementSyncRetries,
 } from '../database/repositories';
 import { useAppStore } from '../store/appStore';
+import { linkOfflineOrderServerId, withOfflineCreatedAt } from '@/utils/offlineOrderTimes';
 
 const MAX_RETRIES = 5;
 
@@ -45,14 +46,18 @@ class SyncService {
     const statusUpdates: any[] = [];
     for (const item of queue) {
       if (item.retries >= MAX_RETRIES) continue;
-      const payload = JSON.parse(item.payload);
+      const raw = JSON.parse(item.payload);
+      const payload = withOfflineCreatedAt(raw, item.created_at);
       if (item.action === 'create_order') ordersToCreate.push({ ...payload, queue_id: item.id });
       else statusUpdates.push({ ...payload, queue_id: item.id });
     }
     if (!ordersToCreate.length && !statusUpdates.length) return;
     try {
       const res = await syncApi.push({ orders: ordersToCreate, status_updates: statusUpdates });
-      for (const c of res.data.created ?? []) await removeSyncQueueItem(c.local_uuid);
+      for (const c of res.data.created ?? []) {
+        if (c.local_uuid && c.id) await linkOfflineOrderServerId(c.local_uuid, c.id);
+        await removeSyncQueueItem(c.local_uuid);
+      }
       for (const e of res.data.errors ?? []) {
         const qItem = queue.find((q) => q.id === e.local_uuid);
         if (qItem) await incrementSyncRetries(qItem.id);

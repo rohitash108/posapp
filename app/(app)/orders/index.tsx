@@ -7,12 +7,12 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, RefreshControl, ScrollView,
   TextInput, Modal, ActivityIndicator, Platform, Pressable,
-  useWindowDimensions,
+  useWindowDimensions, AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { format, isToday, isYesterday, startOfWeek, startOfMonth, subDays } from 'date-fns';
-import { ordersApi } from '@/api/orders';
+import { ordersApi, normalizeOrder } from '@/api/orders';
 import { useAppStore } from '@/store/appStore';
 import { useOrderBadgeStore } from '@/store/orderBadgeStore';
 import type { Order, OrderStatus } from '@/types';
@@ -112,7 +112,6 @@ const SOURCES = [
 ] as const;
 
 const IN_PROGRESS = ['confirmed', 'preparing', 'ready', 'served'];
-const POLL_MS     = 15_000; // 15s — fast enough to catch QR orders quickly
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function sCfg(s: string) { return STATUS_CFG[s as keyof typeof STATUS_CFG] ?? STATUS_CFG.pending; }
@@ -783,33 +782,33 @@ export default function OrdersScreen() {
   const [viewMode,   setViewMode]   = useState<'grid' | 'list'>('grid');
   const [isUpdating, setIsUpdating] = useState(false);
   const [toastMsg,   setToastMsg]   = useState('');
-  const [aggAlert,   setAggAlert]   = useState<{ source: string; orders: Order[] } | null>(null);
-  const [qrAlert,    setQrAlert]    = useState<Order[]>([]);
+  const aggAlert = useOrderBadgeStore((s) => s.aggAlert);
+  const qrAlert  = useOrderBadgeStore((s) => s.qrAlert);
+  const refreshVersion = useOrderBadgeStore((s) => s.refreshVersion);
+  const clearAggAlert = useOrderBadgeStore((s) => s.clearAggAlert);
+  const clearQrAlert  = useOrderBadgeStore((s) => s.clearQrAlert);
   const aggAlertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qrAlertTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const knownOrderIds      = useRef<Set<number>>(new Set());
-  const knownOrderStatuses = useRef<Map<number, string>>(new Map());
-  const isFirstLoad        = useRef(true);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { restaurant } = useAppStore();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const contentW  = isDesktop ? width - 220 : width;
   const numCols   = contentW >= 2200 ? 5 : contentW >= 1700 ? 4 : contentW >= 1200 ? 3 : contentW >= 700 ? 2 : 1;
 
-  const showAggAlert = useCallback((source: string, newOrders: Order[]) => {
+  // Generation counter: each new fetch increments this; stale responses are
+  useEffect(() => {
+    if (!aggAlert) return;
     if (aggAlertTimer.current) clearTimeout(aggAlertTimer.current);
-    setAggAlert({ source, orders: newOrders });
-    playNewOrderBeep();
-    aggAlertTimer.current = setTimeout(() => setAggAlert(null), 8000);
-  }, []);
+    aggAlertTimer.current = setTimeout(() => clearAggAlert(), 8000);
+    return () => { if (aggAlertTimer.current) clearTimeout(aggAlertTimer.current); };
+  }, [aggAlert, clearAggAlert]);
 
-  const showQRAlert = useCallback((newOrders: Order[]) => {
+  useEffect(() => {
+    if (!qrAlert?.length) return;
     if (qrAlertTimer.current) clearTimeout(qrAlertTimer.current);
-    setQrAlert(newOrders);
-    playNewOrderBeep();
-    qrAlertTimer.current = setTimeout(() => setQrAlert([]), 8000);
-  }, []);
+    qrAlertTimer.current = setTimeout(() => clearQrAlert(), 8000);
+    return () => { if (qrAlertTimer.current) clearTimeout(qrAlertTimer.current); };
+  }, [qrAlert, clearQrAlert]);
 
   // Generation counter: each new fetch increments this; stale responses are
   // silently discarded when their generation no longer matches the latest.
@@ -826,93 +825,52 @@ export default function OrdersScreen() {
       // Discard stale responses that arrived after a newer fetch started.
       if (gen !== loadGenRef.current) return;
       const raw: Order[] = Array.isArray(res.data?.data ?? res.data) ? (res.data?.data ?? res.data) : [];
-      // Zomato & Swiggy orders are always pre-paid — force payment_status = 'paid'
-      const data = raw.map(o =>
-        isAgg(o) && o.payment_status !== 'paid'
-          ? { ...o, payment_status: 'paid' as const }
-          : o
-      );
+      const data = raw.map(normalizeOrder);
       setOrders(data);
 
-      // Update shared badge counts so the sidebar doesn't need its own API poll
       const pendingCount = data.filter(o => o.status === 'pending').length;
       const kitchenCount = data.filter(o => ['preparing', 'confirmed'].includes(o.status)).length;
       useOrderBadgeStore.getState().update(pendingCount, kitchenCount);
-
-      // Detect new orders / status changes on background polls (skip first load)
-      if (isFirstLoad.current) {
-        data.forEach(o => {
-          knownOrderIds.current.add(o.id);
-          knownOrderStatuses.current.set(o.id, o.status);
-        });
-        isFirstLoad.current = false;
-      } else {
-        // Zomato / Swiggy — new order detection
-        const newAgg = data.filter(o => isAgg(o) && !knownOrderIds.current.has(o.id));
-        if (newAgg.length > 0) {
-          const src = newAgg.filter(o => o.source === 'zomato').length >= newAgg.filter(o => o.source === 'swiggy').length
-            ? 'zomato' : 'swiggy';
-          showAggAlert(src, newAgg);
-        }
-        // Zomato / Swiggy — status-change detection
-        const statusChangedAgg = data.filter(o =>
-          isAgg(o) &&
-          knownOrderStatuses.current.has(o.id) &&
-          knownOrderStatuses.current.get(o.id) !== o.status
-        );
-        if (statusChangedAgg.length > 0) {
-          const o0 = statusChangedAgg[0];
-          const msg = statusChangedAgg.length === 1
-            ? `Order #${o0.order_number}: ${sCfg(o0.status).label}`
-            : `${statusChangedAgg.length} orders updated`;
-          setToastMsg(msg);
-          setTimeout(() => setToastMsg(''), 3500);
-        }
-        // QR order detection
-        const newQR = data.filter(o => o.source === 'qr' && !knownOrderIds.current.has(o.id));
-        if (newQR.length > 0) {
-          if (newAgg.length > 0) {
-            setTimeout(() => showQRAlert(newQR), 9000);
-          } else {
-            showQRAlert(newQR);
-          }
-        }
-        // Update known state
-        data.forEach(o => {
-          knownOrderIds.current.add(o.id);
-          knownOrderStatuses.current.set(o.id, o.status);
-        });
-      }
     } catch (e) { console.warn('Orders load:', e); }
     finally { setLoading(false); setRefreshing(false); }
-  }, [dateRange, showAggAlert]);
+  }, [dateRange]);
 
-  // Keep a stable ref to the latest `load` so the polling interval always
-  // calls the freshest closure without needing to restart the interval.
-  const loadRef = useRef(load);
-  useEffect(() => { loadRef.current = load; }, [load]);
+  // Initial load
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Mount-only effect: start the initial load + polling interval.
-  // The interval calls loadRef.current (always fresh) so it picks up filter
-  // changes without restarting — no spinner flash on dateRange changes.
-  useEffect(() => {
-    load();
-    pollRef.current = setInterval(() => loadRef.current(true), POLL_MS);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Filter-change effect: silently refetch when dateRange changes after mount.
-  // Runs AFTER mount (isMountedRef guard) so it doesn't double-fire on load.
+  // Silent reload when date filter changes
   const isMountedRef = useRef(false);
   useEffect(() => {
     if (!isMountedRef.current) { isMountedRef.current = true; return; }
-    load(true);  // silent — no spinner, orders stay visible
+    load(true);
   }, [dateRange, load]);
+
+  useEffect(() => {
+    if (refreshVersion === 0) return;
+    load(true);
+  }, [refreshVersion, load]);
 
   useFocusEffect(
     useCallback(() => { load(true); }, [load])
   );
+
+  // Immediate refresh when app returns to foreground (native + PWA)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') load(true);
+    });
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const onVisible = () => {
+        if (document.visibilityState === 'visible') load(true);
+      };
+      document.addEventListener('visibilitychange', onVisible);
+      return () => {
+        sub.remove();
+        document.removeEventListener('visibilitychange', onVisible);
+      };
+    }
+    return () => sub.remove();
+  }, [load]);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -922,11 +880,22 @@ export default function OrdersScreen() {
   const handleStatusChange = useCallback(async (id: number, status: string) => {
     setIsUpdating(true);
     try {
-      await ordersApi.updateStatus(id, status);
-      setOrders(prev => prev.map(o => o.id === id ? { ...o, status: status as OrderStatus } : o));
+      const order = orders.find(o => o.id === id);
+      if (status === 'completed') {
+        await ordersApi.complete(id, order?.payment_method ?? 'cash');
+        setOrders(prev => prev.map(o => o.id === id ? {
+          ...o,
+          status: 'completed' as OrderStatus,
+          payment_status: 'paid',
+          payment_method: (o.payment_method ?? 'cash') as Order['payment_method'],
+        } : o));
+      } else {
+        await ordersApi.updateStatus(id, status);
+        setOrders(prev => prev.map(o => o.id === id ? { ...o, status: status as OrderStatus } : o));
+      }
     } catch (e: any) { showToast(e?.response?.data?.message ?? 'Could not update status'); }
     finally { setIsUpdating(false); }
-  }, [showToast]);
+  }, [orders, showToast]);
 
   const handlePaymentChange = useCallback(async (id: number, method: string) => {
     setIsUpdating(true);
@@ -998,7 +967,7 @@ export default function OrdersScreen() {
       {!!aggAlert && (
         <Pressable
           style={[s.aggBanner, aggAlert.source === 'zomato' ? s.aggBannerZomato : s.aggBannerSwiggy]}
-          onPress={() => setAggAlert(null)}
+          onPress={() => clearAggAlert()}
         >
           <View style={s.aggBannerIcon}>
             <Ionicons name="bicycle" size={20} color="#fff" />
@@ -1018,8 +987,8 @@ export default function OrdersScreen() {
       )}
 
       {/* ── New QR order alert banner ── */}
-      {qrAlert.length > 0 && (
-        <Pressable style={s.qrBanner} onPress={() => setQrAlert([])}>
+      {qrAlert && qrAlert.length > 0 && (
+        <Pressable style={s.qrBanner} onPress={() => clearQrAlert()}>
           <View style={s.qrBannerIcon}>
             <Ionicons name="qr-code-outline" size={20} color="#fff" />
           </View>
@@ -1084,6 +1053,7 @@ export default function OrdersScreen() {
             })}
           </ScrollView>
 
+          {/* Sources row */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.row2}>
             {SOURCES.map(src => {
               const active = srcFilter === src.key;
@@ -1104,8 +1074,9 @@ export default function OrdersScreen() {
                 </Pressable>
               );
             })}
-            <View style={s.divider} />
-            {DATE_PRESETS.map(dp => {
+            {/* Date pills only in same row on desktop; on mobile shown separately below */}
+            {isDesktop && <View style={s.divider} />}
+            {isDesktop && DATE_PRESETS.map(dp => {
               const active = dateRange === dp.key;
               return (
                 <Pressable key={dp.key} style={[s.datePill, active && s.datePillActive]}
@@ -1118,25 +1089,55 @@ export default function OrdersScreen() {
             })}
           </ScrollView>
 
-          <View style={s.row3}>
-            <View style={s.searchBox}>
-              <Ionicons name="search-outline" size={14} color={c.textMuted} />
-              <TextInput style={s.searchInput} placeholder="Search by order #, customer, table…"
-                value={search} onChangeText={setSearch} placeholderTextColor={c.textMuted} />
+          {/* Date pills — own row on mobile so they're always visible */}
+          {!isDesktop && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.row2}>
+              {DATE_PRESETS.map(dp => {
+                const active = dateRange === dp.key;
+                return (
+                  <Pressable key={dp.key} style={[s.datePill, active && s.datePillActive]}
+                    onPress={() => setDateRange(dp.key)}>
+                    <Ionicons name={dp.key === 'all' ? 'time-outline' : 'calendar-outline'} size={11}
+                      color={active ? '#fff' : c.textMuted} />
+                    <Text style={[s.datePillTxt, active && { color: '#fff' }]}>{dp.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {/* ── Search row — full-width on mobile, with toggle on desktop ── */}
+          <View style={isDesktop ? s.row3 : s.row3Mobile}>
+            <View style={isDesktop ? s.searchBox : s.searchBoxMobile}>
+              <Ionicons name="search-outline" size={isDesktop ? 14 : 16} color={search ? c.brand : c.textMuted} />
+              <TextInput
+                style={isDesktop ? s.searchInput : s.searchInputMobile}
+                placeholder="Search orders, customer, table…"
+                value={search}
+                onChangeText={setSearch}
+                placeholderTextColor={c.textMuted}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
               {search ? (
-                <Pressable onPress={() => setSearch('')}>
-                  <Ionicons name="close-circle" size={15} color="#9ca3af" />
+                <Pressable onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={18} color="#9ca3af" />
                 </Pressable>
               ) : null}
             </View>
-            <View style={s.viewToggle}>
-              <Pressable style={[s.viewBtn, viewMode === 'grid' && s.viewBtnActive]} onPress={() => setViewMode('grid')}>
-                <Ionicons name="grid-outline" size={15} color={viewMode === 'grid' ? '#fff' : c.textMuted} />
-              </Pressable>
-              <Pressable style={[s.viewBtn, viewMode === 'list' && s.viewBtnActive]} onPress={() => setViewMode('list')}>
-                <Ionicons name="list-outline" size={15} color={viewMode === 'list' ? '#fff' : c.textMuted} />
-              </Pressable>
-            </View>
+            {/* View toggle — desktop only; on mobile it moves to results bar */}
+            {isDesktop && (
+              <View style={s.viewToggle}>
+                <Pressable style={[s.viewBtn, viewMode === 'grid' && s.viewBtnActive]} onPress={() => setViewMode('grid')}>
+                  <Ionicons name="grid-outline" size={15} color={viewMode === 'grid' ? '#fff' : c.textMuted} />
+                </Pressable>
+                <Pressable style={[s.viewBtn, viewMode === 'list' && s.viewBtnActive]} onPress={() => setViewMode('list')}>
+                  <Ionicons name="list-outline" size={15} color={viewMode === 'list' ? '#fff' : c.textMuted} />
+                </Pressable>
+              </View>
+            )}
           </View>
 
           {(tab !== 'all' || srcFilter !== 'all' || dateRange !== 'today' || search) && (
@@ -1163,6 +1164,17 @@ export default function OrdersScreen() {
             {filtered.length} order{filtered.length !== 1 ? 's' : ''}
           </Text>
           {loading && !refreshing && <ActivityIndicator size="small" color={c.brand} />}
+          {/* View toggle on mobile lives here */}
+          {!isDesktop && (
+            <View style={s.viewToggle}>
+              <Pressable style={[s.viewBtn, viewMode === 'grid' && s.viewBtnActive]} onPress={() => setViewMode('grid')}>
+                <Ionicons name="grid-outline" size={14} color={viewMode === 'grid' ? '#fff' : c.textMuted} />
+              </Pressable>
+              <Pressable style={[s.viewBtn, viewMode === 'list' && s.viewBtnActive]} onPress={() => setViewMode('list')}>
+                <Ionicons name="list-outline" size={14} color={viewMode === 'list' ? '#fff' : c.textMuted} />
+              </Pressable>
+            </View>
+          )}
         </View>
 
         {/* ── Content ── */}
@@ -1271,13 +1283,26 @@ function mkS(c: ThemeColors) {
     datePillActive: { backgroundColor: c.sidebar, borderColor: c.sidebar },
     datePillTxt:    { fontSize: 12.5, fontWeight: '600', color: c.text },
     row3:           { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 12 },
+    row3Mobile:     { paddingHorizontal: 12, paddingBottom: 8, paddingTop: 0 },
     searchBox:      {
       flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
       backgroundColor: c.surfaceAlt, borderRadius: 12,
       paddingHorizontal: 12, paddingVertical: 10,
       borderWidth: 1.5, borderColor: c.border,
     },
+    searchBoxMobile: {
+      flexDirection: 'row', alignItems: 'center', gap: 10,
+      backgroundColor: c.surfaceAlt,
+      borderRadius: 12,
+      paddingHorizontal: 13, paddingVertical: 11,
+      borderWidth: 1.5, borderColor: c.border,
+    },
     searchInput:    { flex: 1, fontSize: 13.5, color: c.heading },
+    searchInputMobile: {
+      flex: 1, fontSize: 14.5, color: c.heading,
+      fontWeight: '500' as const,
+      paddingVertical: 0,
+    },
     viewToggle:     {
       flexDirection: 'row', borderWidth: 1.5, borderColor: c.border,
       borderRadius: 11, overflow: 'hidden', backgroundColor: c.surfaceAlt,

@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { format, subDays, startOfMonth } from 'date-fns';
 import { reportsApi } from '@/api/reports';
 import { useTheme } from '@/store/themeStore';
@@ -64,7 +65,7 @@ function mkS(c: ThemeColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: c.background },
 
-    // Page header
+    // ── Web Page header (unchanged)
     pageHeader:   { flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, backgroundColor: c.surface, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: c.border },
     pageTitle:    { fontSize: 20, fontWeight: '800', color: c.heading },
     dateRange:    { fontSize: 12, color: c.brand, marginTop: 2, fontWeight: '600' },
@@ -75,7 +76,28 @@ function mkS(c: ThemeColors) {
     applyBtn:     { backgroundColor: c.sidebar, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 },
     applyTxt:     { color: '#fff', fontWeight: '700', fontSize: 13 },
 
-    // Stats
+    // ── Mobile header
+    mHeader:        { backgroundColor: c.surface, paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    mTitle:         { fontSize: 22, fontWeight: '900', color: c.heading },
+    mDateRange:     { fontSize: 12, color: c.brand, fontWeight: '600', marginTop: 2, marginBottom: 12 },
+    mDateRow:       { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+    mDateField:     { flex: 1, gap: 4 },
+    mDateFieldLbl:  { fontSize: 10, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase' as const },
+    mDateInput:     { borderWidth: 1, borderColor: c.border, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9, fontSize: 13, color: c.heading, backgroundColor: c.surfaceAlt },
+    mApplyBtn:      { backgroundColor: c.sidebar, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, justifyContent: 'center' },
+    mApplyTxt:      { color: '#fff', fontWeight: '700', fontSize: 13 },
+
+    // ── Mobile stats (2x2 grid)
+    mStatsGrid:   { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    mStatsRow:    { flexDirection: 'row' },
+    mStatCell:    { flex: 1, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 8 },
+    mStatLbl:     { fontSize: 10, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase' as const, letterSpacing: 0.4, marginBottom: 4, textAlign: 'center' },
+    mStatAmt:     { fontSize: 20, fontWeight: '900', textAlign: 'center' },
+    mStatCount:   { fontSize: 26, fontWeight: '900', color: c.heading, textAlign: 'center' },
+    mStatDividerH:{ height: 1, backgroundColor: c.border },
+    mStatDividerV:{ width: 1, backgroundColor: c.border },
+
+    // Web Stats
     statsRow: { flexDirection: 'row', backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
     statCard: { flex: 1, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 8, borderRightWidth: 1, borderRightColor: c.border },
     statLbl:  { fontSize: 10, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
@@ -84,7 +106,7 @@ function mkS(c: ThemeColors) {
 
     // Period chips
     chipsRow:      { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-    chip:          { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1.5, borderColor: c.border },
+    chip:          { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1.5, borderColor: c.border },
     chipActive:    { backgroundColor: c.sidebar, borderColor: c.sidebar },
     chipTxt:       { fontSize: 12, fontWeight: '600', color: c.text },
     chipTxtActive: { color: '#fff', fontWeight: '700' },
@@ -165,7 +187,9 @@ function TrendChart({ data, label, color = PRIMARY }: {
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function ExpenseReportScreen() {
   const { width } = useWindowDimensions();
-  const isDesktop = width >= 860;
+  const isDesktop  = width >= 860;
+  const isMobileOS = Platform.OS !== 'web';
+  const insets     = useSafeAreaInsets();
 
   const { colors: c } = useTheme();
   const s = useMemo(() => mkS(c), [c]);
@@ -239,67 +263,104 @@ export default function ExpenseReportScreen() {
       }>
 
       {/* ── Page header ── */}
-      <View style={s.pageHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.pageTitle}>Expense Report</Text>
+      {isMobileOS ? (
+        /* Mobile: stacked header */
+        <View style={[s.mHeader, { paddingTop: insets.top + 14 }]}>
+          <Text style={s.mTitle}>Expense Report</Text>
           {displayFrom && displayTo ? (
-            <Text style={s.dateRange}>{fmtRangeDate(displayFrom)} — {fmtRangeDate(displayTo)}</Text>
-          ) : null}
-        </View>
-
-        {/* Date inputs */}
-        <View style={s.datePickers}>
-          <View style={s.dateField}>
-            <Text style={s.dateFieldLbl}>From</Text>
-            {Platform.OS === 'web' ? (
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={e => { setDateFrom(e.target.value); setShowCustom(true); }}
-                style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: '5px 8px', fontSize: 12, color: c.heading, backgroundColor: c.surface, cursor: 'pointer' } as any}
-              />
-            ) : (
-              <TextInput style={s.dateInput} value={dateFrom} onChangeText={v => { setDateFrom(v); setShowCustom(true); }} placeholder="YYYY-MM-DD" placeholderTextColor={c.textMuted} />
-            )}
+            <Text style={s.mDateRange}>{fmtRangeDate(displayFrom)} — {fmtRangeDate(displayTo)}</Text>
+          ) : <View style={{ height: 12 }} />}
+          {/* Date inputs row */}
+          <View style={s.mDateRow}>
+            <View style={s.mDateField}>
+              <Text style={s.mDateFieldLbl}>From</Text>
+              <TextInput style={s.mDateInput} value={dateFrom} onChangeText={v => { setDateFrom(v); setShowCustom(true); }} placeholder="YYYY-MM-DD" placeholderTextColor={c.textMuted} />
+            </View>
+            <View style={s.mDateField}>
+              <Text style={s.mDateFieldLbl}>To</Text>
+              <TextInput style={s.mDateInput} value={dateTo} onChangeText={v => { setDateTo(v); setShowCustom(true); }} placeholder="YYYY-MM-DD" placeholderTextColor={c.textMuted} />
+            </View>
+            <Pressable style={({ pressed }) => [s.mApplyBtn, pressed && { opacity: 0.85 }]} onPress={applyCustom}>
+              <Text style={s.mApplyTxt}>Apply</Text>
+            </Pressable>
           </View>
-          <View style={s.dateField}>
-            <Text style={s.dateFieldLbl}>To</Text>
-            {Platform.OS === 'web' ? (
-              <input
-                type="date"
-                value={dateTo}
-                onChange={e => { setDateTo(e.target.value); setShowCustom(true); }}
-                style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: '5px 8px', fontSize: 12, color: c.heading, backgroundColor: c.surface, cursor: 'pointer' } as any}
-              />
-            ) : (
-              <TextInput style={s.dateInput} value={dateTo} onChangeText={v => { setDateTo(v); setShowCustom(true); }} placeholder="YYYY-MM-DD" placeholderTextColor={c.textMuted} />
-            )}
-          </View>
-          <Pressable style={({ pressed }) => [s.applyBtn, pressed && { opacity: 0.85 }]} onPress={applyCustom}>
-            <Text style={s.applyTxt}>Apply</Text>
-          </Pressable>
         </View>
-      </View>
+      ) : (
+        /* Web: original header */
+        <View style={s.pageHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.pageTitle}>Expense Report</Text>
+            {displayFrom && displayTo ? (
+              <Text style={s.dateRange}>{fmtRangeDate(displayFrom)} — {fmtRangeDate(displayTo)}</Text>
+            ) : null}
+          </View>
+          <View style={s.datePickers}>
+            <View style={s.dateField}>
+              <Text style={s.dateFieldLbl}>From</Text>
+              <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setShowCustom(true); }}
+                style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: '5px 8px', fontSize: 12, color: c.heading, backgroundColor: c.surface, cursor: 'pointer' } as any} />
+            </View>
+            <View style={s.dateField}>
+              <Text style={s.dateFieldLbl}>To</Text>
+              <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setShowCustom(true); }}
+                style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: '5px 8px', fontSize: 12, color: c.heading, backgroundColor: c.surface, cursor: 'pointer' } as any} />
+            </View>
+            <Pressable style={({ pressed }) => [s.applyBtn, pressed && { opacity: 0.85 }]} onPress={applyCustom}>
+              <Text style={s.applyTxt}>Apply</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* ── Stats ── */}
-      <View style={s.statsRow}>
-        <View style={s.statCard}>
-          <Text style={[s.statLbl, { color: c.brand }]}>Total Spent</Text>
-          <Text style={[s.statAmt, { color: c.brand }]}>{fmtAmt(totalSpent)}</Text>
+      {isMobileOS ? (
+        /* Mobile: 2×2 grid — each stat gets half the screen width */
+        <View style={s.mStatsGrid}>
+          <View style={s.mStatsRow}>
+            <View style={s.mStatCell}>
+              <Text style={[s.mStatLbl, { color: c.brand }]}>Total Spent</Text>
+              <Text style={[s.mStatAmt, { color: c.brand }]}>{fmtAmt(totalSpent)}</Text>
+            </View>
+            <View style={s.mStatDividerV} />
+            <View style={s.mStatCell}>
+              <Text style={[s.mStatLbl, { color: c.brand }]}>Tax Paid</Text>
+              <Text style={[s.mStatAmt, { color: c.brand }]}>{fmtAmt(taxPaid)}</Text>
+            </View>
+          </View>
+          <View style={s.mStatDividerH} />
+          <View style={s.mStatsRow}>
+            <View style={s.mStatCell}>
+              <Text style={s.mStatLbl}>Categories</Text>
+              <Text style={s.mStatCount}>{byCategory.length}</Text>
+            </View>
+            <View style={s.mStatDividerV} />
+            <View style={s.mStatCell}>
+              <Text style={s.mStatLbl}>Records</Text>
+              <Text style={s.mStatCount}>{recordCount}</Text>
+            </View>
+          </View>
         </View>
-        <View style={s.statCard}>
-          <Text style={[s.statLbl, { color: c.brand }]}>Tax Paid</Text>
-          <Text style={[s.statAmt, { color: c.brand }]}>{fmtAmt(taxPaid)}</Text>
+      ) : (
+        /* Web: original 4-column stats */
+        <View style={s.statsRow}>
+          <View style={s.statCard}>
+            <Text style={[s.statLbl, { color: c.brand }]}>Total Spent</Text>
+            <Text style={[s.statAmt, { color: c.brand }]}>{fmtAmt(totalSpent)}</Text>
+          </View>
+          <View style={s.statCard}>
+            <Text style={[s.statLbl, { color: c.brand }]}>Tax Paid</Text>
+            <Text style={[s.statAmt, { color: c.brand }]}>{fmtAmt(taxPaid)}</Text>
+          </View>
+          <View style={s.statCard}>
+            <Text style={s.statLbl}>Categories</Text>
+            <Text style={s.statCount}>{byCategory.length}</Text>
+          </View>
+          <View style={[s.statCard, { borderRightWidth: 0 }]}>
+            <Text style={s.statLbl}>Records</Text>
+            <Text style={s.statCount}>{recordCount}</Text>
+          </View>
         </View>
-        <View style={s.statCard}>
-          <Text style={s.statLbl}>Categories</Text>
-          <Text style={s.statCount}>{byCategory.length}</Text>
-        </View>
-        <View style={[s.statCard, { borderRightWidth: 0 }]}>
-          <Text style={s.statLbl}>Records</Text>
-          <Text style={s.statCount}>{recordCount}</Text>
-        </View>
-      </View>
+      )}
 
       {/* ── Period chips ── */}
       <View style={s.chipsRow}>

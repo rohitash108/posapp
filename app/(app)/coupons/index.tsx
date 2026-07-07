@@ -829,21 +829,36 @@ export default function CouponsScreen() {
       )}
 
       {/* Add/Edit Modal */}
-      <Modal
-        visible={formOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => { setFormOpen(false); setEditing(null); }}>
-        <Pressable style={s.modalBackdrop} onPress={() => { setFormOpen(false); setEditing(null); }}>
-          <Pressable style={[s.modalPanel, isDesktop && s.modalPanelDesktop]} onPress={() => {}}>
-            <CouponForm
-              coupon={editing}
-              onSave={afterSave}
-              onClose={() => { setFormOpen(false); setEditing(null); }}
-            />
+      {Platform.OS !== 'web' ? (
+        /* Mobile: full-screen slide modal — fixes ScrollView collapse on Android */
+        <Modal
+          visible={formOpen}
+          animationType="slide"
+          onRequestClose={() => { setFormOpen(false); setEditing(null); }}>
+          <CouponForm
+            coupon={editing}
+            onSave={afterSave}
+            onClose={() => { setFormOpen(false); setEditing(null); }}
+          />
+        </Modal>
+      ) : (
+        /* Web: centered overlay (unchanged) */
+        <Modal
+          visible={formOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => { setFormOpen(false); setEditing(null); }}>
+          <Pressable style={s.modalBackdrop} onPress={() => { setFormOpen(false); setEditing(null); }}>
+            <Pressable style={[s.modalPanel, isDesktop && s.modalPanelDesktop]} onPress={() => {}}>
+              <CouponForm
+                coupon={editing}
+                onSave={afterSave}
+                onClose={() => { setFormOpen(false); setEditing(null); }}
+              />
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
+        </Modal>
+      )}
     </View>
   );
 }

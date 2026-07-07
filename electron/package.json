@@ -3,5 +3,8 @@
   "version": "1.0.0",
   "description": "GTC POS — Global Tea Cafe",
   "author": "Global Tea Cafe",
-  "main": "main.js"
+  "main": "main.js",
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  }
 }

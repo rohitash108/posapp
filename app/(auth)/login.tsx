@@ -80,7 +80,7 @@ export default function LoginScreen() {
       } else {
         syncService.runSync().catch(console.warn);
       }
-      router.replace('/(app)/pos');
+      router.replace('/(app)/dashboard');
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? err?.response?.data?.errors?.email?.[0] ?? 'Login failed. Check your credentials.';
       Alert.alert('Login Failed', msg);

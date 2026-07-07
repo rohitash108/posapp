@@ -11,7 +11,8 @@
 
 'use strict';
 
-const { app, BrowserWindow, dialog, session } = require('electron');
+const { app, BrowserWindow, dialog, session, globalShortcut } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path   = require('path');
 const http   = require('http');
 const net    = require('net');
@@ -22,6 +23,11 @@ const crypto = require('crypto');
 // ── Config ────────────────────────────────────────────────────────────────────
 let PORT = 57891;
 let server;
+let mainWindow = null;
+let manualUpdateCheck = false;
+
+const UPDATE_CHECK_DELAY_MS = 8_000;
+const UPDATE_RECHECK_MS = 4 * 60 * 60 * 1000; // every 4 hours
 
 const MIME = {
   '.html':  'text/html; charset=utf-8',
@@ -293,6 +299,107 @@ function serveEntry(req, res, entry, ext) {
   }
 }
 
+// ── Auto-updater (GitHub Releases via electron-updater) ───────────────────────
+function setupAutoUpdater(win) {
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.allowDowngrade = false;
+
+  const prompt = (options) => {
+    const target = win && !win.isDestroyed() ? win : BrowserWindow.getFocusedWindow();
+    return dialog.showMessageBox(target || undefined, options);
+  };
+
+  autoUpdater.on('update-available', (info) => {
+    prompt({
+      type: 'info',
+      title: 'GTC POS — Update Available',
+      message: `Version ${info.version} is available.`,
+      detail: `You are on v${app.getVersion()}.\n\nDownload and install the update?`,
+      buttons: ['Download', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    }).then(({ response }) => {
+      if (response === 0) autoUpdater.downloadUpdate();
+    });
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    if (!manualUpdateCheck) return;
+    manualUpdateCheck = false;
+    prompt({
+      type: 'info',
+      title: 'GTC POS — Up to Date',
+      message: 'You are on the latest version.',
+      detail: `Current version: v${app.getVersion()}`,
+      buttons: ['OK'],
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    prompt({
+      type: 'info',
+      title: 'GTC POS — Update Ready',
+      message: `Version ${info.version} has been downloaded.`,
+      detail: 'Restart the app to apply the update.',
+      buttons: ['Restart Now', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    }).then(({ response }) => {
+      if (response === 0) autoUpdater.quitAndInstall(false, true);
+    });
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[autoUpdater]', err?.message || err);
+    if (!manualUpdateCheck) return;
+    manualUpdateCheck = false;
+    prompt({
+      type: 'warning',
+      title: 'GTC POS — Update Check Failed',
+      message: 'Could not check for updates.',
+      detail: err?.message || 'Please try again later.',
+      buttons: ['OK'],
+    });
+  });
+
+  const checkForUpdates = () => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('[autoUpdater] check failed:', err?.message || err);
+    });
+  };
+
+  setTimeout(checkForUpdates, UPDATE_CHECK_DELAY_MS);
+  setInterval(checkForUpdates, UPDATE_RECHECK_MS);
+}
+
+function checkForUpdatesManual() {
+  if (!app.isPackaged) {
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'GTC POS',
+      message: 'Auto-update runs in the installed Windows app only.',
+      detail: 'Build the installer to test update checks.',
+      buttons: ['OK'],
+    });
+    return;
+  }
+
+  manualUpdateCheck = true;
+  autoUpdater.checkForUpdates().catch((err) => {
+    manualUpdateCheck = false;
+    console.error('[autoUpdater] manual check failed:', err?.message || err);
+    dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'GTC POS — Update Check Failed',
+      message: err?.message || 'Could not check for updates.',
+      buttons: ['OK'],
+    });
+  });
+}
+
 // ── Window ────────────────────────────────────────────────────────────────────
 function createWindow() {
   const iconPath = getIconPath();
@@ -314,7 +421,11 @@ function createWindow() {
   });
   win.setMenu(null);
   win.once('ready-to-show', () => win.show());
-  win.on('closed', () => { if (server) server.close(); });
+  win.on('closed', () => {
+    mainWindow = null;
+    if (server) server.close();
+  });
+  mainWindow = win;
   return win;
 }
 
@@ -360,7 +471,15 @@ app.whenReady().then(async () => {
   await startServer(distPath);
 
   // Navigate to the app
-  win.loadURL(`http://localhost:${PORT}`);
+  await win.loadURL(`http://localhost:${PORT}`);
+
+  setupAutoUpdater(win);
+
+  globalShortcut.register('CommandOrControl+Shift+U', checkForUpdatesManual);
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on('window-all-closed', () => {

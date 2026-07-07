@@ -6,6 +6,7 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import {
   View, Text, ScrollView, Pressable, StyleSheet,
   ActivityIndicator, TextInput, RefreshControl, Modal, Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -13,6 +14,7 @@ import {
   startOfMonth, endOfMonth, eachDayOfInterval,
   getDay, isToday, isSameDay,
 } from 'date-fns';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ordersApi } from '@/api/orders';
 import client from '@/api/client';
 import { useTheme } from '@/store/themeStore';
@@ -288,6 +290,42 @@ function mk(c: ThemeColors) {
     // ── Loading / empty ───────────────────────────────────────────────────
     center:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 48 },
     emptyTxt:  { fontSize: 14, color: c.textMuted, marginTop: 12, fontWeight: '500' },
+
+    // ── Mobile bottom sheet (calendar / dropdown) ──────────────────────
+    bsBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+    bsSheet:    { position: 'absolute', bottom: 0, left: 0, right: 0,
+                  backgroundColor: c.surface,
+                  borderTopLeftRadius: 20, borderTopRightRadius: 20,
+                  overflow: 'hidden',
+                  shadowColor: '#000', shadowOpacity: 0.2,
+                  shadowRadius: 20, shadowOffset: { width: 0, height: -4 },
+                  elevation: 20 },
+    bsHandle:   { width: 40, height: 4, borderRadius: 2,
+                  backgroundColor: c.border, alignSelf: 'center', marginTop: 10, marginBottom: 4 },
+    bsTitle:    { fontSize: 15, fontWeight: '700', color: c.heading,
+                  textAlign: 'center', paddingVertical: 12,
+                  borderBottomWidth: 1, borderBottomColor: c.border },
+
+    // ── Mobile order card ─────────────────────────────────────────────
+    cardWrap:   { backgroundColor: c.surface, borderRadius: 14,
+                  borderWidth: 1, borderColor: c.border,
+                  marginHorizontal: 12, marginTop: 10,
+                  overflow: 'hidden' },
+    cardTop:    { flexDirection: 'row', alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 14, paddingTop: 13, paddingBottom: 10,
+                  borderBottomWidth: 1, borderBottomColor: c.border },
+    cardOrderNo:{ fontSize: 15, fontWeight: '800', color: c.primary },
+    cardBody:   { paddingHorizontal: 14, paddingVertical: 11, gap: 7 },
+    cardRow:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    cardLabel:  { fontSize: 12.5, color: c.textMuted, flex: 1 },
+    cardValue:  { fontSize: 12.5, color: c.text, fontWeight: '500' },
+    cardFoot:   { flexDirection: 'row', alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 14, paddingVertical: 10,
+                  backgroundColor: c.surfaceAlt,
+                  borderTopWidth: 1, borderTopColor: c.border },
+    cardTotal:  { fontSize: 15, fontWeight: '800', color: c.heading },
   });
 }
 
@@ -302,14 +340,15 @@ function DateField({ value, onChange, label, c, s }:
   const [open, setOpen]         = useState(false);
   const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
   const triggerRef              = useRef<View>(null);
+  const isMobileOS              = Platform.OS !== 'web';
 
-  // current calendar month shown
   const selected  = value ? parse(value, 'yyyy-MM-dd', new Date()) : new Date();
   const [month, setMonth] = useState(() => {
     return value ? parse(value, 'yyyy-MM-dd', new Date()) : new Date();
   });
 
   function openCalendar() {
+    if (isMobileOS) { setOpen(true); return; }
     triggerRef.current?.measureInWindow((x, y, _w, h) => {
       setPopupPos({ top: y + h + 4, left: x });
       setOpen(true);
@@ -324,16 +363,49 @@ function DateField({ value, onChange, label, c, s }:
   const firstDay  = startOfMonth(month);
   const lastDay   = endOfMonth(month);
   const days      = eachDayOfInterval({ start: firstDay, end: lastDay });
-  const leading   = getDay(firstDay); // blank cells before 1st
+  const leading   = getDay(firstDay);
 
   const displayVal = value
     ? format(parse(value, 'yyyy-MM-dd', new Date()), 'dd MMM yyyy')
     : '';
 
+  // Shared calendar body
+  const CalendarBody = (
+    <>
+      <View style={s.calHead}>
+        <Pressable style={s.calNavBtn} onPress={() => setMonth(m => subMonths(m, 1))}>
+          <Ionicons name="chevron-back" size={18} color={c.text} />
+        </Pressable>
+        <Text style={s.calTitle}>{format(month, 'MMMM yyyy')}</Text>
+        <Pressable style={s.calNavBtn} onPress={() => setMonth(m => addMonths(m, 1))}>
+          <Ionicons name="chevron-forward" size={18} color={c.text} />
+        </Pressable>
+      </View>
+      <View style={s.calWeekRow}>
+        {WEEK_DAYS.map(d => <Text key={d} style={s.calWeekDay}>{d}</Text>)}
+      </View>
+      <View style={s.calGrid}>
+        {Array.from({ length: leading }).map((_, i) => <View key={`b${i}`} style={s.calCell} />)}
+        {days.map(d => {
+          const sel = isSameDay(d, selected);
+          const tod = isToday(d);
+          return (
+            <Pressable key={d.toISOString()}
+              style={[s.calCell, sel && s.calCellSel, !sel && tod && s.calCellTod]}
+              onPress={() => pickDay(d)}>
+              <Text style={[s.calDayTxt, sel && s.calDaySel, !sel && tod && s.calDayTod]}>
+                {format(d, 'd')}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </>
+  );
+
   return (
     <View style={s.col}>
       <Text style={s.fieldLbl}>{label}</Text>
-
       <Pressable ref={triggerRef} style={s.fieldBox} onPress={openCalendar}>
         <Ionicons name="calendar-outline" size={14} color={c.textMuted} />
         {displayVal
@@ -341,53 +413,29 @@ function DateField({ value, onChange, label, c, s }:
           : <Text style={s.fieldPh}  numberOfLines={1}>Select date</Text>}
       </Pressable>
 
-      <Modal visible={open} transparent animationType="none" onRequestClose={() => setOpen(false)}>
-        <Pressable style={s.ddOverlay} onPress={() => setOpen(false)}>
-          <View style={[s.calPopup, { top: popupPos.top, left: popupPos.left }]}
-            // Prevent backdrop tap from firing when tapping inside calendar
-            onStartShouldSetResponder={() => true}
-            onTouchEnd={e => e.stopPropagation()}>
-
-            {/* Month navigation */}
-            <View style={s.calHead}>
-              <Pressable style={s.calNavBtn} onPress={() => setMonth(m => subMonths(m, 1))}>
-                <Ionicons name="chevron-back" size={18} color={c.text} />
-              </Pressable>
-              <Text style={s.calTitle}>{format(month, 'MMMM yyyy')}</Text>
-              <Pressable style={s.calNavBtn} onPress={() => setMonth(m => addMonths(m, 1))}>
-                <Ionicons name="chevron-forward" size={18} color={c.text} />
-              </Pressable>
-            </View>
-
-            {/* Weekday headers */}
-            <View style={s.calWeekRow}>
-              {WEEK_DAYS.map(d => (
-                <Text key={d} style={s.calWeekDay}>{d}</Text>
-              ))}
-            </View>
-
-            {/* Day grid */}
-            <View style={s.calGrid}>
-              {/* Leading blanks */}
-              {Array.from({ length: leading }).map((_, i) => (
-                <View key={`b${i}`} style={s.calCell} />
-              ))}
-              {days.map(d => {
-                const sel = isSameDay(d, selected);
-                const tod = isToday(d);
-                return (
-                  <Pressable key={d.toISOString()} style={[s.calCell, sel && s.calCellSel, !sel && tod && s.calCellTod]}
-                    onPress={() => pickDay(d)}>
-                    <Text style={[s.calDayTxt, sel && s.calDaySel, !sel && tod && s.calDayTod]}>
-                      {format(d, 'd')}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+      {isMobileOS ? (
+        /* Mobile: bottom sheet */
+        <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+          <Pressable style={s.bsBackdrop} onPress={() => setOpen(false)} />
+          <View style={s.bsSheet}>
+            <View style={s.bsHandle} />
+            <Text style={s.bsTitle}>{label}</Text>
+            {CalendarBody}
+            <View style={{ height: 20 }} />
           </View>
-        </Pressable>
-      </Modal>
+        </Modal>
+      ) : (
+        /* Web: anchored popup */
+        <Modal visible={open} transparent animationType="none" onRequestClose={() => setOpen(false)}>
+          <Pressable style={s.ddOverlay} onPress={() => setOpen(false)}>
+            <View style={[s.calPopup, { top: popupPos.top, left: popupPos.left }]}
+              onStartShouldSetResponder={() => true}
+              onTouchEnd={e => e.stopPropagation()}>
+              {CalendarBody}
+            </View>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -400,23 +448,36 @@ function Dropdown({ value, onChange, options, label, placeholder, c, s }:
     label: string; placeholder: string;
     c: ThemeColors; s: ReturnType<typeof mk> }) {
 
-  const [open, setOpen]       = useState(false);
+  const [open, setOpen]         = useState(false);
   const [popupPos, setPopupPos] = useState({ top: 0, left: 0, width: 200 });
-  const triggerRef = useRef<View>(null);
+  const triggerRef              = useRef<View>(null);
+  const isMobileOS              = Platform.OS !== 'web';
   const sel = options.find(o => o.value === value);
 
   function openMenu() {
+    if (isMobileOS) { setOpen(true); return; }
     triggerRef.current?.measureInWindow((x, y, w, h) => {
       setPopupPos({ top: y + h + 4, left: x, width: w });
       setOpen(true);
     });
   }
 
+  const OptionsList = (
+    <ScrollView bounces={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: 320 }}>
+      {options.map(o => (
+        <Pressable key={o.value}
+          style={[s.dRow, o.value === value && s.dRowA]}
+          onPress={() => { onChange(o.value); setOpen(false); }}>
+          <Text style={[s.dTxt, o.value === value && s.dTxtA]}>{o.label}</Text>
+          {o.value === value && <Ionicons name="checkmark" size={16} color={c.primary} />}
+        </Pressable>
+      ))}
+    </ScrollView>
+  );
+
   return (
     <View style={s.col}>
       <Text style={s.fieldLbl}>{label}</Text>
-
-      {/* Trigger button */}
       <Pressable ref={triggerRef} style={s.fieldBox} onPress={openMenu}>
         {sel?.value
           ? <Text style={s.fieldTxt} numberOfLines={1}>{sel.label}</Text>
@@ -424,30 +485,27 @@ function Dropdown({ value, onChange, options, label, placeholder, c, s }:
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={13} color={c.textMuted} />
       </Pressable>
 
-      {/* Floating popup — rendered in a transparent full-screen Modal */}
-      <Modal visible={open} transparent animationType="none" onRequestClose={() => setOpen(false)}>
-        {/* Invisible full-screen backdrop — tap to dismiss */}
-        <Pressable style={s.ddOverlay} onPress={() => setOpen(false)}>
-          {/* Floating card below the trigger */}
-          <View style={[s.ddPopup, {
-            top:   popupPos.top,
-            left:  popupPos.left,
-            width: popupPos.width,
-          }]}>
-            <ScrollView bounces={false} keyboardShouldPersistTaps="handled">
-              {options.map(o => (
-                <Pressable key={o.value}
-                  style={[s.dRow, o.value === value && s.dRowA]}
-                  onPress={() => { onChange(o.value); setOpen(false); }}>
-                  <Text style={[s.dTxt, o.value === value && s.dTxtA]}>{o.label}</Text>
-                  {o.value === value &&
-                    <Ionicons name="checkmark" size={16} color={c.primary} />}
-                </Pressable>
-              ))}
-            </ScrollView>
+      {isMobileOS ? (
+        /* Mobile: bottom sheet */
+        <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+          <Pressable style={s.bsBackdrop} onPress={() => setOpen(false)} />
+          <View style={s.bsSheet}>
+            <View style={s.bsHandle} />
+            <Text style={s.bsTitle}>{label}</Text>
+            {OptionsList}
+            <View style={{ height: 20 }} />
           </View>
-        </Pressable>
-      </Modal>
+        </Modal>
+      ) : (
+        /* Web: anchored popup */
+        <Modal visible={open} transparent animationType="none" onRequestClose={() => setOpen(false)}>
+          <Pressable style={s.ddOverlay} onPress={() => setOpen(false)}>
+            <View style={[s.ddPopup, { top: popupPos.top, left: popupPos.left, width: popupPos.width }]}>
+              {OptionsList}
+            </View>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -481,11 +539,74 @@ function Pages({ page, last, go, s }: {
   );
 }
 
+// ─── Mobile Order Card ────────────────────────────────────────────────────────
+
+function OrderCard({ order, isDark, c, s }: {
+  order: Order; isDark: boolean; c: ThemeColors; s: ReturnType<typeof mk>;
+}) {
+  const sc    = statusClr(order.status, isDark);
+  const total = Number(order.grand_total ?? order.total ?? order.final_total ?? 0);
+  const tableName = order.table?.name ?? order.table_name;
+  return (
+    <View style={s.cardWrap}>
+      {/* Top: order # + status */}
+      <View style={s.cardTop}>
+        <Text style={s.cardOrderNo}>#{order.order_number ?? order.id}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontSize: 12, color: c.textMuted }}>
+            {fmtDate(order.created_at ?? order.date)}
+          </Text>
+          <View style={[s.pill, { backgroundColor: sc.bg }]}>
+            <Text style={[s.pillTxt, { color: sc.fg }]}>{order.status}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Body: customer, type, table */}
+      <View style={s.cardBody}>
+        <View style={s.cardRow}>
+          <Ionicons name="person-outline" size={13} color={c.textMuted} />
+          <Text style={[s.cardValue, { flex: 1 }]} numberOfLines={1}>
+            {order.customer?.name ?? order.customer_name ?? 'Walk-in'}
+          </Text>
+        </View>
+        <View style={s.cardRow}>
+          <Ionicons name="restaurant-outline" size={13} color={c.textMuted} />
+          <Text style={s.cardValue}>{fmtType(order.order_type ?? order.type)}</Text>
+          {!!tableName && (
+            <>
+              <Text style={{ color: c.border, fontSize: 12 }}>·</Text>
+              <Ionicons name="grid-outline" size={12} color={c.textMuted} />
+              <Text style={s.cardValue}>{tableName}</Text>
+            </>
+          )}
+          {order.payment_method && (
+            <>
+              <Text style={{ color: c.border, fontSize: 12 }}>·</Text>
+              <Ionicons name="card-outline" size={12} color={c.textMuted} />
+              <Text style={s.cardValue}>{order.payment_method}</Text>
+            </>
+          )}
+        </View>
+      </View>
+
+      {/* Footer: total */}
+      <View style={s.cardFoot}>
+        <Text style={{ fontSize: 12.5, color: c.textMuted }}>Grand Total</Text>
+        <Text style={s.cardTotal}>{rupee2(total)}</Text>
+      </View>
+    </View>
+  );
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ReportsScreen() {
   const { colors: c, isDark } = useTheme();
-  const s = useMemo(() => mk(c), [c]);
+  const s        = useMemo(() => mk(c), [c]);
+  const insets   = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isMobile = Platform.OS !== 'web';
 
   const [activeTab, setActiveTab] = useState(0);
 
@@ -587,7 +708,7 @@ export default function ReportsScreen() {
     <View style={s.shell}>
 
       {/* ══ Tabs ════════════════════════════════════════════════════════════ */}
-      <View style={s.tabBar}>
+      <View style={[s.tabBar, isMobile && { paddingTop: insets.top }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 4 }}>
           {TABS.map((t, i) => (
@@ -649,12 +770,32 @@ export default function ReportsScreen() {
         </Pressable>
       </View>
 
-      {/* ══ Table ════════════════════════════════════════════════════════════ */}
+      {/* ══ Table / Cards ════════════════════════════════════════════════════ */}
       {loading ? (
         <View style={s.center}>
           <ActivityIndicator size="large" color={c.primary} />
         </View>
+      ) : isMobile ? (
+        /* ── Mobile: card list ── */
+        <ScrollView
+          style={s.tableWrap}
+          contentContainerStyle={{ paddingBottom: 12 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); load(true); }}
+              tintColor={c.primary} />
+          }>
+          {rows.length === 0 ? (
+            <View style={s.center}>
+              <Ionicons name="receipt-outline" size={48} color={c.border} />
+              <Text style={s.emptyTxt}>No orders found</Text>
+            </View>
+          ) : rows.map(order => (
+            <OrderCard key={order.id} order={order} isDark={isDark} c={c} s={s} />
+          ))}
+        </ScrollView>
       ) : (
+        /* ── Web: table ── */
         <ScrollView style={s.tableWrap}
           refreshControl={
             <RefreshControl refreshing={refreshing}
@@ -662,58 +803,51 @@ export default function ReportsScreen() {
               tintColor={c.primary} />
           }>
           <View style={{ flex: 1 }}>
-
-              {/* Header */}
-              <View style={s.thead}>
-                <Text style={[s.th, s.cId]}>Order #</Text>
-                <Text style={[s.th, s.cDate]}>Date</Text>
-                <Text style={[s.th, s.cCust]}>Customer</Text>
-                <Text style={[s.th, s.cType]}>Type</Text>
-                <Text style={[s.th, s.cTable]}>Table</Text>
-                <Text style={[s.th, s.cTotal, { textAlign: 'right' }]}>Grand Total</Text>
-                <Text style={[s.th, s.cStatus, { paddingLeft: 8 }]}>Status</Text>
+            <View style={s.thead}>
+              <Text style={[s.th, s.cId]}>Order #</Text>
+              <Text style={[s.th, s.cDate]}>Date</Text>
+              <Text style={[s.th, s.cCust]}>Customer</Text>
+              <Text style={[s.th, s.cType]}>Type</Text>
+              <Text style={[s.th, s.cTable]}>Table</Text>
+              <Text style={[s.th, s.cTotal, { textAlign: 'right' }]}>Grand Total</Text>
+              <Text style={[s.th, s.cStatus, { paddingLeft: 8 }]}>Status</Text>
+            </View>
+            {rows.length === 0 ? (
+              <View style={s.center}>
+                <Ionicons name="receipt-outline" size={48} color={c.border} />
+                <Text style={s.emptyTxt}>No orders found</Text>
               </View>
-
-              {/* Rows */}
-              {rows.length === 0 ? (
-                <View style={s.center}>
-                  <Ionicons name="receipt-outline" size={48} color={c.border} />
-                  <Text style={s.emptyTxt}>No orders found</Text>
-                </View>
-              ) : rows.map(order => {
-                const sc    = statusClr(order.status, isDark);
-                const total = Number(order.grand_total ?? order.total ?? order.final_total ?? 0);
-                return (
-                  <View key={order.id} style={s.trow}>
-                    {/* Order # — blue like web */}
-                    <Text style={[s.td, s.cId, { fontWeight: '700', color: c.primary }]}
-                      numberOfLines={1}>
-                      #{order.order_number ?? order.id}
-                    </Text>
-                    <Text style={[s.td, s.cDate, { fontSize: 12.5 }]} numberOfLines={1}>
-                      {fmtDate(order.created_at ?? order.date)}
-                    </Text>
-                    <Text style={[s.td, s.cCust]} numberOfLines={1}>
-                      {order.customer?.name ?? order.customer_name ?? 'Walk-in'}
-                    </Text>
-                    <Text style={[s.td, s.cType, { fontSize: 12.5 }]} numberOfLines={1}>
-                      {fmtType(order.order_type ?? order.type)}
-                    </Text>
-                    <Text style={[s.td, s.cTable, { fontSize: 12.5 }]} numberOfLines={1}>
-                      {order.table?.name ?? order.table_name ?? '—'}
-                    </Text>
-                    <Text style={[s.td, s.cTotal, { fontWeight: '700', textAlign: 'right' }]}>
-                      {rupee2(total)}
-                    </Text>
-                    <View style={[s.cStatus, { paddingLeft: 8 }]}>
-                      <View style={[s.pill, { backgroundColor: sc.bg }]}>
-                        <Text style={[s.pillTxt, { color: sc.fg }]}>{order.status}</Text>
-                      </View>
+            ) : rows.map(order => {
+              const sc    = statusClr(order.status, isDark);
+              const total = Number(order.grand_total ?? order.total ?? order.final_total ?? 0);
+              return (
+                <View key={order.id} style={s.trow}>
+                  <Text style={[s.td, s.cId, { fontWeight: '700', color: c.primary }]} numberOfLines={1}>
+                    #{order.order_number ?? order.id}
+                  </Text>
+                  <Text style={[s.td, s.cDate, { fontSize: 12.5 }]} numberOfLines={1}>
+                    {fmtDate(order.created_at ?? order.date)}
+                  </Text>
+                  <Text style={[s.td, s.cCust]} numberOfLines={1}>
+                    {order.customer?.name ?? order.customer_name ?? 'Walk-in'}
+                  </Text>
+                  <Text style={[s.td, s.cType, { fontSize: 12.5 }]} numberOfLines={1}>
+                    {fmtType(order.order_type ?? order.type)}
+                  </Text>
+                  <Text style={[s.td, s.cTable, { fontSize: 12.5 }]} numberOfLines={1}>
+                    {order.table?.name ?? order.table_name ?? '—'}
+                  </Text>
+                  <Text style={[s.td, s.cTotal, { fontWeight: '700', textAlign: 'right' }]}>
+                    {rupee2(total)}
+                  </Text>
+                  <View style={[s.cStatus, { paddingLeft: 8 }]}>
+                    <View style={[s.pill, { backgroundColor: sc.bg }]}>
+                      <Text style={[s.pillTxt, { color: sc.fg }]}>{order.status}</Text>
                     </View>
                   </View>
-                );
-              })}
-
+                </View>
+              );
+            })}
           </View>
         </ScrollView>
       )}
@@ -721,37 +855,67 @@ export default function ReportsScreen() {
       {/* ══ Bottom bar ═══════════════════════════════════════════════════════ */}
       <View style={s.bottomWrap}>
 
-        {/* Entries selector + Pagination — same row as web */}
-        <View style={s.paginRow}>
-          <View style={s.ppGroup}>
-            <Text style={s.ppLbl}>Show</Text>
-            {PER_PAGE_OPTIONS.map(n => (
-              <Pressable key={n} style={[s.ppChip, perPage === n && s.ppChipA]}
-                onPress={() => { setPerPage(n); setPage(1); }}>
-                <Text style={[s.ppTxt, perPage === n && s.ppTxtA]}>{n}</Text>
+        {isMobile ? (
+          /* Mobile: entries + pagination stacked */
+          <>
+            <View style={[s.paginRow, { justifyContent: 'center' }]}>
+              <View style={s.ppGroup}>
+                <Text style={s.ppLbl}>Show</Text>
+                {PER_PAGE_OPTIONS.map(n => (
+                  <Pressable key={n} style={[s.ppChip, perPage === n && s.ppChipA]}
+                    onPress={() => { setPerPage(n); setPage(1); }}>
+                    <Text style={[s.ppTxt, perPage === n && s.ppTxtA]}>{n}</Text>
+                  </Pressable>
+                ))}
+                <Text style={s.ppLbl}>entries</Text>
+              </View>
+            </View>
+            <View style={[s.paginRow, { justifyContent: 'center', paddingTop: 0 }]}>
+              <View style={s.pageGroup}>
+                <Pressable style={[s.pageChip, page <= 1 && s.pageChipDis]}
+                  onPress={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>
+                  <Ionicons name="chevron-back" size={12} color={c.text} />
+                  <Text style={s.pageTx}>Prev</Text>
+                </Pressable>
+                <Pages page={page} last={lastPage} go={setPage} s={s} />
+                <Pressable style={[s.pageChip, page >= lastPage && s.pageChipDis]}
+                  onPress={() => setPage(p => Math.min(lastPage, p + 1))} disabled={page >= lastPage}>
+                  <Text style={s.pageTx}>Next</Text>
+                  <Ionicons name="chevron-forward" size={12} color={c.text} />
+                </Pressable>
+              </View>
+            </View>
+          </>
+        ) : (
+          /* Web: single row */
+          <View style={s.paginRow}>
+            <View style={s.ppGroup}>
+              <Text style={s.ppLbl}>Show</Text>
+              {PER_PAGE_OPTIONS.map(n => (
+                <Pressable key={n} style={[s.ppChip, perPage === n && s.ppChipA]}
+                  onPress={() => { setPerPage(n); setPage(1); }}>
+                  <Text style={[s.ppTxt, perPage === n && s.ppTxtA]}>{n}</Text>
+                </Pressable>
+              ))}
+              <Text style={s.ppLbl}>entries</Text>
+            </View>
+            <View style={s.pageGroup}>
+              <Pressable style={[s.pageChip, page <= 1 && s.pageChipDis]}
+                onPress={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>
+                <Ionicons name="chevron-back" size={12} color={c.text} />
+                <Text style={s.pageTx}>Prev</Text>
               </Pressable>
-            ))}
-            <Text style={s.ppLbl}>entries</Text>
+              <Pages page={page} last={lastPage} go={setPage} s={s} />
+              <Pressable style={[s.pageChip, page >= lastPage && s.pageChipDis]}
+                onPress={() => setPage(p => Math.min(lastPage, p + 1))} disabled={page >= lastPage}>
+                <Text style={s.pageTx}>Next</Text>
+                <Ionicons name="chevron-forward" size={12} color={c.text} />
+              </Pressable>
+            </View>
           </View>
+        )}
 
-          <View style={s.pageGroup}>
-            <Pressable style={[s.pageChip, page <= 1 && s.pageChipDis]}
-              onPress={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>
-              <Ionicons name="chevron-back" size={12} color={c.text} />
-              <Text style={s.pageTx}>Prev</Text>
-            </Pressable>
-
-            <Pages page={page} last={lastPage} go={setPage} s={s} />
-
-            <Pressable style={[s.pageChip, page >= lastPage && s.pageChipDis]}
-              onPress={() => setPage(p => Math.min(lastPage, p + 1))} disabled={page >= lastPage}>
-              <Text style={s.pageTx}>Next</Text>
-              <Ionicons name="chevron-forward" size={12} color={c.text} />
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Period total — web: "Period total: N order(s), ₹X.XX" */}
+        {/* Period total */}
         <View style={s.periodRow}>
           <Text style={s.periodLbl}>
             Period total:{' '}

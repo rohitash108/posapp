@@ -140,5 +140,5 @@ export default function Index() {
 
   if (!isHydrated) return <AnimatedSplash />;
 
-  return token ? <Redirect href="/(app)/pos" /> : <Redirect href="/(auth)/login" />;
+  return token ? <Redirect href="/(app)/dashboard" /> : <Redirect href="/(auth)/login" />;
 }

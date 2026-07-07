@@ -9,6 +9,7 @@ import {
   webSaveCategories, webSaveItems, webSaveTables,
   webGetSyncQueue, webRemoveSyncQueue, webSetLastSync,
 } from '@/utils/webDb';
+import { linkOfflineOrderServerId, withOfflineCreatedAt } from '@/utils/offlineOrderTimes';
 
 export const webSyncService = {
   async pull(): Promise<void> {
@@ -38,7 +39,10 @@ export const webSyncService = {
     for (const item of queue) {
       try {
         if (item.action === 'create_order') {
-          await ordersApi.create(JSON.parse(item.payload));
+          const payload = withOfflineCreatedAt(JSON.parse(item.payload), item.created_at);
+          const res = await ordersApi.create(payload);
+          const serverId = res.data?.id ?? res.data?.data?.id;
+          if (serverId && item.id) await linkOfflineOrderServerId(item.id, serverId);
         } else if (item.action === 'update_status') {
           const { order_id, status } = JSON.parse(item.payload);
           await ordersApi.updateStatus(order_id, status);

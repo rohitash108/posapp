@@ -184,8 +184,10 @@ function mkS(c: ThemeColors) {
     viewToggle:  { flexDirection: 'row', borderRadius: 7, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
     toggleBtn:   { paddingHorizontal: 9, paddingVertical: 7, backgroundColor: c.surface },
     toggleActive:{ backgroundColor: PRIMARY },
-    searchBox:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: c.surface, minWidth: 120 },
-    searchInput: { flex: 1, fontSize: 13, color: c.heading },
+    searchBox:        { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: c.surface, minWidth: 120 },
+    searchInput:      { flex: 1, fontSize: 13, color: c.heading },
+    searchBoxMobile:  { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.surfaceAlt, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 12, borderWidth: 1.5, borderColor: c.border },
+    searchInputMobile:{ flex: 1, fontSize: 15, color: c.heading, fontWeight: '500', paddingVertical: 0 },
     addBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.sidebar, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
     addBtnTxt:   { color: '#fff', fontWeight: '700', fontSize: 13 },
     loadWrap:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -531,20 +533,21 @@ function CustomerCard({
       {isRegistered ? (
         <View style={gv.cardActions}>
           <Pressable style={({ pressed }) => [gv.actionBtn, gv.payBtn, pressed && { opacity: 0.7 }]} onPress={onPay}>
-            <Ionicons name="wallet-outline" size={13} color={CRE_GRN} />
+            <Ionicons name="wallet-outline" size={14} color={CRE_GRN} />
             <Text style={gv.payTxt}>Pay</Text>
           </Pressable>
           <Pressable style={({ pressed }) => [gv.actionBtn, gv.editBtn, pressed && { opacity: 0.7 }]} onPress={onEdit}>
-            <Ionicons name="create-outline" size={13} color="#b45309" />
+            <Ionicons name="create-outline" size={14} color="#b45309" />
             <Text style={gv.editTxt}>Edit</Text>
           </Pressable>
           <Pressable style={({ pressed }) => [gv.actionBtn, gv.delBtn, pressed && { opacity: 0.7 }]} onPress={onDelete}>
-            {deleting ? <ActivityIndicator size={12} color={DUE_RED} /> : <Ionicons name="trash-outline" size={13} color={DUE_RED} />}
+            {deleting ? <ActivityIndicator size={12} color={DUE_RED} /> : <Ionicons name="trash-outline" size={14} color={DUE_RED} />}
             <Text style={gv.delTxt}>Delete</Text>
           </Pressable>
         </View>
       ) : (
-        <View style={[gv.cardActions, { justifyContent: 'center', paddingVertical: 10 }]}>
+        <View style={[gv.cardActions, { justifyContent: 'center', alignItems: 'center', gap: 5, paddingVertical: 10 }]}>
+          <Ionicons name="information-circle-outline" size={13} color={c.textMuted} />
           <Text style={{ fontSize: 12, color: c.textMuted }}>From orders only — not registered</Text>
         </View>
       )}
@@ -696,8 +699,8 @@ export default function CustomersScreen() {
       {/* ── Header ── */}
       {isMobile ? (
         /* Mobile: two rows */
-        <View style={[s.header, { flexDirection: 'column', alignItems: 'stretch', gap: 8, paddingTop: insets.top + 11 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={[s.header, { flexDirection: 'column', alignItems: 'stretch', gap: 8, paddingTop: insets.top + 11, paddingBottom: 11 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Text style={s.headerTitle}>Customer</Text>
               <Pressable style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]}
@@ -723,12 +726,24 @@ export default function CustomersScreen() {
             </View>
           </View>
           {/* Search — full width on mobile */}
-          <View style={s.searchBox}>
-            <TextInput style={s.searchInput} value={search} onChangeText={setSearch}
-              placeholder="Search by name or phone" placeholderTextColor={c.textMuted} />
-            {search
-              ? <Pressable onPress={() => setSearch('')}><Ionicons name="close-circle" size={15} color={c.textMuted} /></Pressable>
-              : <Ionicons name="search-outline" size={15} color={c.textMuted} />}
+          <View style={s.searchBoxMobile}>
+            <Ionicons name="search-outline" size={17} color={c.textMuted} />
+            <TextInput
+              style={s.searchInputMobile}
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search by name or phone..."
+              placeholderTextColor={c.textMuted}
+              returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
+              clearButtonMode="while-editing"
+            />
+            {!!search && (
+              <Pressable onPress={() => setSearch('')} hitSlop={8}>
+                <Ionicons name="close-circle" size={17} color={c.textMuted} />
+              </Pressable>
+            )}
           </View>
         </View>
       ) : (

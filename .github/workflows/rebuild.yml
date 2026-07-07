@@ -21,6 +21,14 @@ on:
           - both
           - installer-only
           - portable-only
+      publish_release:
+        description: 'Publish to GitHub Releases (for auto-update). Version tag must match package.json.'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -81,19 +89,28 @@ jobs:
 
       - name: Build installer only
         if: ${{ inputs.target == 'installer-only' }}
-        run: npx electron-builder --win nsis --x64
+        shell: pwsh
+        run: |
+          $publish = if ('${{ inputs.publish_release }}' -eq 'true') { '--publish always' } else { '' }
+          npx electron-builder --win nsis --x64 @($publish.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build portable only
         if: ${{ inputs.target == 'portable-only' }}
-        run: npx electron-builder --win portable --x64
+        shell: pwsh
+        run: |
+          $publish = if ('${{ inputs.publish_release }}' -eq 'true') { '--publish always' } else { '' }
+          npx electron-builder --win portable --x64 @($publish.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build both (installer + portable)
         if: ${{ inputs.target == 'both' || inputs.target == '' }}
-        run: npx electron-builder --win nsis portable --x64
+        shell: pwsh
+        run: |
+          $publish = if ('${{ inputs.publish_release }}' -eq 'true') { '--publish always' } else { '' }
+          npx electron-builder --win nsis portable --x64 @($publish.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

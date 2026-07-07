@@ -54,6 +54,9 @@ export default function RootLayout() {
       // Unblock the UI immediately — do not wait for server validation.
       setHydrated();
 
+      const { hydrateOfflineOrderTimes } = await import('@/utils/offlineOrderTimes');
+      await hydrateOfflineOrderTimes();
+
       // ── Step 2: Validate with server in the background (non-blocking) ────────
       // Runs only when a session exists. Never clears auth on network errors —
       // only a confirmed 401 (handled by the interceptor + silentReauth) can

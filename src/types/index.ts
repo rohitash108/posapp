@@ -189,6 +189,7 @@ export interface Order {
   kot_printed?: boolean;
   is_draft?: boolean;
   items: OrderItem[];
+  local_uuid?: string;
   created_at?: string;
   updated_at?: string;
 }

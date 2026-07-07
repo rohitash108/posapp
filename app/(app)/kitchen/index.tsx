@@ -2,13 +2,14 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   View, Text, FlatList, Pressable, StyleSheet,
   RefreshControl, ActivityIndicator, useWindowDimensions,
-  TextInput, ScrollView, Platform,
+  TextInput, ScrollView, Platform, AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ordersApi } from '@/api/orders';
 import { useAppStore } from '@/store/appStore';
+import { useOrderBadgeStore } from '@/store/orderBadgeStore';
 import { useTheme } from '@/store/themeStore';
 import type { ThemeColors } from '@/theme/tokens';
 import type { Order, OrderStatus } from '@/types';
@@ -204,6 +205,7 @@ export default function KitchenScreen() {
   const isAdmin = user?.role === 'restaurant_admin' || user?.role === 'admin';
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refreshVersion = useOrderBadgeStore((s) => s.refreshVersion);
   const prevFocusedRef = useRef(false);
   const isFocused = useIsFocused();
 
@@ -248,10 +250,26 @@ export default function KitchenScreen() {
     prevFocusedRef.current = isFocused;
   }, [isFocused, load]);
 
+  useEffect(() => {
+    if (refreshVersion === 0) return;
+    load(true);
+  }, [refreshVersion, load]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') load(true);
+    });
+    return () => sub.remove();
+  }, [load]);
+
   async function handleStatus(order: Order, newStatus: OrderStatus) {
     setActionLoading(p => ({ ...p, [order.id]: true }));
     try {
-      await ordersApi.updateStatus(order.id, newStatus);
+      if (newStatus === 'completed') {
+        await ordersApi.complete(order.id, order.payment_method ?? 'cash');
+      } else {
+        await ordersApi.updateStatus(order.id, newStatus);
+      }
       if (newStatus === 'completed' || newStatus === 'cancelled') {
         setOrders(prev => prev.filter(o => o.id !== order.id));
         if (newStatus === 'completed') setCompletedToday(c => c + 1);
