@@ -2,7 +2,7 @@
  * Settings Screen — Professional redesign
  * Profile hero · Restaurant info · Appearance · Sync · About · Logout
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, Pressable, StyleSheet, Alert,
   ScrollView, Platform, Modal, ActivityIndicator,
@@ -15,6 +15,7 @@ import { useTheme } from '@/store/themeStore';
 import { syncService } from '@/sync/SyncService';
 import { webSyncService } from '@/sync/WebSyncService';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { checkForUpdates, getAppVersion, isDesktopApp } from '@/utils/desktopBridge';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const FOREST  = '#1A2B1A';
@@ -93,6 +94,12 @@ export default function SettingsScreen() {
   const { isDark, toggleMode, mode } = useTheme();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loggingOut,      setLoggingOut]      = useState(false);
+  const [appVersion,      setAppVersion]      = useState('1.0.1');
+  const desktopApp = isDesktopApp();
+
+  useEffect(() => {
+    void getAppVersion().then(setAppVersion);
+  }, []);
 
   const initials = user?.name
     ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -280,15 +287,27 @@ export default function SettingsScreen() {
           iconBg="#f5f3ff"
           iconColor="#7c3aed"
           label="Version"
-          value="v1.0.0"
+          value={`v${appVersion}`}
         />
+        {desktopApp ? (
+          <PressableRow
+            icon="cloud-download-outline"
+            iconBg="#eff6ff"
+            iconColor="#2563eb"
+            label="Check for Updates"
+            sub="Shows if you are on the latest version"
+            onPress={checkForUpdates}
+          />
+        ) : null}
         <SettingRow
           icon="layers-outline"
           iconBg="#f0fdf4"
           iconColor="#16a34a"
           label="Platform"
           value={
-            Platform.OS === 'web'
+            desktopApp
+              ? 'Windows App'
+              : Platform.OS === 'web'
               ? 'Web Browser'
               : Platform.OS === 'ios'
               ? 'iOS'
@@ -315,7 +334,7 @@ export default function SettingsScreen() {
       {/* Footer */}
       <View style={s.footer}>
         <Text style={s.footerTxt}>GTC POS · Powered by Softwar.in</Text>
-        <Text style={s.footerVersion}>Version 1.0.0 · {new Date().getFullYear()}</Text>
+        <Text style={s.footerVersion}>Version {appVersion} · {new Date().getFullYear()}</Text>
       </View>
 
       {/* ── Logout Confirmation Modal ──────────────────────────────────── */}

@@ -11,7 +11,7 @@
 
 'use strict';
 
-const { app, BrowserWindow, dialog, session, globalShortcut } = require('electron');
+const { app, BrowserWindow, dialog, session, globalShortcut, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path   = require('path');
 const http   = require('http');
@@ -413,6 +413,7 @@ function createWindow() {
     icon:     fs.existsSync(iconPath) ? iconPath : undefined,
     show: false,            // will show after ready-to-show to avoid white flash
     webPreferences: {
+      preload:                 path.join(__dirname, 'preload.js'),
       nodeIntegration:         false,
       contextIsolation:        true,
       webSecurity:             false,
@@ -474,6 +475,11 @@ app.whenReady().then(async () => {
   await win.loadURL(`http://localhost:${PORT}`);
 
   setupAutoUpdater(win);
+
+  ipcMain.handle('gtc-pos:get-version', () => app.getVersion());
+  ipcMain.handle('gtc-pos:check-for-updates', () => {
+    checkForUpdatesManual();
+  });
 
   globalShortcut.register('CommandOrControl+Shift+U', checkForUpdatesManual);
 });
