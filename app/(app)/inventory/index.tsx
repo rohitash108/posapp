@@ -87,46 +87,48 @@ function mkS(c: ThemeColors) {
     tabActive:{ borderBottomWidth: 2, borderBottomColor: BRAND },
     tabTxt:   { fontSize: 13, fontWeight: '600', color: c.textMuted },
 
-    card:     { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: 'hidden' },
+    card:     { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: 'hidden', width: '100%', alignSelf: 'stretch' },
     cardHdr:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
     cardHdrTxt: { fontSize: 14, fontWeight: '700', color: c.heading },
     cardHdrSub: { fontSize: 12, color: c.textMuted },
 
-    tableToolbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border, flexWrap: 'wrap' },
-    searchWrap:   { flex: 1, minWidth: 150, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: c.border },
-    searchInput:  { flex: 1, fontSize: 13, color: c.heading },
-    filterChips:  { flexDirection: 'row', gap: 6 },
-    chip:         { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+    tableToolbar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border, width: '100%' },
+    searchWrap:   { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surfaceAlt, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: c.border },
+    searchInput:  { flex: 1, fontSize: 13.5, color: c.heading },
+    filterChips:  { flexDirection: 'row', gap: 8, flexShrink: 0 },
+    chip:         { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
     chipTxt:      { fontSize: 12, fontWeight: '600', color: c.text },
     chipBadge:    { backgroundColor: c.border, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 1 },
     chipBadgeTxt: { fontSize: 10, fontWeight: '700', color: c.text },
 
-    tRow:    { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: c.border },
+    tableWrap: { width: '100%' },
+    tRow:    { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: c.border, width: '100%' },
     tHead:   { backgroundColor: c.surfaceAlt, borderBottomColor: c.border },
     tRowAlt: { backgroundColor: c.surfaceAlt },
-    tCell:   { paddingHorizontal: 12, paddingVertical: 11, fontSize: 12.5, color: c.text },
+    tCell:   { paddingHorizontal: 14, paddingVertical: 13, fontSize: 13, color: c.text },
 
-    cName:   { flex: 2, paddingHorizontal: 12, paddingVertical: 10 },
-    cUnit:   { width: 70 },
-    cOnHand: { width: 90, textAlign: 'right' },
-    cStatus: { width: 110, paddingHorizontal: 8, paddingVertical: 8, justifyContent: 'center' },
-    cAct:    { width: 80, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
+    // Flex columns so the table stretches across the full card width
+    cName:   { flex: 3, minWidth: 0, paddingHorizontal: 14, paddingVertical: 12 },
+    cUnit:   { flex: 0.8, minWidth: 64, paddingHorizontal: 10 },
+    cOnHand: { flex: 1.1, minWidth: 88, paddingHorizontal: 10, textAlign: 'right' },
+    cStatus: { flex: 1.3, minWidth: 110, paddingHorizontal: 10, paddingVertical: 10, justifyContent: 'flex-start' },
+    cAct:    { flex: 1, minWidth: 96, paddingHorizontal: 10, alignItems: 'flex-end', justifyContent: 'center' },
 
-    ingName:  { fontSize: 13.5, fontWeight: '600', color: c.heading },
-    ingSku:   { fontSize: 11, color: c.textMuted, marginTop: 1 },
-    progressBg:   { height: 3, backgroundColor: c.border, borderRadius: 2, marginTop: 5, overflow: 'hidden' },
-    progressFill: { height: 3, borderRadius: 2 },
-    statusBadge:  { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' },
-    statusTxt:    { fontSize: 11, fontWeight: '700' },
-    minTxt:       { fontSize: 10.5, color: c.textMuted, marginTop: 2 },
-    actBtn:       { width: 30, height: 30, borderRadius: 7, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+    ingName:  { fontSize: 14, fontWeight: '700', color: c.heading },
+    ingSku:   { fontSize: 11.5, color: c.textMuted, marginTop: 2 },
+    progressBg:   { height: 4, backgroundColor: c.border, borderRadius: 2, marginTop: 7, overflow: 'hidden', maxWidth: 220 },
+    progressFill: { height: 4, borderRadius: 2 },
+    statusBadge:  { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, alignSelf: 'flex-start' },
+    statusTxt:    { fontSize: 11.5, fontWeight: '700' },
+    minTxt:       { fontSize: 11, color: c.textMuted, marginTop: 3 },
+    actBtn:       { width: 34, height: 34, borderRadius: 9, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
 
-    mWhen: { width: 90 },
-    mType: { width: 110, paddingHorizontal: 8, paddingVertical: 8, justifyContent: 'center' },
-    mIng:  { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
-    mQty:  { width: 90, textAlign: 'right', paddingRight: 14 },
-    movBadge:    { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' },
-    movBadgeTxt: { fontSize: 11.5, fontWeight: '700' },
+    mWhen: { flex: 1.1, minWidth: 90, paddingHorizontal: 14 },
+    mType: { flex: 1.2, minWidth: 100, paddingHorizontal: 10, paddingVertical: 10, justifyContent: 'flex-start' },
+    mIng:  { flex: 2.5, minWidth: 0, paddingHorizontal: 12, paddingVertical: 12 },
+    mQty:  { flex: 1, minWidth: 88, textAlign: 'right', paddingRight: 16, paddingHorizontal: 10 },
+    movBadge:    { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, alignSelf: 'flex-start' },
+    movBadgeTxt: { fontSize: 12, fontWeight: '700' },
 
     emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50, gap: 8 },
     emptyTxt:  { fontSize: 14, color: c.textMuted, fontWeight: '600' },
@@ -473,7 +475,7 @@ export default function InventoryScreen() {
       ) : (
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 14, gap: 14 }}
+          contentContainerStyle={{ padding: 14, gap: 14, width: '100%', flexGrow: 1 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(true); }} tintColor={BRAND} />}
         >
           {/* ── Alert cards: Low stock | Expiring ────────────── */}
@@ -557,7 +559,7 @@ export default function InventoryScreen() {
               {/* Search + filter */}
               <View style={[s.tableToolbar, isMobile && { flexDirection: 'column', alignItems: 'stretch' }]}>
                 <View style={s.searchWrap}>
-                  <Ionicons name="search" size={13} color={c.textMuted} />
+                  <Ionicons name="search" size={14} color={c.textMuted} />
                   <TextInput
                     style={s.searchInput}
                     value={search}
@@ -567,14 +569,13 @@ export default function InventoryScreen() {
                   />
                   {search ? (
                     <TouchableOpacity onPress={() => setSearch('')}>
-                      <Ionicons name="close-circle" size={13} color={c.textMuted} />
+                      <Ionicons name="close-circle" size={14} color={c.textMuted} />
                     </TouchableOpacity>
                   ) : null}
                 </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ flexDirection: 'row', gap: 6 }}>
+                <View style={s.filterChips}>
                   {([
-                    ['all', 'All',       ingredients.length,                                '#374151'],
+                    ['all', 'All',       ingredients.length,                                '#1B2E1B'],
                     ['low', 'Low Stock', lowStock.length,                                    '#d97706'],
                     ['out', 'Out',       ingredients.filter(i => i.on_hand <= 0).length,    '#dc2626'],
                   ] as const).map(([f, label, cnt, col]) => (
@@ -591,64 +592,62 @@ export default function InventoryScreen() {
                       )}
                     </TouchableOpacity>
                   ))}
-                </ScrollView>
+                </View>
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={!twoCol}>
-                <View style={{ minWidth: twoCol ? undefined : 480 }}>
-                  {/* Table header */}
-                  <View style={[s.tRow, s.tHead]}>
-                    <Text style={[s.tCell, s.cName]}>Ingredient</Text>
-                    <Text style={[s.tCell, s.cUnit]}>Unit</Text>
-                    <Text style={[s.tCell, s.cOnHand]}>On Hand</Text>
-                    <Text style={[s.tCell, s.cStatus]}>Status</Text>
-                    <Text style={[s.tCell, s.cAct]}>Actions</Text>
-                  </View>
+              <View style={s.tableWrap}>
+                {/* Table header */}
+                <View style={[s.tRow, s.tHead]}>
+                  <Text style={[s.tCell, s.cName]}>Ingredient</Text>
+                  <Text style={[s.tCell, s.cUnit]}>Unit</Text>
+                  <Text style={[s.tCell, s.cOnHand]}>On Hand</Text>
+                  <Text style={[s.tCell, s.cStatus]}>Status</Text>
+                  <Text style={[s.tCell, s.cAct, { textAlign: 'right' }]}>Actions</Text>
+                </View>
 
-                  {displayed.length === 0 ? (
-                    <View style={s.emptyWrap}>
-                      <Ionicons name="cube-outline" size={36} color={c.textMuted} />
-                      <Text style={s.emptyTxt}>{search ? 'No ingredients matched' : 'No inventory items'}</Text>
-                    </View>
-                  ) : displayed.map((ing, idx) => {
-                    const st = stockStatus(ing);
-                    const pct = ing.low_stock_threshold > 0
-                      ? Math.min(100, (ing.on_hand / (ing.low_stock_threshold * 3)) * 100)
-                      : Math.min(100, (ing.on_hand / 100) * 100);
-                    return (
-                      <View key={ing.id} style={[s.tRow, idx % 2 === 1 && s.tRowAlt]}>
-                        <View style={s.cName}>
-                          <Text style={s.ingName}>{ing.name}</Text>
-                          {ing.sku ? <Text style={s.ingSku}>{ing.sku}</Text> : null}
-                          <View style={s.progressBg}>
-                            <View style={[s.progressFill, { width: `${pct}%` as any, backgroundColor: st.color }]} />
-                          </View>
-                        </View>
-                        <Text style={[s.tCell, s.cUnit]}>{ing.unit ?? '—'}</Text>
-                        <Text style={[s.tCell, s.cOnHand, { fontWeight: '800', color: ing.on_hand <= 0 ? '#dc2626' : c.heading, fontSize: 15 }]}>
-                          {ing.on_hand.toFixed(3)}
-                        </Text>
-                        <View style={s.cStatus}>
-                          <View style={[s.statusBadge, { backgroundColor: st.bg }]}>
-                            <Text style={[s.statusTxt, { color: st.color }]}>{st.label}</Text>
-                          </View>
-                          {ing.low_stock_threshold > 0 && (
-                            <Text style={s.minTxt}>Min: {ing.low_stock_threshold}</Text>
-                          )}
-                        </View>
-                        <View style={[s.cAct, { flexDirection: 'row', gap: 5 }]}>
-                          <TouchableOpacity style={s.actBtn} onPress={() => openStockIn(ing)}>
-                            <Ionicons name="arrow-down-circle-outline" size={14} color={BRAND} />
-                          </TouchableOpacity>
-                          <TouchableOpacity style={[s.actBtn, { borderColor: '#fecaca' }]} onPress={() => openWaste(ing)}>
-                            <Ionicons name="trash-outline" size={14} color="#dc2626" />
-                          </TouchableOpacity>
+                {displayed.length === 0 ? (
+                  <View style={s.emptyWrap}>
+                    <Ionicons name="cube-outline" size={36} color={c.textMuted} />
+                    <Text style={s.emptyTxt}>{search ? 'No ingredients matched' : 'No inventory items'}</Text>
+                  </View>
+                ) : displayed.map((ing, idx) => {
+                  const st = stockStatus(ing);
+                  const pct = ing.low_stock_threshold > 0
+                    ? Math.min(100, (ing.on_hand / (ing.low_stock_threshold * 3)) * 100)
+                    : Math.min(100, (ing.on_hand / 100) * 100);
+                  return (
+                    <View key={ing.id} style={[s.tRow, idx % 2 === 1 && s.tRowAlt]}>
+                      <View style={s.cName}>
+                        <Text style={s.ingName} numberOfLines={1}>{ing.name}</Text>
+                        {ing.sku ? <Text style={s.ingSku}>{ing.sku}</Text> : null}
+                        <View style={s.progressBg}>
+                          <View style={[s.progressFill, { width: `${pct}%` as any, backgroundColor: st.color }]} />
                         </View>
                       </View>
-                    );
-                  })}
-                </View>
-              </ScrollView>
+                      <Text style={[s.tCell, s.cUnit]}>{ing.unit ?? '—'}</Text>
+                      <Text style={[s.tCell, s.cOnHand, { fontWeight: '800', color: ing.on_hand <= 0 ? '#dc2626' : c.heading, fontSize: 15 }]}>
+                        {ing.on_hand.toFixed(3)}
+                      </Text>
+                      <View style={s.cStatus}>
+                        <View style={[s.statusBadge, { backgroundColor: st.bg }]}>
+                          <Text style={[s.statusTxt, { color: st.color }]}>{st.label}</Text>
+                        </View>
+                        {ing.low_stock_threshold > 0 && (
+                          <Text style={s.minTxt}>Min: {ing.low_stock_threshold}</Text>
+                        )}
+                      </View>
+                      <View style={[s.cAct, { flexDirection: 'row', gap: 6 }]}>
+                        <TouchableOpacity style={s.actBtn} onPress={() => openStockIn(ing)}>
+                          <Ionicons name="arrow-down-circle-outline" size={15} color={BRAND} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[s.actBtn, { borderColor: '#fecaca' }]} onPress={() => openWaste(ing)}>
+                          <Ionicons name="trash-outline" size={15} color="#dc2626" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           ) : (
             /* ── Recent movements ──────────────────────────── */

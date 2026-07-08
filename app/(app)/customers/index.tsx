@@ -135,24 +135,25 @@ function mkGv(c: ThemeColors) {
 
 function mkTbl(c: ThemeColors) {
   return StyleSheet.create({
-    tableWrap:  { backgroundColor: c.surface },
-    headerRow:  { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceAlt, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: c.border },
+    tableWrap:  { backgroundColor: c.surface, width: '100%', alignSelf: 'stretch' },
+    headerRow:  { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceAlt, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border, width: '100%' },
     th:         { fontSize: 11, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.3, paddingHorizontal: 12 },
-    row:        { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: c.border },
+    row:        { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: c.border, width: '100%' },
     rowAlt:     { backgroundColor: c.surfaceAlt },
-    cell:       { fontSize: 13, color: c.text, paddingHorizontal: 12, paddingVertical: 12 },
-    cId:        { width: 72 },
-    cName:      { flex: 1.8, paddingHorizontal: 12 },
-    cPhone:     { flex: 1.1 },
-    cOrders:    { width: 76, flexDirection: 'row' },
-    cLast:      { flex: 1.2 },
-    cBal:       { flex: 1.1, paddingHorizontal: 12 },
-    cStatus:    { flex: 0.9, paddingHorizontal: 12 },
-    cAct:       { width: 116, paddingHorizontal: 10, paddingVertical: 10 },
+    cell:       { fontSize: 13, color: c.text, paddingHorizontal: 12, paddingVertical: 13 },
+    // Flex columns so the table fills the full content width
+    cId:        { flex: 0.55, minWidth: 56, paddingHorizontal: 12 },
+    cName:      { flex: 2.2, minWidth: 0, paddingHorizontal: 12 },
+    cPhone:     { flex: 1.2, minWidth: 100, paddingHorizontal: 10 },
+    cOrders:    { flex: 0.8, minWidth: 72, paddingHorizontal: 8, justifyContent: 'center' },
+    cLast:      { flex: 1.3, minWidth: 100, paddingHorizontal: 10 },
+    cBal:       { flex: 1.2, minWidth: 100, paddingHorizontal: 12 },
+    cStatus:    { flex: 0.9, minWidth: 88, paddingHorizontal: 10 },
+    cAct:       { flex: 1.1, minWidth: 112, paddingHorizontal: 10, paddingVertical: 10, alignItems: 'flex-end' },
     custName:   { fontSize: 13.5, fontWeight: '600', color: c.heading },
     custEmail:  { fontSize: 11, color: c.textMuted, marginTop: 1 },
     dash:       { fontSize: 12, color: c.border },
-    actBtn:     { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+    actBtn:     { width: 32, height: 32, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
     actPay:     { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
     actEdit:    { backgroundColor: '#fef9c3', borderColor: '#fef3c7' },
     actDel:     { backgroundColor: '#fff1f2', borderColor: '#fecaca' },
@@ -790,9 +791,34 @@ export default function CustomersScreen() {
         </View>
       ) : viewMode === 'list' ? (
         <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, width: '100%' }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={c.brand} />}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={isMobile}>
-            <View style={[tbl.tableWrap, isMobile && { minWidth: 680 }]}>
+          {isMobile ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator>
+              <View style={[tbl.tableWrap, { minWidth: 720 }]}>
+                <View style={tbl.headerRow}>
+                  <Text style={[tbl.th, tbl.cId]}>#</Text>
+                  <Text style={[tbl.th, tbl.cName]}>Customer</Text>
+                  <Text style={[tbl.th, tbl.cPhone]}>Phone</Text>
+                  <Text style={[tbl.th, tbl.cOrders, { textAlign: 'center' }]}>Orders</Text>
+                  <Text style={[tbl.th, tbl.cLast]}>Last Order</Text>
+                  <Text style={[tbl.th, tbl.cBal]}>Balance</Text>
+                  <Text style={[tbl.th, tbl.cStatus]}>Status</Text>
+                  <Text style={[tbl.th, tbl.cAct, { textAlign: 'right' }]}>Actions</Text>
+                </View>
+                {filtered.length === 0 ? (
+                  <View style={s.emptyWrap}>
+                    <Ionicons name="people-outline" size={40} color={c.textMuted} />
+                    <Text style={s.emptyTitle}>{search ? 'No customers matched' : 'No customers yet'}</Text>
+                  </View>
+                ) : (
+                  filtered.map((cust, idx) => <TableRow key={cust.id ?? `od_${idx}`} cust={cust} idx={idx} />)
+                )}
+              </View>
+            </ScrollView>
+          ) : (
+            <View style={tbl.tableWrap}>
               <View style={tbl.headerRow}>
                 <Text style={[tbl.th, tbl.cId]}>#</Text>
                 <Text style={[tbl.th, tbl.cName]}>Customer</Text>
@@ -801,7 +827,7 @@ export default function CustomersScreen() {
                 <Text style={[tbl.th, tbl.cLast]}>Last Order</Text>
                 <Text style={[tbl.th, tbl.cBal]}>Balance</Text>
                 <Text style={[tbl.th, tbl.cStatus]}>Status</Text>
-                <Text style={[tbl.th, tbl.cAct]}>Actions</Text>
+                <Text style={[tbl.th, tbl.cAct, { textAlign: 'right' }]}>Actions</Text>
               </View>
               {filtered.length === 0 ? (
                 <View style={s.emptyWrap}>
@@ -812,7 +838,7 @@ export default function CustomersScreen() {
                 filtered.map((cust, idx) => <TableRow key={cust.id ?? `od_${idx}`} cust={cust} idx={idx} />)
               )}
             </View>
-          </ScrollView>
+          )}
         </ScrollView>
       ) : (
         <ScrollView
