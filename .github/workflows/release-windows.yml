@@ -1,7 +1,8 @@
 name: Release Windows App
 
 # Publishes installer + portable to GitHub Releases for electron-updater.
-# Trigger: push a version tag that matches package.json (e.g. v1.0.1 when version is 1.0.1).
+# Trigger: push a version tag that matches package.json (e.g. v1.0.2 when version is 1.0.2).
+# Re-run: Actions → Release Windows App → Run workflow → tag v1.0.2 (if a tag build failed).
 
 on:
   push:
@@ -10,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (must match package.json version, e.g. v1.0.0)'
+        description: 'Release tag (must match package.json version, e.g. v1.0.2)'
         required: true
-        default: 'v1.0.0'
+        default: 'v1.0.2'
 
 permissions:
   contents: write
@@ -31,6 +32,17 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+
+      - name: Cache Electron download
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\.cache\electron
+            ~\.cache\electron-builder
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json', 'electron/package.json') }}
+          restore-keys: |
+            electron-${{ runner.os }}-
 
       - name: Resolve release tag
         id: tag
@@ -75,8 +87,41 @@ jobs:
       - name: Make Windows icon
         run: npm run make:ico
 
-      - name: Build Windows installer + portable
-        run: npx electron-builder --win nsis portable --x64 --publish never
+      - name: Preflight Electron download (retry on 504)
+        shell: pwsh
+        run: |
+          $max = 5
+          for ($i = 1; $i -le $max; $i++) {
+            Write-Host "Downloading Electron binary (attempt $i/$max)..."
+            npx electron --version
+            if ($LASTEXITCODE -eq 0) { Write-Host "Electron ready."; exit 0 }
+            if ($i -lt $max) {
+              $wait = 20 * $i
+              Write-Host "Download failed (exit $LASTEXITCODE). Retrying in ${wait}s..."
+              Start-Sleep -Seconds $wait
+            }
+          }
+          Write-Error "Could not download Electron after $max attempts."
+          exit 1
+
+      - name: Build Windows installer + portable (retry on 504)
+        shell: pwsh
+        env:
+          ELECTRON_BUILDER_CACHE: ${{ runner.temp }}\electron-builder-cache
+        run: |
+          $max = 3
+          for ($i = 1; $i -le $max; $i++) {
+            Write-Host "electron-builder attempt $i/$max..."
+            npx electron-builder --win nsis portable --x64 --publish never
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($i -lt $max) {
+              $wait = 30 * $i
+              Write-Host "Build failed (exit $LASTEXITCODE). Retrying in ${wait}s..."
+              Start-Sleep -Seconds $wait
+            }
+          }
+          Write-Error "electron-builder failed after $max attempts."
+          exit $LASTEXITCODE
 
       - name: List output files
         shell: pwsh
