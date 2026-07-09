@@ -493,10 +493,10 @@ export default function AppLayout() {
           <Tabs screenOptions={tabScreenOptions}>
             <Tabs.Screen name="dashboard/index" options={{ headerShown: false }} />
             <Tabs.Screen name="pos/index" options={{ headerShown: false }} />
-            <Tabs.Screen name="kitchen/index"    options={{ title: 'Kitchen Display' }} />
+            <Tabs.Screen name="kitchen/index"    options={{ headerShown: false }} />
             <Tabs.Screen name="orders/index"     options={{ title: 'Orders' }} />
             <Tabs.Screen name="tables/index"     options={{ title: 'Tables' }} />
-            <Tabs.Screen name="customers/index"      options={{ title: 'Customers' }} />
+            <Tabs.Screen name="customers/index"      options={{ headerShown: false }} />
             <Tabs.Screen name="wallet/index"        options={{ title: 'Wallet' }} />
             <Tabs.Screen name="reservations/index"  options={{ headerShown: false }} />
             <Tabs.Screen name="menu/index"          options={{ headerShown: false }} />
@@ -508,7 +508,7 @@ export default function AppLayout() {
             <Tabs.Screen name="coupons/index"       options={{ headerShown: false }} />
             <Tabs.Screen name="expenses/index"      options={{ headerShown: false }} />
             <Tabs.Screen name="expense-report/index" options={{ headerShown: false }} />
-            <Tabs.Screen name="tickets/index"       options={{ title: 'Support Tickets' }} />
+            <Tabs.Screen name="tickets/index"       options={{ headerShown: false }} />
             <Tabs.Screen name="reports/index"       options={{ title: 'Reports' }} />
             <Tabs.Screen name="staff/index"         options={{ title: 'Staff' }} />
             <Tabs.Screen name="notifications/index" options={{ title: 'Notifications' }} />

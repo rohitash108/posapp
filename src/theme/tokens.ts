@@ -122,9 +122,9 @@ export const themes: Record<ThemeMode, ThemeColors> = {
     placeholder: '#CBD5E1',
     dashboard: {
       ...dashboardBase,
-      bg: '#F5F0E8',
+      bg: '#f9f9fa',
       white: '#FFFFFF',
-      border: '#E8E3DA',
+      border: '#E2E8F0',
       text: '#0F172A',
       muted: '#64748B',
       card: '#FFFFFF',
@@ -133,7 +133,7 @@ export const themes: Record<ThemeMode, ThemeColors> = {
     statusBar: 'dark',
   },
   dark: {
-    background: '#0C0C20',
+    background: '#101111',
     surface: '#1a1f26',
     surfaceAlt: '#101111',
     border: '#272828',
@@ -159,7 +159,7 @@ export const themes: Record<ThemeMode, ThemeColors> = {
     tabInactive: '#767A80',
     ...WEB_SEMANTIC,
     loginPanel: '#0F1F0F',
-    loginFormBg: '#0C0C20',
+    loginFormBg: '#101111',
     loginCard: '#1a1f26',
     loginBrandBg: '#0f1f0f',
     inputBg: '#232830',
@@ -168,7 +168,7 @@ export const themes: Record<ThemeMode, ThemeColors> = {
     placeholder: '#545658',
     dashboard: {
       ...dashboardBase,
-      bg: '#0C0C20',
+      bg: '#101111',
       white: '#1a1f26',
       border: '#272828',
       text: '#CDCED0',

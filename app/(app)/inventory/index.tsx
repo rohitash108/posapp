@@ -38,10 +38,6 @@ function timeAgo(iso?: string | null): string {
   return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-function daysUntil(dateStr: string): number {
-  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
-}
-
 function stockStatus(ing: Ingredient): { label: string; color: string; bg: string } {
   if (ing.on_hand <= 0)
     return { label: 'Out of Stock', color: '#dc2626', bg: '#fef2f2' };
@@ -57,12 +53,19 @@ function mkS(c: ThemeColors) {
     shell:    { flex: 1, backgroundColor: c.background },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-    topbar:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, gap: 10 },
+    topbar:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
     pageTitle:   { fontSize: 18, fontWeight: '800', color: c.heading },
-    pageSub:     { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    pageSub:     { fontSize: 11, color: c.textMuted, marginTop: 1 },
     topActions:  { flexDirection: 'row', gap: 8 },
-    actionBtn:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, borderWidth: 1, borderColor: 'transparent' },
+    actionBtn:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 10 },
     actionBtnTxt:{ fontSize: 13, fontWeight: '700' },
+
+    statsBar:    { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border },
+    statItem:    { flex: 1, alignItems: 'center', gap: 1 },
+    statIcon:    { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginBottom: 1 },
+    statVal:     { fontSize: 14, fontWeight: '800' },
+    statLbl:     { fontSize: 9, color: c.textMuted, textAlign: 'center' },
+    statDivider: { width: 1, height: 28, backgroundColor: c.border },
 
     errBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fef2f2', borderBottomWidth: 1, borderBottomColor: '#fecaca', paddingHorizontal: 14, paddingVertical: 9 },
     errText:   { flex: 1, fontSize: 12.5, color: '#dc2626' },
@@ -390,8 +393,6 @@ export default function InventoryScreen() {
   const [opType, setOpType]     = useState<OpType>('stock-in');
   const [tab, setTab]           = useState<'stock' | 'movements'>('stock');
 
-  const twoCol = width >= 860;
-
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     setError('');
@@ -436,24 +437,49 @@ export default function InventoryScreen() {
     return matchFilter && matchSearch;
   });
 
+  const outCount = ingredients.filter(i => i.on_hand <= 0).length;
+
+  const statItems = [
+    { icon: 'cube-outline',           val: ingredients.length, lbl: 'Total',     color: '#2563eb' },
+    { icon: 'warning-outline',        val: lowStock.length,      lbl: 'Low Stock', color: '#d97706' },
+    { icon: 'close-circle-outline',   val: outCount,             lbl: 'Out',       color: '#dc2626' },
+    { icon: 'time-outline',           val: expiring.length,      lbl: 'Expiring',  color: '#ef4444' },
+  ] as const;
+
   return (
     <View style={s.shell}>
-      {/* ── Top bar ────────────────────────────────────────── */}
+      {/* ── Page header ────────────────────────────────────── */}
       <View style={[s.topbar, { paddingTop: insets.top + 12 }]}>
         <View style={{ flex: 1 }}>
           <Text style={s.pageTitle}>Inventory</Text>
           <Text style={s.pageSub}>{ingredients.length} ingredients tracked</Text>
         </View>
         <View style={s.topActions}>
-          <TouchableOpacity style={[s.actionBtn, { backgroundColor: c.surface, borderColor: c.border }]} onPress={() => openWaste()}>
+          <TouchableOpacity style={[s.actionBtn, { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }]} onPress={() => openWaste()}>
             <Ionicons name="trash-outline" size={14} color="#dc2626" />
             <Text style={[s.actionBtnTxt, { color: '#dc2626' }]}>Waste</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[s.actionBtn, { backgroundColor: BRAND }]} onPress={() => openStockIn()}>
+          <TouchableOpacity style={[s.actionBtn, { backgroundColor: c.sidebar }]} onPress={() => openStockIn()}>
             <Ionicons name="arrow-down-circle-outline" size={14} color="#fff" />
             <Text style={[s.actionBtnTxt, { color: '#fff' }]}>Stock In</Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* ── Stats bar (Kitchen / Coupons style) ───────────── */}
+      <View style={s.statsBar}>
+        {statItems.map((st, i) => (
+          <React.Fragment key={st.lbl}>
+            {i > 0 && <View style={s.statDivider} />}
+            <View style={s.statItem}>
+              <View style={[s.statIcon, { backgroundColor: st.color + '18' }]}>
+                <Ionicons name={st.icon} size={14} color={st.color} />
+              </View>
+              <Text style={[s.statVal, { color: st.color }]}>{st.val}</Text>
+              <Text style={s.statLbl}>{st.lbl}</Text>
+            </View>
+          </React.Fragment>
+        ))}
       </View>
 
       {/* ── Error banner ───────────────────────────────────── */}
@@ -478,59 +504,6 @@ export default function InventoryScreen() {
           contentContainerStyle={{ padding: 14, gap: 14, width: '100%', flexGrow: 1 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(true); }} tintColor={BRAND} />}
         >
-          {/* ── Alert cards: Low stock | Expiring ────────────── */}
-          <View style={[s.alertRow, twoCol && { flexDirection: 'row', gap: 14 }]}>
-            {/* Low stock card */}
-            <View style={[s.alertCard, twoCol && { flex: 1 }]}>
-              <View style={s.alertCardHdr}>
-                <Ionicons name="warning-outline" size={15} color="#d97706" />
-                <Text style={s.alertCardTitle}>Low Stock</Text>
-                <View style={s.alertBadge}>
-                  <Text style={[s.alertBadgeTxt, { color: '#d97706' }]}>{lowStock.length}</Text>
-                </View>
-              </View>
-              {lowStock.length === 0 ? (
-                <Text style={s.alertEmpty}>No low-stock alerts (or thresholds not set)</Text>
-              ) : lowStock.map(i => (
-                <View key={i.id} style={s.alertRow2}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.alertItemName}>{i.name}</Text>
-                    <Text style={s.alertItemUnit}>{i.unit}</Text>
-                  </View>
-                  <View style={s.warnBadge}>
-                    <Text style={s.warnBadgeTxt}>
-                      {i.on_hand.toFixed(2)} / {i.low_stock_threshold.toFixed(2)}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-
-            {/* Expiring card */}
-            <View style={[s.alertCard, twoCol && { flex: 1 }]}>
-              <View style={s.alertCardHdr}>
-                <Ionicons name="time-outline" size={15} color="#dc2626" />
-                <Text style={s.alertCardTitle}>Expiring within 7 days</Text>
-                <View style={s.alertBadge}>
-                  <Text style={[s.alertBadgeTxt, { color: '#dc2626' }]}>{expiring.length}</Text>
-                </View>
-              </View>
-              {expiring.length === 0 ? (
-                <Text style={s.alertEmpty}>No batches expiring soon</Text>
-              ) : expiring.map(b => (
-                <View key={b.id} style={s.alertRow2}>
-                  <Text style={s.alertItemName}>{b.ingredient_name}</Text>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={[s.alertItemUnit, { color: daysUntil(b.expiry_date) <= 2 ? '#dc2626' : '#d97706', fontWeight: '700' }]}>
-                      {new Date(b.expiry_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </Text>
-                    <Text style={s.alertItemUnit}>{b.quantity_remaining.toFixed(3)} {b.unit}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-
           {/* ── Tab: Stock | Movements ────────────────────────── */}
           <View style={s.tabBar}>
             <TouchableOpacity

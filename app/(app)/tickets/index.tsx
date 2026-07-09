@@ -68,19 +68,20 @@ function fmtAgo(s?: string) {
 
 function mkSc(c: ThemeColors) {
   return StyleSheet.create({
-    // ── Desktop header ─────────────────────────────────────────────────
-    header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-    headerTitle: { fontSize: 20, fontWeight: '800', color: c.heading },
-    headerSub:   { fontSize: 12, color: c.brand, marginTop: 2, fontWeight: '600' },
-    newBtn:      { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.sidebar, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
+    // ── Page header (Inventory style) ─────────────────────────────────
+    header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    headerTitle: { fontSize: 18, fontWeight: '800', color: c.heading },
+    headerSub:   { fontSize: 11, color: c.textMuted, marginTop: 1 },
+    newBtn:      { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.sidebar, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 8 },
     newBtnTxt:   { color: '#fff', fontWeight: '700', fontSize: 13 },
 
-    // ── Desktop stats row ─────────────────────────────────────────────
-    statsRow:    { flexDirection: 'row', backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-    statCard:    { flex: 1, alignItems: 'center', paddingVertical: 14, gap: 4 },
-    statIconWrap:{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-    statLbl:     { fontSize: 10, color: c.textMuted, fontWeight: '600' },
-    statVal:     { fontSize: 18, fontWeight: '800' },
+    // ── Stats bar (Inventory style) ───────────────────────────────────
+    statsBar:    { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border },
+    statItem:    { flex: 1, alignItems: 'center', gap: 1 },
+    statIcon:    { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginBottom: 1 },
+    statVal:     { fontSize: 14, fontWeight: '800' },
+    statLbl:     { fontSize: 9, color: c.textMuted, textAlign: 'center' },
+    statDivider: { width: 1, height: 28, backgroundColor: c.border },
 
     // ── Desktop filter bar ────────────────────────────────────────────
     filterBar:   { flexDirection: 'row', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap', backgroundColor: c.surface, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
@@ -94,20 +95,15 @@ function mkSc(c: ThemeColors) {
     modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
     modalPanel:    { width: 720, maxWidth: '95%', maxHeight: '90%', borderRadius: 16, overflow: 'hidden', backgroundColor: c.surface, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
 
-    // ── Mobile header ─────────────────────────────────────────────────
-    mHeader:      { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, paddingHorizontal: 18, paddingBottom: 14 },
+    // ── Mobile header (Inventory style) ─────────────────────────────
+    mHeader:      { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
     mHeaderRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-    mHeaderTitle: { fontSize: 24, fontWeight: '900', color: c.heading, letterSpacing: -0.5 },
-    mHeaderSub:   { fontSize: 12, color: c.brand, marginTop: 3, fontWeight: '600', lineHeight: 16 },
-    mNewBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.sidebar, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, shadowColor: c.sidebar, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
-    mNewBtnTxt:   { color: '#fff', fontWeight: '800', fontSize: 13 },
+    mHeaderTitle: { fontSize: 18, fontWeight: '800', color: c.heading },
+    mHeaderSub:   { fontSize: 11, color: c.textMuted, marginTop: 1 },
+    mNewBtn:      { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.sidebar, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 8 },
+    mNewBtnTxt:   { color: '#fff', fontWeight: '700', fontSize: 13 },
 
-    // ── Mobile stats ──────────────────────────────────────────────────
-    mStatsScroll: { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-    mStatCard:    { alignItems: 'center', borderRadius: 14, padding: 12, minWidth: 76, gap: 5 },
-    mStatIconWrap:{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-    mStatVal:     { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
-    mStatLbl:     { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
+    // ── Mobile stats (uses statsBar above) ──────────────────────────
 
     // ── Mobile filter section ─────────────────────────────────────────
     mFilterToggle:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
@@ -1050,33 +1046,33 @@ export default function TicketsScreen() {
       <View style={{ flex: 1, backgroundColor: c.background }}>
 
         {/* ── Mobile Header ── */}
-        <View style={[sc.mHeader, { paddingTop: insets.top + 14 }]}>
+        <View style={[sc.mHeader, { paddingTop: insets.top + 12 }]}>
           <View style={sc.mHeaderRow}>
             <View style={{ flex: 1 }}>
               <Text style={sc.mHeaderTitle}>Support Tickets</Text>
-              <Text style={sc.mHeaderSub}>Raise issues to the platform admin team</Text>
+              <Text style={sc.mHeaderSub}>{tickets.length} tickets</Text>
             </View>
             <Pressable style={({ pressed }) => [sc.mNewBtn, pressed && { opacity: 0.85 }]} onPress={() => setShowCreate(true)}>
-              <Ionicons name="add" size={18} color="#fff" />
-              <Text style={sc.mNewBtnTxt}>New</Text>
+              <Ionicons name="add-circle-outline" size={15} color="#fff" />
+              <Text style={sc.mNewBtnTxt}>New Ticket</Text>
             </Pressable>
           </View>
         </View>
 
-        {/* ── Stats — horizontal scroll ── */}
-        <View style={sc.mStatsScroll}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 10, paddingHorizontal: 14, paddingVertical: 12 }}>
-            {STAT_ITEMS.map(s => (
-              <View key={s.key} style={[sc.mStatCard, { backgroundColor: s.bg, borderWidth: 1, borderColor: s.color + '20' }]}>
-                <View style={[sc.mStatIconWrap, { backgroundColor: '#fff' }]}>
-                  <Ionicons name={s.icon} size={20} color={s.color} />
+        {/* ── Stats bar ── */}
+        <View style={sc.statsBar}>
+          {STAT_ITEMS.map((s, i) => (
+            <React.Fragment key={s.key}>
+              {i > 0 && <View style={sc.statDivider} />}
+              <View style={sc.statItem}>
+                <View style={[sc.statIcon, { backgroundColor: s.color + '18' }]}>
+                  <Ionicons name={s.icon} size={14} color={s.color} />
                 </View>
-                <Text style={[sc.mStatVal, { color: s.color }]}>{countFor(s.key)}</Text>
-                <Text style={[sc.mStatLbl, { color: s.color }]}>{s.label}</Text>
+                <Text style={[sc.statVal, { color: s.color }]}>{countFor(s.key)}</Text>
+                <Text style={sc.statLbl}>{s.label}</Text>
               </View>
-            ))}
-          </ScrollView>
+            </React.Fragment>
+          ))}
         </View>
 
         {/* ── Filter toggle row ── */}
@@ -1199,10 +1195,10 @@ export default function TicketsScreen() {
   // ─── Desktop / Web Layout (unchanged) ──────────────────────────────────────
   return (
     <Pressable style={{ flex: 1, backgroundColor: c.background }} onPress={() => {}}>
-      <View style={sc.header}>
-        <View>
+      <View style={[sc.header, { paddingTop: insets.top + 12 }]}>
+        <View style={{ flex: 1 }}>
           <Text style={sc.headerTitle}>Support Tickets</Text>
-          <Text style={sc.headerSub}>Raise issues to the platform admin team and track their status.</Text>
+          <Text style={sc.headerSub}>{tickets.length} tickets</Text>
         </View>
         <Pressable style={({ pressed }) => [sc.newBtn, pressed && { opacity: 0.85 }]} onPress={() => setShowCreate(true)}>
           <Ionicons name="add-circle-outline" size={15} color="#fff" />
@@ -1210,15 +1206,18 @@ export default function TicketsScreen() {
         </Pressable>
       </View>
 
-      <View style={sc.statsRow}>
-        {STAT_ITEMS.map(s => (
-          <View key={s.key} style={[sc.statCard, s.key !== 'all' && { borderLeftWidth: 1, borderLeftColor: c.border }]}>
-            <View style={[sc.statIconWrap, { backgroundColor: s.bg }]}>
-              <Ionicons name={s.icon} size={18} color={s.color} />
+      <View style={sc.statsBar}>
+        {STAT_ITEMS.map((s, i) => (
+          <React.Fragment key={s.key}>
+            {i > 0 && <View style={sc.statDivider} />}
+            <View style={sc.statItem}>
+              <View style={[sc.statIcon, { backgroundColor: s.color + '18' }]}>
+                <Ionicons name={s.icon} size={14} color={s.color} />
+              </View>
+              <Text style={[sc.statVal, { color: s.color }]}>{countFor(s.key)}</Text>
+              <Text style={sc.statLbl}>{s.label}</Text>
             </View>
-            <Text style={sc.statLbl}>{s.label}</Text>
-            <Text style={[sc.statVal, { color: s.color }]}>{countFor(s.key)}</Text>
-          </View>
+          </React.Fragment>
         ))}
       </View>
 

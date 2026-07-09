@@ -19,6 +19,11 @@ import { useTheme } from '@/store/themeStore';
 import type { ThemeColors } from '@/theme/tokens';
 import type { Coupon } from '@/types';
 
+// ── Layout ────────────────────────────────────────────────────────────────────
+const SIDEBAR_W = 220;
+const GRID_PAD  = 16;
+const GRID_GAP  = 10;
+
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const FOREST  = '#1A2B1A';
 const GOLD    = '#C9A52A';
@@ -112,11 +117,11 @@ function mkS(c: ThemeColors) {
 
 function mkCc(c: ThemeColors) {
   return StyleSheet.create({
-    card:        { backgroundColor: c.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: c.border, borderLeftWidth: 4, borderLeftColor: c.brand, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+    card:        { backgroundColor: c.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: c.border, borderLeftWidth: 4, borderLeftColor: c.brand, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2, width: '100%' },
     cardFaded:   { opacity: 0.75 },
     top:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
     codeTag:     { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fefce8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#fef08a' },
-    codeText:    { fontSize: 15, fontWeight: '900', color: c.heading, letterSpacing: 1.5 },
+    codeText:    { fontSize: 14, fontWeight: '900', color: c.heading, letterSpacing: 1.2 },
     statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1 },
     statusDot:   { width: 5, height: 5, borderRadius: 2.5 },
     statusTxt:   { fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
@@ -626,6 +631,9 @@ export default function CouponsScreen() {
   const { width } = useWindowDimensions();
   const insets    = useSafeAreaInsets();
   const isDesktop = width >= 900;
+  const hasSidebar = width >= 640;
+  const contentW  = hasSidebar ? width - SIDEBAR_W : width;
+  const numCols   = contentW >= 1200 ? 3 : contentW >= 720 ? 2 : 1;
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -793,20 +801,31 @@ export default function CouponsScreen() {
         <FlatList
           data={filtered}
           keyExtractor={i => String(i.id)}
-          contentContainerStyle={{ padding: 10, paddingBottom: 40, gap: 8, flexGrow: 1 }}
+          key={`coupon-grid-${numCols}`}
+          numColumns={numCols}
+          columnWrapperStyle={numCols > 1 ? { gap: GRID_GAP } : undefined}
+          contentContainerStyle={{
+            paddingHorizontal: GRID_PAD,
+            paddingTop: 10,
+            paddingBottom: 40,
+            gap: numCols === 1 ? GRID_GAP : undefined,
+            flexGrow: 1,
+          }}
           refreshControl={
             <RefreshControl refreshing={refreshing}
               onRefresh={() => { setRefreshing(true); load(true); }}
               tintColor={c.brand} />
           }
           renderItem={({ item: coup }) => (
-            <CouponCard
-              coupon={coup}
-              toggling={toggling.has(coup.id)}
-              onEdit={() => openEdit(coup)}
-              onDelete={() => handleDelete(coup)}
-              onToggle={() => handleToggle(coup)}
-            />
+            <View style={numCols > 1 ? { flex: 1, marginBottom: GRID_GAP } : undefined}>
+              <CouponCard
+                coupon={coup}
+                toggling={toggling.has(coup.id)}
+                onEdit={() => openEdit(coup)}
+                onDelete={() => handleDelete(coup)}
+                onToggle={() => handleToggle(coup)}
+              />
+            </View>
           )}
           ListEmptyComponent={
             <View style={s.emptyWrap}>

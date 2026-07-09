@@ -22,7 +22,7 @@ const TYPE_FILTERS = ['all', 'Dine in', 'Takeaway', 'Delivery'] as const;
 
 function mkS(c: ThemeColors) {
   return StyleSheet.create({
-    shell:        { flex: 1, backgroundColor: c.background },
+    shell:        { flex: 1, backgroundColor: c.background, overflow: 'hidden' },
     header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
     title:        { fontSize: 22, fontWeight: '800', color: c.heading, letterSpacing: -0.5 },
     iconBtn:      { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
@@ -31,19 +31,30 @@ function mkS(c: ThemeColors) {
     dropMenu:     { position: 'absolute', top: '100%', right: 0, marginTop: 4, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, minWidth: 140, zIndex: 50, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
     dropItem:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
     dropItemTxt:  { fontSize: 13, color: c.text },
-    tableCard:    { margin: 16, backgroundColor: c.surface, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: c.border, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-    toolbar:      { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
-    searchBox:    { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: c.border, minWidth: 140 },
+    tableSection: { width: '100%', maxWidth: '100%', alignSelf: 'stretch', backgroundColor: c.surface },
+    tableWrap:    { width: '100%', maxWidth: '100%', alignSelf: 'stretch' },
+    tableInner:   { minWidth: 640 },
+    toolbar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    toolbarTools: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+    searchBox:    { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: c.border, width: 220, maxWidth: 220, flexGrow: 0, flexShrink: 0 },
+    searchBoxMobile: { flex: 1, width: '100%', maxWidth: '100%' },
     searchInput:  { flex: 1, fontSize: 13, color: c.heading },
     toolBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
     toolBtnActive:{ borderColor: c.sidebar, backgroundColor: c.surfaceAlt },
     toolBtnTxt:   { fontSize: 12.5, fontWeight: '600', color: c.text },
     sortBtn:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
-    colHead:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 11, backgroundColor: c.surfaceAlt, borderBottomWidth: 1, borderBottomColor: c.border },
-    colHd:        { fontSize: 11.5, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
-    row:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: c.border },
+    colHead:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: c.surfaceAlt, borderBottomWidth: 1, borderBottomColor: c.border, width: '100%' },
+    colHd:        { fontSize: 11, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.2 },
+    row:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border, width: '100%' },
+    cTxId:        { flex: 1.15, minWidth: 0, paddingRight: 6 },
+    cOrder:       { flex: 0.65, minWidth: 0, paddingRight: 6 },
+    cToken:       { flex: 0.75, minWidth: 0, paddingRight: 6 },
+    cCustomer:    { flex: 1.15, minWidth: 0, paddingRight: 6 },
+    cType:        { flex: 0.95, minWidth: 0, paddingRight: 6 },
+    cMenus:       { flex: 0.55, minWidth: 0, paddingRight: 6 },
+    cTotal:       { flex: 0.95, minWidth: 72, textAlign: 'right', paddingRight: 4 },
     rowAlt:       { backgroundColor: c.surfaceAlt },
-    cell:         { fontSize: 13.5, color: c.text, fontWeight: '500' },
+    cell:         { fontSize: 13, color: c.text, fontWeight: '500' },
     cellRef:      { fontWeight: '700', color: c.heading },
     cellMuted:    { color: c.textMuted },
     cellAmt:      { fontWeight: '800', color: c.heading, textAlign: 'right' },
@@ -51,17 +62,13 @@ function mkS(c: ThemeColors) {
     cardRef:      { fontSize: 14, fontWeight: '700', color: c.heading },
     cardAmt:      { fontSize: 16, fontWeight: '800', color: c.sidebar, marginTop: 2 },
     cardMeta:     { fontSize: 12, color: c.textMuted, marginTop: 2 },
-    paginBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border },
-    entriesBox:   { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
+    paginBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface },
+    paginLeft:    { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1, minWidth: 0 },
+    entriesBox:   { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceAlt },
     entriesTxt:   { fontSize: 12.5, fontWeight: '600', color: c.text },
     entriesLabel: { fontSize: 12.5, color: c.textMuted },
-    pageBtn:      { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
-    pageBtnActive:{ backgroundColor: PRIMARY, borderColor: PRIMARY },
-    pageBtnDis:   { opacity: 0.4 },
-    pageBtnTxt:   { fontSize: 12.5, fontWeight: '600', color: c.text },
-    footer:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12 },
     footerTxt:    { fontSize: 12.5, color: '#f59e0b', fontWeight: '600' },
-    pageBtn2:     { width: 30, height: 30, borderRadius: 6, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center' },
+    pageBtn2:     { width: 30, height: 30, borderRadius: 6, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
     pageBtn2Active:{ backgroundColor: PRIMARY, borderColor: PRIMARY },
     pageBtn2Txt:  { fontSize: 12.5, fontWeight: '600', color: c.text },
     centerWrap:   { paddingVertical: 60, alignItems: 'center', gap: 12 },
@@ -180,16 +187,15 @@ export default function PaymentsScreen() {
         </View>
       </View>
 
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, maxWidth: '100%' }} showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing}
             onRefresh={() => { setRefreshing(true); load(true); }} tintColor={c.sidebar} />
         }>
 
-        <View style={s.tableCard}>
+        <View style={s.tableSection}>
           <View style={[s.toolbar, isMobile && { flexDirection: 'column', alignItems: 'stretch' }]}>
-            {/* Search — full width on mobile */}
-            <View style={s.searchBox}>
+            <View style={[s.searchBox, isMobile && s.searchBoxMobile]}>
               <TextInput
                 style={s.searchInput}
                 value={search}
@@ -203,8 +209,7 @@ export default function PaymentsScreen() {
                 : <Ionicons name="search-outline" size={15} color={c.textMuted} />
               }
             </View>
-            {/* Action buttons row */}
-            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'nowrap' as any }}>
+            <View style={[s.toolbarTools, isMobile && { width: '100%' }]}>
               <View style={{ position: 'relative', flex: isMobile ? 1 : undefined }}>
                 <Pressable style={[s.toolBtn, typeFilter !== 'all' && s.toolBtnActive, isMobile && { flex: 1 }]}
                   onPress={() => setFilterOpen(o => !o)}>
@@ -254,16 +259,51 @@ export default function PaymentsScreen() {
               );
             })
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={isMobile}>
-              <View style={isMobile ? { minWidth: 640 } : undefined}>
+            isMobile ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator>
+                <View style={[s.tableWrap, s.tableInner]}>
+                  <View style={s.colHead}>
+                    <Text style={[s.colHd, s.cTxId]}>Transaction ID</Text>
+                    <Text style={[s.colHd, s.cOrder]}>Order ID</Text>
+                    <Text style={[s.colHd, s.cToken]}>Token No</Text>
+                    <Text style={[s.colHd, s.cCustomer]}>Customer</Text>
+                    <Text style={[s.colHd, s.cType]}>Type</Text>
+                    <Text style={[s.colHd, s.cMenus]}>Menus</Text>
+                    <Text style={[s.colHd, s.cTotal]}>Grand Total</Text>
+                  </View>
+                  {pageData.map((pay, i) => {
+                    const ref      = pay.reference_number ?? `#${pay.id}`;
+                    const orderId  = pay.order_id ?? '—';
+                    const tokenNo  = (pay as any).token_no ?? '—';
+                    const customer = pay.customer_name ?? 'Walk-in';
+                    const type     = (pay as any).order_type ?? (pay as any).type ?? 'Dine in';
+                    const menus    = (pay as any).items_count ?? (pay as any).menus ?? '—';
+                    const total    = `₹${Number(pay.amount).toFixed(2)}`;
+                    const isEven   = i % 2 === 1;
+                    return (
+                      <View key={pay.id} style={[s.row, isEven && s.rowAlt]}>
+                        <Text style={[s.cell, s.cellRef, s.cTxId]} numberOfLines={1}>{ref}</Text>
+                        <Text style={[s.cell, s.cOrder]} numberOfLines={1}>{orderId}</Text>
+                        <Text style={[s.cell, s.cellMuted, s.cToken]} numberOfLines={1}>{tokenNo}</Text>
+                        <Text style={[s.cell, s.cCustomer]} numberOfLines={1}>{customer}</Text>
+                        <Text style={[s.cell, s.cType]} numberOfLines={1}>{type}</Text>
+                        <Text style={[s.cell, s.cMenus]} numberOfLines={1}>{menus}</Text>
+                        <Text style={[s.cell, s.cellAmt, s.cTotal]} numberOfLines={1}>{total}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            ) : (
+              <View style={s.tableWrap}>
                 <View style={s.colHead}>
-                  <Text style={[s.colHd, { flex: 1.4 }]}>Transaction ID</Text>
-                  <Text style={[s.colHd, { flex: 1   }]}>Order ID</Text>
-                  <Text style={[s.colHd, { flex: 1.1 }]}>Token No</Text>
-                  <Text style={[s.colHd, { flex: 1.5 }]}>Customer</Text>
-                  <Text style={[s.colHd, { flex: 1.2 }]}>Type</Text>
-                  <Text style={[s.colHd, { flex: 0.8 }]}>Menus</Text>
-                  <Text style={[s.colHd, { flex: 1.2, textAlign: 'right' }]}>Grand Total</Text>
+                  <Text style={[s.colHd, s.cTxId]} numberOfLines={1}>Transaction ID</Text>
+                  <Text style={[s.colHd, s.cOrder]} numberOfLines={1}>Order ID</Text>
+                  <Text style={[s.colHd, s.cToken]} numberOfLines={1}>Token No</Text>
+                  <Text style={[s.colHd, s.cCustomer]} numberOfLines={1}>Customer</Text>
+                  <Text style={[s.colHd, s.cType]} numberOfLines={1}>Type</Text>
+                  <Text style={[s.colHd, s.cMenus]} numberOfLines={1}>Menus</Text>
+                  <Text style={[s.colHd, s.cTotal]} numberOfLines={1}>Grand Total</Text>
                 </View>
                 {pageData.map((pay, i) => {
                   const ref      = pay.reference_number ?? `#${pay.id}`;
@@ -276,23 +316,23 @@ export default function PaymentsScreen() {
                   const isEven   = i % 2 === 1;
                   return (
                     <View key={pay.id} style={[s.row, isEven && s.rowAlt]}>
-                      <Text style={[s.cell, s.cellRef, { flex: 1.4 }]}>{ref}</Text>
-                      <Text style={[s.cell, { flex: 1   }]}>{orderId}</Text>
-                      <Text style={[s.cell, s.cellMuted, { flex: 1.1 }]}>{tokenNo}</Text>
-                      <Text style={[s.cell, { flex: 1.5 }]}>{customer}</Text>
-                      <Text style={[s.cell, { flex: 1.2 }]}>{type}</Text>
-                      <Text style={[s.cell, { flex: 0.8 }]}>{menus}</Text>
-                      <Text style={[s.cell, s.cellAmt, { flex: 1.2 }]}>{total}</Text>
+                      <Text style={[s.cell, s.cellRef, s.cTxId]} numberOfLines={1}>{ref}</Text>
+                      <Text style={[s.cell, s.cOrder]} numberOfLines={1}>{orderId}</Text>
+                      <Text style={[s.cell, s.cellMuted, s.cToken]} numberOfLines={1}>{tokenNo}</Text>
+                      <Text style={[s.cell, s.cCustomer]} numberOfLines={1}>{customer}</Text>
+                      <Text style={[s.cell, s.cType]} numberOfLines={1}>{type}</Text>
+                      <Text style={[s.cell, s.cMenus]} numberOfLines={1}>{menus}</Text>
+                      <Text style={[s.cell, s.cellAmt, s.cTotal]} numberOfLines={1}>{total}</Text>
                     </View>
                   );
                 })}
               </View>
-            </ScrollView>
+            )
           )}
 
           {!loading && filtered.length > 0 && (
             <View style={s.paginBar}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={s.paginLeft}>
                 <Pressable style={s.entriesBox} onPress={() => {
                   const idx = PAGE_SIZES.indexOf(pageSize as typeof PAGE_SIZES[number]);
                   const next = PAGE_SIZES[(idx + 1) % PAGE_SIZES.length];
@@ -302,50 +342,29 @@ export default function PaymentsScreen() {
                   <Text style={s.entriesTxt}>{pageSize}</Text>
                 </Pressable>
                 <Text style={s.entriesLabel}>Entries</Text>
+                <Text style={s.footerTxt}>
+                  Showing {fromRow} to {toRow} of {filtered.length} results
+                </Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: 4 }}>
-                <Pressable style={[s.pageBtn, safePage === 1 && s.pageBtnDis]}
-                  onPress={() => goPage(safePage - 1)} disabled={safePage === 1}>
-                  <Text style={[s.pageBtnTxt, safePage === 1 && { color: c.border }]}>‹ Prev</Text>
+              <View style={{ flexDirection: 'row', gap: 3, alignItems: 'center', flexShrink: 0 }}>
+                <Pressable style={s.pageBtn2} onPress={() => goPage(safePage - 1)} disabled={safePage === 1}>
+                  <Ionicons name="chevron-back" size={13} color={safePage === 1 ? c.border : c.text} />
                 </Pressable>
-                {[1, 2].filter(n => n <= totalPages).map(n => (
-                  <Pressable key={n} style={[s.pageBtn, safePage === n && s.pageBtnActive]}
+                {pageNums.map(n => (
+                  <Pressable key={n} style={[s.pageBtn2, safePage === n && s.pageBtn2Active]}
                     onPress={() => goPage(n)}>
-                    <Text style={[s.pageBtnTxt, safePage === n && { color: '#fff', fontWeight: '700' }]}>{n}</Text>
+                    <Text style={[s.pageBtn2Txt, safePage === n && { color: '#fff', fontWeight: '700' }]}>{n}</Text>
                   </Pressable>
                 ))}
-                <Pressable style={[s.pageBtn, safePage === totalPages && s.pageBtnDis]}
-                  onPress={() => goPage(safePage + 1)} disabled={safePage === totalPages}>
-                  <Text style={[s.pageBtnTxt, safePage === totalPages && { color: c.border }]}>Next ›</Text>
+                <Pressable style={s.pageBtn2} onPress={() => goPage(safePage + 1)} disabled={safePage === totalPages}>
+                  <Ionicons name="chevron-forward" size={13} color={safePage === totalPages ? c.border : c.text} />
                 </Pressable>
               </View>
             </View>
           )}
         </View>
 
-        {!loading && filtered.length > 0 && (
-          <View style={s.footer}>
-            <Text style={s.footerTxt}>
-              Showing {fromRow} to {toRow} of {filtered.length} results
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
-              <Pressable style={s.pageBtn2} onPress={() => goPage(1)} disabled={safePage === 1}>
-                <Ionicons name="chevron-back" size={13} color={safePage === 1 ? c.border : c.text} />
-              </Pressable>
-              {pageNums.map(n => (
-                <Pressable key={n} style={[s.pageBtn2, safePage === n && s.pageBtn2Active]}
-                  onPress={() => goPage(n)}>
-                  <Text style={[s.pageBtn2Txt, safePage === n && { color: '#fff', fontWeight: '700' }]}>{n}</Text>
-                </Pressable>
-              ))}
-              <Pressable style={s.pageBtn2} onPress={() => goPage(totalPages)} disabled={safePage === totalPages}>
-                <Ionicons name="chevron-forward" size={13} color={safePage === totalPages ? c.border : c.text} />
-              </Pressable>
-            </View>
-          </View>
-        )}
-
-        <View style={{ height: 40 }} />
+        <View style={{ height: 24 }} />
       </ScrollView>
     </View>
   );

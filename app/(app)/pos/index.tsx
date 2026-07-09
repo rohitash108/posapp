@@ -1841,9 +1841,9 @@ export default function POSScreen() {
         {customItemModal}
 
         {/* Top header bar */}
-        <View style={[sh.posHeader, t.chrome]}>
+        <View style={sh.posHeader}>
           <Pressable style={sh.posBackBtn} onPress={() => router.replace('/(app)/dashboard')}>
-            <Ionicons name="arrow-back" size={15} color="#fff" />
+            <Ionicons name="arrow-back" size={15} color={t.colors.text} />
             <Text style={sh.posBackText}>Dashboard</Text>
           </Pressable>
           <Text style={sh.posTitle}>Point of Sale</Text>
@@ -2419,10 +2419,10 @@ export default function POSScreen() {
 function mkSh(c: _TC) { return StyleSheet.create({
   shell:      { flex: 1, flexDirection: 'column', backgroundColor: c.background },
   cols:       { flex: 1, flexDirection: 'row' },
-  posHeader:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: c.sidebar, borderBottomWidth: 1, borderBottomColor: c.sidebarBorder, gap: 12 },
-  posBackBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  posBackText:{ fontSize: 13, fontWeight: '600', color: '#fff' },
-  posTitle:   { fontSize: 15, fontWeight: '800', color: c.brand, letterSpacing: 0.5 },
+  posHeader:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, gap: 12 },
+  posBackBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+  posBackText:{ fontSize: 13, fontWeight: '600', color: c.text },
+  posTitle:   { fontSize: 18, fontWeight: '800', color: c.heading, letterSpacing: 0.2 },
 
   rail:       { width: 170, backgroundColor: c.surface, borderRightWidth: 1, borderRightColor: c.border },
   railHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingTop: 14, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: c.border },

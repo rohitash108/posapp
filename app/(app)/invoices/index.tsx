@@ -87,9 +87,11 @@ function mkS(c: ThemeColors) {
     exportMenu:   { position: 'absolute', top: '100%', right: 0, marginTop: 4, backgroundColor: c.surface, borderRadius: 8, borderWidth: 1, borderColor: c.border, minWidth: 140, zIndex: 50, elevation: 4 },
     exportMenuItem:{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
     exportMenuTxt:{ fontSize: 13, color: c.text },
-    filterRow:    { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-    searchBox:    { flex: 1, minWidth: 140, flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: c.surface },
-    searchInput:  { flex: 1, fontSize: 13, color: c.heading },
+    filterRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    filterTools:  { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+    searchBox:    { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surfaceAlt, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: c.border, width: 240, maxWidth: 240, flexGrow: 0, flexShrink: 0 },
+    searchBoxMobile: { flex: 1, width: '100%', maxWidth: '100%' },
+    searchInput:  { flex: 1, fontSize: 13, color: c.heading, paddingVertical: 0 },
     filterBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
     filterBtnTxt: { fontSize: 13, fontWeight: '600', color: c.text },
     filterDot:    { width: 7, height: 7, borderRadius: 3.5, backgroundColor: c.sidebar },
@@ -133,22 +135,12 @@ function mkTr(c: ThemeColors) {
 
 function mkPg(c: ThemeColors) {
   return StyleSheet.create({
-    wrap:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface },
-    left:         { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    entriesInput: { width: 44, borderWidth: 1, borderColor: c.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: 13, color: c.heading, textAlign: 'center', backgroundColor: c.surface },
-    entriesLbl:   { fontSize: 13, color: c.text },
-    right:        { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    navBtn:       { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
-    navBtnDisabled: { opacity: 0.4 },
-    navBtnTxt:    { fontSize: 13, fontWeight: '600', color: c.text },
-    pageNumRow:   { flexDirection: 'row', gap: 4 },
-    pageBtn:      { width: 32, height: 32, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
-    pageBtnActive:{ backgroundColor: PRIMARY, borderColor: PRIMARY },
-    pageBtnTxt:   { fontSize: 13, fontWeight: '600', color: c.text },
-    pageBtnTxtActive: { color: '#fff' },
-    bottomRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surfaceAlt },
+    wrap:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface },
+    left:         { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1, minWidth: 0 },
+    entriesInput: { width: 44, borderWidth: 1, borderColor: c.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: 13, color: c.heading, textAlign: 'center', backgroundColor: c.surfaceAlt },
+    entriesLbl:   { fontSize: 13, color: c.textMuted },
     showingTxt:   { fontSize: 12.5, color: c.brand, fontWeight: '600' },
-    numBar:       { flexDirection: 'row', alignItems: 'center', gap: 3 },
+    numBar:       { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 0 },
     numBtn:       { width: 28, height: 28, borderRadius: 5, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
     numBtnArrow:  { backgroundColor: c.surface },
     numBtnActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
@@ -649,61 +641,7 @@ function InvoiceDetail({
   );
 }
 
-// ── Pagination helpers ────────────────────────────────────────────────────────
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
-
-function PaginationBar({
-  page, totalPages, total, perPage, from, to,
-  onPage, onPerPage,
-}: {
-  page: number; totalPages: number; total: number;
-  perPage: number; from: number; to: number;
-  onPage: (p: number) => void;
-  onPerPage: (n: number) => void;
-}) {
-  const { colors: c } = useTheme();
-  const pg = useMemo(() => mkPg(c), [c]);
-
-  return (
-    <View style={pg.wrap}>
-      {/* Left: entries selector */}
-      <View style={pg.left}>
-        <TextInput
-          style={pg.entriesInput}
-          value={String(perPage)}
-          onChangeText={v => { const n = parseInt(v); if (!isNaN(n) && n > 0) onPerPage(n); }}
-          keyboardType="numeric"
-          selectTextOnFocus
-        />
-        <Text style={pg.entriesLbl}>Entries</Text>
-      </View>
-
-      {/* Right: prev/next + page buttons */}
-      <View style={pg.right}>
-        <Pressable style={({ pressed }) => [pg.navBtn, page <= 1 && pg.navBtnDisabled, pressed && { opacity: 0.6 }]}
-          onPress={() => page > 1 && onPage(page - 1)} disabled={page <= 1}>
-          <Ionicons name="chevron-back" size={13} color={page <= 1 ? c.border : c.text} />
-          <Text style={[pg.navBtnTxt, page <= 1 && { color: c.border }]}>Prev</Text>
-        </Pressable>
-        <View style={pg.pageNumRow}>
-          <Pressable style={[pg.pageBtn, page === 1 && pg.pageBtnActive]} onPress={() => onPage(1)}>
-            <Text style={[pg.pageBtnTxt, page === 1 && pg.pageBtnTxtActive]}>1</Text>
-          </Pressable>
-          {totalPages >= 2 && (
-            <Pressable style={[pg.pageBtn, page === 2 && pg.pageBtnActive]} onPress={() => onPage(2)}>
-              <Text style={[pg.pageBtnTxt, page === 2 && pg.pageBtnTxtActive]}>2</Text>
-            </Pressable>
-          )}
-        </View>
-        <Pressable style={({ pressed }) => [pg.navBtn, page >= totalPages && pg.navBtnDisabled, pressed && { opacity: 0.6 }]}
-          onPress={() => page < totalPages && onPage(page + 1)} disabled={page >= totalPages}>
-          <Text style={[pg.navBtnTxt, page >= totalPages && { color: c.border }]}>Next</Text>
-          <Ionicons name="chevron-forward" size={13} color={page >= totalPages ? c.border : c.text} />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
+// ── Pagination ────────────────────────────────────────────────────────────────
 
 function PageNumBar({
   page, totalPages, onPage,
@@ -873,9 +811,9 @@ export default function InvoicesScreen() {
       </View>
 
       {/* ── Search + filter bar ── */}
-      <View style={[s.filterRow, isMobile && { flexDirection: 'column', gap: 8 }]}>
-        {/* Row 1: Search (always full-width on mobile) */}
-        <View style={s.searchBox}>
+      <View style={[s.filterRow, isMobile && { flexDirection: 'column', alignItems: 'stretch' }]}>
+        <View style={[s.searchBox, isMobile && s.searchBoxMobile]}>
+          <Ionicons name="search-outline" size={15} color={c.textMuted} />
           <TextInput
             style={s.searchInput}
             value={search}
@@ -888,11 +826,18 @@ export default function InvoicesScreen() {
             placeholder="Search invoices…"
             placeholderTextColor={c.textMuted}
           />
-          <Ionicons name="search-outline" size={15} color={c.textMuted} />
+          {search ? (
+            <Pressable onPress={() => {
+              setSearch('');
+              setPage(1);
+              load({ pg: 1, q: '' });
+            }} hitSlop={8}>
+              <Ionicons name="close-circle" size={15} color={c.textMuted} />
+            </Pressable>
+          ) : null}
         </View>
 
-        {/* Row 2 (desktop: inline; mobile: second row) */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: isMobile ? 'flex-start' : 'flex-end' }}>
+        <View style={[s.filterTools, isMobile && { justifyContent: 'flex-start' }]}>
           {/* Filter dropdown */}
           <View style={{ position: 'relative', zIndex: 100 }}>
             <Pressable style={({ pressed }) => [s.filterBtn, filterOpen && { borderColor: c.sidebar }, pressed && { opacity: 0.8 }]}
@@ -975,17 +920,22 @@ export default function InvoicesScreen() {
             )}
             {/* Footer pagination */}
             {filtered.length > 0 && (
-              <>
-                <PaginationBar page={page} totalPages={totalPages} total={displayTotal}
-                  perPage={perPage} from={fromNum} to={toNum}
-                  onPage={goPage} onPerPage={changePerPage} />
-                <View style={pg.bottomRow}>
+              <View style={pg.wrap}>
+                <View style={pg.left}>
+                  <TextInput
+                    style={pg.entriesInput}
+                    value={String(perPage)}
+                    onChangeText={v => { const n = parseInt(v, 10); if (!isNaN(n) && n > 0) changePerPage(n); }}
+                    keyboardType="numeric"
+                    selectTextOnFocus
+                  />
+                  <Text style={pg.entriesLbl}>Entries</Text>
                   <Text style={pg.showingTxt}>
                     Showing {fromNum} to {toNum} of {displayTotal} results
                   </Text>
-                  <PageNumBar page={page} totalPages={totalPages} onPage={goPage} />
                 </View>
-              </>
+                <PageNumBar page={page} totalPages={totalPages} onPage={goPage} />
+              </View>
             )}
           </View>
         </ScrollView>

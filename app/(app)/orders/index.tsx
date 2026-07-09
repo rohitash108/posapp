@@ -1,13 +1,12 @@
 /**
  * Orders Screen
- * Three-dot menus use positioned context-menu dropdowns (getBoundingClientRect)
- * instead of modal sheets — fixes bottom-left corner bug on web.
+ * Dropdowns use measureInWindow + fixed positioning on web so menus anchor to the clicked button.
  */
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, RefreshControl, ScrollView,
   TextInput, Modal, ActivityIndicator, Platform, Pressable,
-  useWindowDimensions, AppState,
+  useWindowDimensions, AppState, Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
@@ -19,10 +18,16 @@ import type { Order, OrderStatus } from '@/types';
 import { useTheme } from '@/store/themeStore';
 import type { ThemeColors } from '@/theme/tokens';
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
-const FOREST  = '#1A2B1A';
-const GOLD    = '#C9A52A';
-const PRIMARY = '#2563eb';
+// ── csPos semantic palette (matches dashboard + tokens.ts) ───────────────────
+const S = {
+  primary: '#0D76E1',
+  success: '#14B51D',
+  danger:  '#FF3636',
+  warning: '#FDAF22',
+  info:    '#2088EE',
+  purple:  '#A91CFF',
+  orange:  '#E65100',
+};
 
 // Play a short two-tone beep via Web Audio API (no package needed).
 function playNewOrderBeep() {
@@ -52,41 +57,41 @@ function playNewOrderBeep() {
 
 // ── Food-type dot colors (veg=green, non_veg=red, egg=amber) ─────────────────
 const FOOD_DOT_COLOR: Record<string, string> = {
-  veg:     '#16a34a',
-  non_veg: '#dc2626',
-  egg:     '#d97706',
+  veg:     S.success,
+  non_veg: S.danger,
+  egg:     S.warning,
 };
 
-// ── Status / source config ────────────────────────────────────────────────────
+// ── Status / source config (csPos — light bg + dark bgDark variants) ─────────
 const STATUS_CFG = {
-  pending:   { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe', dot: '#3b82f6', label: 'Pending',   next: 'confirmed', nextLabel: 'Confirm'       },
-  confirmed: { bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe', dot: '#3b82f6', label: 'Confirmed', next: 'preparing', nextLabel: 'Start Cooking' },
-  preparing: { bg: '#fff7ed', text: '#c2410c', border: '#fed7aa', dot: '#f97316', label: 'Preparing', next: 'ready',     nextLabel: 'Mark Ready'    },
-  ready:     { bg: '#fdf4ff', text: '#7c3aed', border: '#e9d5ff', dot: '#8b5cf6', label: 'Ready',     next: 'served',    nextLabel: 'Mark Served'   },
-  served:    { bg: '#ecfeff', text: '#0891b2', border: '#a5f3fc', dot: '#06b6d4', label: 'Served',    next: 'completed', nextLabel: 'Complete'      },
-  completed: { bg: '#f0fdf4', text: '#16a34a', border: '#bbf7d0', dot: '#22c55e', label: 'Completed', next: null,        nextLabel: null            },
-  cancelled: { bg: '#fff1f2', text: '#dc2626', border: '#fecaca', dot: '#ef4444', label: 'Cancelled', next: null,        nextLabel: null            },
+  pending:   { bg: '#fef9ec', bgDark: 'rgba(253,175,34,0.15)',  text: S.warning, border: '#fde68a', borderDark: 'rgba(253,175,34,0.35)', dot: S.warning, label: 'Pending',   next: 'confirmed', nextLabel: 'Confirm'       },
+  confirmed: { bg: '#eff6ff', bgDark: 'rgba(13,118,225,0.15)',  text: S.primary, border: '#bfdbfe', borderDark: 'rgba(13,118,225,0.35)', dot: S.primary, label: 'Confirmed', next: 'preparing', nextLabel: 'Start Cooking' },
+  preparing: { bg: '#f5f3ff', bgDark: 'rgba(169,28,255,0.15)',  text: S.purple,  border: '#e9d5ff', borderDark: 'rgba(169,28,255,0.35)', dot: S.purple,  label: 'Preparing', next: 'ready',     nextLabel: 'Mark Ready'    },
+  ready:     { bg: '#ecfeff', bgDark: 'rgba(32,136,238,0.15)',  text: S.info,    border: '#a5f3fc', borderDark: 'rgba(32,136,238,0.35)', dot: S.info,    label: 'Ready',     next: 'served',    nextLabel: 'Mark Served'   },
+  served:    { bg: '#ecfdf5', bgDark: 'rgba(20,181,29,0.15)',   text: S.success, border: '#bbf7d0', borderDark: 'rgba(20,181,29,0.35)',  dot: S.success, label: 'Served',    next: 'completed', nextLabel: 'Complete'      },
+  completed: { bg: '#f0fdf4', bgDark: 'rgba(20,181,29,0.15)',   text: S.success, border: '#bbf7d0', borderDark: 'rgba(20,181,29,0.35)',  dot: S.success, label: 'Completed', next: null,        nextLabel: null            },
+  cancelled: { bg: '#fff1f2', bgDark: 'rgba(255,54,54,0.15)',   text: S.danger,  border: '#fecaca', borderDark: 'rgba(255,54,54,0.35)',  dot: S.danger,  label: 'Cancelled', next: null,        nextLabel: null            },
 } as const;
 
 const SOURCE_CFG = {
-  pos:    { label: 'POS',    color: '#374151', bg: '#f1f5f9', dot: '#94a3b8' },
-  zomato: { label: 'Zomato', color: '#dc2626', bg: '#fff1f2', dot: '#ef4444' },
-  swiggy: { label: 'Swiggy', color: '#ea580c', bg: '#fff7ed', dot: '#f97316' },
-  qr:     { label: 'QR',     color: '#7c3aed', bg: '#f5f3ff', dot: '#8b5cf6' },
+  pos:    { label: 'POS',    color: '#64748B', bg: '#f1f5f9', bgDark: 'rgba(100,116,139,0.15)', dot: '#94a3b8' },
+  zomato: { label: 'Zomato', color: S.danger,  bg: '#fff1f2', bgDark: 'rgba(255,54,54,0.15)',  dot: S.danger  },
+  swiggy: { label: 'Swiggy', color: S.orange,  bg: '#fff7ed', bgDark: 'rgba(230,81,0,0.15)',   dot: S.orange  },
+  qr:     { label: 'QR',     color: S.purple,  bg: '#f5f3ff', bgDark: 'rgba(169,28,255,0.15)', dot: S.purple  },
 } as const;
 
 const STAT_CARDS = [
-  { key: 'pending',   label: 'Pending',    icon: 'time-outline'           as const, color: '#2563eb', bg: '#eff6ff' },
-  { key: 'confirmed', label: 'Confirmed',  icon: 'bookmark-outline'       as const, color: '#0891b2', bg: '#ecfeff' },
-  { key: 'preparing', label: 'In Kitchen', icon: 'flame-outline'          as const, color: '#c2410c', bg: '#fff7ed' },
-  { key: 'ready',     label: 'Ready',      icon: 'alarm-outline'          as const, color: '#7c3aed', bg: '#fdf4ff' },
-  { key: 'completed', label: 'Completed',  icon: 'checkmark-done-outline' as const, color: '#16a34a', bg: '#f0fdf4' },
-  { key: 'cancelled', label: 'Cancelled',  icon: 'close-circle-outline'   as const, color: '#dc2626', bg: '#fff1f2' },
+  { key: 'pending',   label: 'Pending',    icon: 'time-outline'           as const, color: S.warning, bg: '#fef9ec', bgDark: 'rgba(253,175,34,0.15)'  },
+  { key: 'confirmed', label: 'Confirmed',  icon: 'bookmark-outline'       as const, color: S.primary, bg: '#eff6ff', bgDark: 'rgba(13,118,225,0.15)'  },
+  { key: 'preparing', label: 'In Kitchen', icon: 'flame-outline'          as const, color: S.purple,  bg: '#f5f3ff', bgDark: 'rgba(169,28,255,0.15)'  },
+  { key: 'ready',     label: 'Ready',      icon: 'alarm-outline'          as const, color: S.info,    bg: '#ecfeff', bgDark: 'rgba(32,136,238,0.15)'  },
+  { key: 'completed', label: 'Completed',  icon: 'checkmark-done-outline' as const, color: S.success, bg: '#f0fdf4', bgDark: 'rgba(20,181,29,0.15)'   },
+  { key: 'cancelled', label: 'Cancelled',  icon: 'close-circle-outline'   as const, color: S.danger,  bg: '#fff1f2', bgDark: 'rgba(255,54,54,0.15)'   },
 ] as const;
 
 type TabKey = 'all' | 'pending' | 'inprogress' | 'completed' | 'cancelled' | 'paid' | 'unpaid';
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'all',        label: 'All'         },
+  { key: 'all',        label: 'All Orders'  },
   { key: 'pending',    label: 'Pending'     },
   { key: 'inprogress', label: 'In Progress' },
   { key: 'completed',  label: 'Completed'   },
@@ -114,7 +119,35 @@ const SOURCES = [
 const IN_PROGRESS = ['confirmed', 'preparing', 'ready', 'served'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function sCfg(s: string) { return STATUS_CFG[s as keyof typeof STATUS_CFG] ?? STATUS_CFG.pending; }
+function sCfg(status: string, isDark: boolean) {
+  const raw = STATUS_CFG[status as keyof typeof STATUS_CFG] ?? STATUS_CFG.pending;
+  return {
+    ...raw,
+    bg:     isDark ? raw.bgDark : raw.bg,
+    border: isDark ? raw.borderDark : raw.border,
+  };
+}
+function srcCfg(source: string, isDark: boolean) {
+  const raw = SOURCE_CFG[source as keyof typeof SOURCE_CFG] ?? SOURCE_CFG.pos;
+  return { ...raw, bg: isDark ? raw.bgDark : raw.bg };
+}
+/** csPos order-card status dropdown (ghost outline, not solid fill) */
+function statusPillLook(status: string, isDark: boolean, c: ThemeColors) {
+  const cfg = sCfg(status, isDark);
+  if (isDark) {
+    return {
+      bg: 'transparent',
+      border: 'rgba(255,255,255,0.35)',
+      text: '#fff',
+      dot: cfg.dot,
+      showDot: false,
+    };
+  }
+  if (status === 'completed') {
+    return { bg: 'transparent', border: S.success, text: S.success, dot: S.success, showDot: false };
+  }
+  return { bg: cfg.bg, border: cfg.border, text: cfg.text, dot: cfg.dot, showDot: true };
+}
 function srcLabel(source?: string | null): string | null {
   if (!source || source === 'pos') return null;
   return SOURCE_CFG[source as keyof typeof SOURCE_CFG]?.label ?? source.toUpperCase();
@@ -127,6 +160,12 @@ function fmtTime(dt?: string) {
   if (isToday(d))     return format(d, 'h:mm a');
   if (isYesterday(d)) return `Yesterday ${format(d, 'h:mm a')}`;
   return format(d, 'dd MMM, h:mm a');
+}
+
+/** Full date/time on order cards (csPos parity) */
+function fmtCardTime(dt?: string) {
+  if (!dt) return '—';
+  return format(new Date(dt), 'dd MMM yyyy, hh:mm a');
 }
 
 function getDateRange(key: string) {
@@ -179,26 +218,57 @@ ${Number(order.discount_amount)>0?`<tr><td>Discount</td><td align="right" style=
   if (w) { w.document.write(html); w.document.close(); }
 }
 
+function printKOT(order: Order, restaurant: any) {
+  if (Platform.OS !== 'web') return;
+  const rows = (order.items ?? []).map(i =>
+    `<tr><td style="font-weight:800;font-size:16px">${i.quantity}</td><td>${i.item_name ?? i.name ?? ''}${i.variation ? ` (${i.variation})` : ''}</td></tr>`
+  ).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>KOT ${order.order_number}</title>
+<style>body{font-family:Arial,sans-serif;max-width:320px;margin:0 auto;padding:12px}h2{text-align:center;letter-spacing:3px;border:2px solid #000;display:inline-block;padding:2px 10px}
+table{width:100%;margin-top:10px;font-size:13px}td{padding:6px 4px;border-bottom:1px dashed #ccc}</style></head><body>
+<h2>KOT</h2>
+<div style="text-align:center;font-size:12px;margin-top:6px">${restaurant?.name ?? 'KITCHEN'}</div>
+<div style="font-size:11px;margin:8px 0"><b>#${order.order_number}</b> · ${(order.order_type ?? '').replace(/_/g,' ').toUpperCase()}${order.table_name ? ` · ${order.table_name}` : ''}</div>
+<table>${rows}</table>
+<script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const w = window.open('', '_blank', 'width=360,height=520');
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
 // ── Positioned dropdown engine ────────────────────────────────────────────────
 interface DropPos { top: number; left: number; width: number }
 
-/**
- * Measures an element by nativeID and returns coordinates for a dropdown panel.
- * Prefers opening below; flips above if insufficient space.
- */
-function measureDrop(nativeId: string, panelW = 220, panelH = 300): DropPos | null {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') return null;
-  const el = document.getElementById(nativeId);
-  if (!el) return null;
-  const r  = el.getBoundingClientRect();
-  if (r.width === 0) return null;
-  const sw = window.innerWidth;
-  const sh = window.innerHeight;
-  // Right-align panel to button, clamped to viewport
-  const left = Math.max(8, Math.min(r.right - panelW, sw - panelW - 8));
-  // Prefer below; flip above if not enough room
-  const top  = sh - r.bottom > panelH ? r.bottom + 6 : Math.max(8, r.top - panelH - 4);
+function computeDropPos(
+  x: number, y: number, width: number, height: number,
+  panelW: number, panelH: number,
+): DropPos {
+  const { width: sw, height: sh } = Dimensions.get('window');
+  const left = Math.max(8, Math.min(x + width - panelW, sw - panelW - 8));
+  const top  = sh - (y + height) > panelH ? y + height + 6 : Math.max(8, y - panelH - 4);
   return { top, left, width: panelW };
+}
+
+/** Measure a ref in window coords — reliable on web (unlike getElementById + absolute in Modal). */
+function measureAnchor(
+  ref: React.RefObject<View | null>,
+  panelW: number,
+  panelH: number,
+  cb: (pos: DropPos | null) => void,
+) {
+  const node = ref.current;
+  if (!node) { cb(null); return; }
+  requestAnimationFrame(() => {
+    node.measureInWindow((x, y, width, height) => {
+      if (width <= 0 && height <= 0) { cb(null); return; }
+      cb(computeDropPos(x, y, width, height, panelW, panelH));
+    });
+  });
+}
+
+function dropPanelStyle(pos: DropPos) {
+  return Platform.OS === 'web'
+    ? ({ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 } as const)
+    : ({ position: 'absolute', top: pos.top, left: pos.left, width: pos.width } as const);
 }
 
 // ── Shared action props ───────────────────────────────────────────────────────
@@ -245,7 +315,7 @@ function ActionDropdown({ order, pos, onClose, onStatusChange, onMarkPaid, onPri
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-      <View style={[dd.panel, { top: pos.top, left: pos.left, width: pos.width }]}>
+      <View style={[dd.panel, dropPanelStyle(pos)]}>
         <View style={dd.header}>
           <Text style={dd.headerTitle}>Order #{order.order_number}</Text>
           <Text style={dd.headerSub}>
@@ -254,23 +324,23 @@ function ActionDropdown({ order, pos, onClose, onStatusChange, onMarkPaid, onPri
           </Text>
         </View>
         <View style={dd.sep} />
-        <DDItem icon="swap-horizontal-outline" label="Change Status" color={PRIMARY} dd={dd}
+        <DDItem icon="swap-horizontal-outline" label="Change Status" color={c.primary} dd={dd}
           onPress={() => { onClose(); onShowStatus(); }} />
         {!agg && (
           <DDItem
             icon={isPaid ? 'alert-circle-outline' : 'checkmark-circle-outline'}
             label={isPaid ? 'Mark as Unpaid' : 'Mark as Paid'}
-            color={isPaid ? '#d97706' : '#16a34a'}
+            color={isPaid ? c.warning : c.success}
             onPress={() => { onClose(); onMarkPaid(order.id, !isPaid); }}
             dd={dd}
           />
         )}
         {!done && (
-          <DDItem icon="checkmark-done-outline" label="Mark Completed" color="#16a34a" dd={dd}
+          <DDItem icon="checkmark-done-outline" label="Mark Completed" color={c.success} dd={dd}
             onPress={() => { onClose(); onStatusChange(order.id, 'completed'); }} />
         )}
         {!done && (
-          <DDItem icon="close-circle-outline" label="Cancel Order" color="#dc2626" danger dd={dd}
+          <DDItem icon="close-circle-outline" label="Cancel Order" color={c.danger} danger dd={dd}
             onPress={() => { onClose(); onStatusChange(order.id, 'cancelled'); }} />
         )}
         {Platform.OS === 'web' && (
@@ -289,7 +359,7 @@ function ActionDropdown({ order, pos, onClose, onStatusChange, onMarkPaid, onPri
 function StatusDropdown({ order, pos, onClose, onSelect }: {
   order: Order; pos: DropPos; onClose: () => void; onSelect: (s: string) => void;
 }) {
-  const { colors: c } = useTheme();
+  const { colors: c, isDark } = useTheme();
   const dd = useMemo(() => mkDd(c), [c]);
   const FORWARD: OrderStatus[] = ['pending','confirmed','preparing','ready','served','completed'];
   const idx     = FORWARD.indexOf(order.status as OrderStatus);
@@ -297,14 +367,14 @@ function StatusDropdown({ order, pos, onClose, onSelect }: {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-      <View style={[dd.panel, { top: pos.top, left: pos.left, width: pos.width }]}>
+      <View style={[dd.panel, dropPanelStyle(pos)]}>
         <View style={dd.header}>
           <Text style={dd.headerTitle}>Change Status</Text>
           <Text style={dd.headerSub}>Order #{order.order_number}</Text>
         </View>
         <View style={dd.sep} />
         {options.map(s => {
-          const sc     = sCfg(s);
+          const sc     = sCfg(s, isDark);
           const active = order.status === s;
           return (
             <Pressable
@@ -346,10 +416,10 @@ function ActionSheetModal({ order, visible, onClose, onStatusChange, onMarkPaid,
         <View style={ms.sheet}>
           <View style={ms.handle} />
           <Text style={ms.title}>Order #{order.order_number}</Text>
-          <SheetRow icon="swap-horizontal-outline" label="Change Status"   color={PRIMARY}     ms={ms} onPress={() => { onClose(); onShowStatus(); }} />
-          {!agg && <SheetRow icon={isPaid ? 'alert-circle-outline' : 'checkmark-circle-outline'} label={isPaid ? 'Mark as Unpaid' : 'Mark as Paid'} color={isPaid ? '#d97706' : '#16a34a'} ms={ms} onPress={() => { onClose(); onMarkPaid(order.id, !isPaid); }} />}
-          {!done && <SheetRow icon="checkmark-done-outline" label="Mark Completed" color="#16a34a" ms={ms} onPress={() => { onClose(); onStatusChange(order.id, 'completed'); }} />}
-          {!done && <SheetRow icon="close-circle-outline"   label="Cancel Order"   color="#dc2626" ms={ms} onPress={() => { onClose(); onStatusChange(order.id, 'cancelled'); }} />}
+          <SheetRow icon="swap-horizontal-outline" label="Change Status"   color={c.primary} ms={ms} onPress={() => { onClose(); onShowStatus(); }} />
+          {!agg && <SheetRow icon={isPaid ? 'alert-circle-outline' : 'checkmark-circle-outline'} label={isPaid ? 'Mark as Unpaid' : 'Mark as Paid'} color={isPaid ? c.warning : c.success} ms={ms} onPress={() => { onClose(); onMarkPaid(order.id, !isPaid); }} />}
+          {!done && <SheetRow icon="checkmark-done-outline" label="Mark Completed" color={c.success} ms={ms} onPress={() => { onClose(); onStatusChange(order.id, 'completed'); }} />}
+          {!done && <SheetRow icon="close-circle-outline"   label="Cancel Order"   color={c.danger} ms={ms} onPress={() => { onClose(); onStatusChange(order.id, 'cancelled'); }} />}
           {Platform.OS === 'web' && <SheetRow icon="print-outline" label="Print Receipt" color={c.text} ms={ms} onPress={() => { onClose(); onPrint(order); }} />}
           <View style={{ height: 16 }} />
         </View>
@@ -361,7 +431,7 @@ function ActionSheetModal({ order, visible, onClose, onStatusChange, onMarkPaid,
 function StatusPickerModal({ order, visible, onClose, onSelect }: {
   order: Order; visible: boolean; onClose: () => void; onSelect: (s: string) => void;
 }) {
-  const { colors: c } = useTheme();
+  const { colors: c, isDark } = useTheme();
   const ms = useMemo(() => mkMs(c), [c]);
   const FORWARD: OrderStatus[] = ['pending','confirmed','preparing','ready','served','completed'];
   const idx     = FORWARD.indexOf(order.status as OrderStatus);
@@ -374,7 +444,7 @@ function StatusPickerModal({ order, visible, onClose, onSelect }: {
           <Text style={ms.title}>Change Status</Text>
           <Text style={ms.sub}>Order #{order.order_number}</Text>
           {options.map(s => {
-            const sc = sCfg(s); const active = order.status === s;
+            const sc = sCfg(s, isDark); const active = order.status === s;
             return (
               <Pressable key={s} style={[ms.item, active && { backgroundColor: sc.bg }]}
                 onPress={() => { onClose(); onSelect(s); }}>
@@ -409,26 +479,32 @@ function SheetRow({ icon, label, color, onPress, ms }: {
 
 // ── Order Card (Grid) ─────────────────────────────────────────────────────────
 function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint, isUpdating }: { order: Order } & ActionProps) {
-  const { colors: c } = useTheme();
-  const cd = useMemo(() => mkCd(c), [c]);
+  const { colors: c, isDark } = useTheme();
+  const { restaurant } = useAppStore();
+  const cd = useMemo(() => mkCd(c, isDark), [c, isDark]);
   const [showAction, setShowAction] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   const [actionPos,  setActionPos]  = useState<DropPos | null>(null);
   const [statusPos,  setStatusPos]  = useState<DropPos | null>(null);
 
+  const menuAnchorRef   = useRef<View>(null);
+  const statusAnchorRef = useRef<View>(null);
+
   const menuId   = `ord-act-${order.id}`;
   const statusId = `ord-sts-${order.id}`;
 
   function openAction() {
-    const p = measureDrop(menuId, 228, 280);
-    setActionPos(p);
-    setShowAction(true);
+    measureAnchor(menuAnchorRef, 228, 280, (p) => {
+      setActionPos(p);
+      setShowAction(true);
+    });
   }
 
   function openStatus() {
-    const p = measureDrop(statusId, 200, 260);
-    setStatusPos(p);
-    setShowStatus(true);
+    measureAnchor(statusAnchorRef, 200, 260, (p) => {
+      setStatusPos(p);
+      setShowStatus(true);
+    });
   }
 
   function openStatusFromAction() {
@@ -437,26 +513,27 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
     setTimeout(() => openStatus(), 50);
   }
 
-  const cfg    = sCfg(order.status);
+  const cfg    = sCfg(order.status, isDark);
+  const pill   = statusPillLook(order.status, isDark, c);
   const isPaid = order.payment_status === 'paid';
   const agg    = isAgg(order);
   const items  = order.items ?? [];
   const shown  = items.slice(0, 3);
   const more   = Math.max(0, items.length - 3);
   const lbl    = srcLabel(order.source);
-  const srcC   = SOURCE_CFG[(order.source ?? 'pos') as keyof typeof SOURCE_CFG] ?? SOURCE_CFG.pos;
+  const srcC   = srcCfg(order.source ?? 'pos', isDark);
 
   return (
     <View style={cd.wrap}>
-      {/* ── Dark header ── */}
+      {/* ── Card header (csPos: flat surface + blue icon) ── */}
       <View style={cd.head}>
         <View style={cd.headL}>
           <View style={cd.avatar}>
-            <Ionicons name="bag-handle-outline" size={16} color="rgba(255,255,255,0.85)" />
+            <Ionicons name="bag-handle-outline" size={16} color="#fff" />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <Text style={cd.orderNum}>#{order.order_number}</Text>
+              <Text style={cd.orderNum}>Order {order.order_number}</Text>
               {lbl && (
                 <View style={[cd.srcBadge, { backgroundColor: srcC.bg }]}>
                   <View style={[cd.srcDot, { backgroundColor: srcC.dot }]} />
@@ -466,54 +543,51 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
             </View>
             <Text style={cd.headSub} numberOfLines={1}>
               {(order.order_type ?? 'dine_in').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}
-              {order.table_name ? ` · ${order.table_name}` : ''}
+              {order.table_name ? ` | Table: ${order.table_name}` : ''}
             </Text>
           </View>
         </View>
-        <View style={cd.headR}>
-          <Text style={cd.time}>{fmtTime(order.created_at)}</Text>
-          {/* Three-dot menu button — nativeID used by measureDrop */}
+        <View ref={menuAnchorRef} collapsable={false}>
           <Pressable nativeID={menuId} style={cd.menuBtn} onPress={openAction}>
-            <Ionicons name="ellipsis-vertical" size={14} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="ellipsis-vertical" size={14} color={c.textMuted} />
           </Pressable>
         </View>
       </View>
 
-      {/* ── Customer ── */}
-      <View style={cd.customerRow}>
-        <Ionicons name="person-outline" size={12} color={c.textMuted} />
-        <Text style={cd.customerName} numberOfLines={1}>{order.customer_name || 'Walk-in'}</Text>
-        {order.external_id && agg && (
-          <Text style={cd.extId} numberOfLines={1}>· ID: {order.external_id}</Text>
-        )}
+      {/* ── Total + timestamp ── */}
+      <View style={cd.totalRow}>
+        <Text style={cd.totalAmt}>Total: ₹{Number(order.total ?? 0).toFixed(2)}</Text>
+        <Text style={cd.time}>{fmtCardTime(order.created_at)}</Text>
       </View>
 
       {/* ── Items ── */}
       <View style={cd.itemsWrap}>
         {shown.length === 0 ? (
           <Text style={cd.noItems}>{agg ? 'Items not synced' : 'No items'}</Text>
-        ) : shown.map((i, idx) => (
-          <View key={idx} style={cd.itemRow}>
-            <View style={[cd.itemDot, { backgroundColor: FOOD_DOT_COLOR[i.food_type ?? 'veg'] ?? '#16a34a' }]} />
-            <Text style={cd.itemName} numberOfLines={1}>
-              {i.item_name ?? i.name ?? ''}{i.variation ? ` · ${i.variation}` : ''}
+        ) : shown.map((i, idx) => {
+          const unit  = Number(i.unit_price ?? 0);
+          const line  = unit * Number(i.quantity ?? 1);
+          const name  = `${i.item_name ?? i.name ?? ''}${i.variation ? ` (${i.variation})` : ''}`;
+          return (
+            <Text key={idx} style={cd.itemLine} numberOfLines={2}>
+              <Text style={cd.itemName}>{name ? `${name} — ` : ''}</Text>
+              <Text style={cd.itemQty}>{i.quantity} × </Text>
+              <Text style={cd.itemPriceOrange}>₹{unit.toFixed(2)}</Text>
+              <Text style={cd.itemQty}> = </Text>
+              <Text style={cd.itemPriceOrange}>₹{line.toFixed(2)}</Text>
             </Text>
-            <Text style={cd.itemQty}>×{i.quantity}</Text>
-            {Number(i.unit_price) > 0 && (
-              <Text style={cd.itemPrice}>₹{Number(i.unit_price).toFixed(0)}</Text>
-            )}
-          </View>
-        ))}
+          );
+        })}
         {more > 0 && <Text style={cd.moreItems}>+{more} more item{more > 1 ? 's' : ''}</Text>}
         {order.notes ? (
           <View style={cd.notesBox}>
-            <Ionicons name="chatbubble-outline" size={11} color="#92400e" />
+            <Ionicons name="chatbubble-outline" size={11} color={isDark ? c.warning : '#92400e'} />
             <Text style={cd.notesText} numberOfLines={2}>{order.notes}</Text>
           </View>
         ) : null}
         {agg && (order.rider_name || order.rider_status) ? (
           <View style={cd.riderBox}>
-            <Ionicons name="bicycle-outline" size={11} color="#0369a1" />
+            <Ionicons name="bicycle-outline" size={11} color={isDark ? c.info : '#0369a1'} />
             <Text style={cd.riderText} numberOfLines={1}>
               {order.rider_name ? order.rider_name : 'Rider'}
               {order.rider_phone ? ` · ${order.rider_phone}` : ''}
@@ -523,33 +597,51 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
         ) : null}
       </View>
 
-      {/* ── Total bar ── */}
-      <View style={cd.totalBar}>
-        <Text style={cd.totalAmt}>₹{Number(order.total ?? 0).toFixed(2)}</Text>
-        <View style={{ flex: 1 }} />
-        {!agg && (
+      {/* ── Action buttons (web) ── */}
+      {Platform.OS === 'web' && !agg && (
+        <View style={cd.actionRow}>
+          <Pressable style={cd.outlineOrangeBtn} onPress={() => onPrint(order)}>
+            <Ionicons name="document-text-outline" size={13} color={S.orange} />
+            <Text style={cd.outlineOrangeTxt}>Receipt</Text>
+          </Pressable>
+          <Pressable style={cd.solidPrimaryBtn} onPress={() => onPrint(order)}>
+            <Ionicons name="print-outline" size={13} color="#fff" />
+            <Text style={cd.solidPrimaryTxt}>Print</Text>
+          </Pressable>
+          <Pressable style={cd.outlineNeutralBtn} onPress={() => printKOT(order, restaurant)}>
+            <Ionicons name="restaurant-outline" size={13} color={isDark ? '#fff' : c.heading} />
+            <Text style={cd.outlineNeutralTxt}>KOT</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* ── Payment methods ── */}
+      {!agg && (
+        <View style={cd.payRow}>
+          <Text style={cd.payLabel}>Payment:</Text>
           <View style={cd.payMethodRow}>
-            {(['cash','card','upi'] as const).map(pm => {
+            {(['cash','card','upi'] as const).map((pm, idx, arr) => {
               const active = (order.payment_method ?? '') === pm;
+              const isLast = idx === arr.length - 1;
               return (
                 <Pressable key={pm} disabled={isUpdating}
-                  style={[cd.pmBtn, active && cd.pmBtnActive]}
+                  style={[cd.pmBtn, isLast && cd.pmBtnLast, active && cd.pmBtnActive]}
                   onPress={() => onPaymentChange(order.id, pm)}>
-                  <Text style={[cd.pmText, active && { color: '#fff' }]}>
+                  <Text style={[cd.pmText, active && cd.pmTextActive]}>
                     {pm === 'upi' ? 'UPI' : pm.charAt(0).toUpperCase() + pm.slice(1)}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
-        )}
-      </View>
+        </View>
+      )}
 
       {/* ── Footer ── */}
       <View style={cd.footer}>
         <View style={[cd.payPill, isPaid ? cd.paidPill : cd.unpaidPill]}>
-          <View style={[cd.payDot, { backgroundColor: isPaid ? '#22c55e' : '#f59e0b' }]} />
-          <Text style={[cd.payText, { color: isPaid ? '#16a34a' : '#d97706' }]}>
+          <View style={[cd.payDot, { backgroundColor: isPaid ? c.success : c.warning }]} />
+          <Text style={[cd.payText, { color: isPaid ? c.success : c.warning }]}>
             {isPaid ? 'Paid' : 'Unpaid'}
           </Text>
         </View>
@@ -560,10 +652,16 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
             <Text style={cd.markPaidTxt}>Mark Paid</Text>
           </Pressable>
         )}
+        {isPaid && !agg && (
+          <Pressable style={({ pressed }) => [cd.markUnpaidBtn, pressed && { opacity: 0.75 }]}
+            onPress={() => onMarkPaid(order.id, false)} disabled={isUpdating}>
+            <Text style={cd.markUnpaidTxt}>Mark Unpaid</Text>
+          </Pressable>
+        )}
         <View style={{ flex: 1 }} />
 
         {isUpdating ? (
-          <ActivityIndicator size="small" color={PRIMARY} />
+          <ActivityIndicator size="small" color={c.primary} />
         ) : agg && order.status === 'pending' ? (
           <View style={{ flexDirection: 'row', gap: 6 }}>
             <Pressable style={cd.acceptBtn} onPress={() => onStatusChange(order.id, 'confirmed')}>
@@ -574,20 +672,17 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
             </Pressable>
           </View>
         ) : (
-          /* Status pill — nativeID used by measureDrop */
-          <Pressable nativeID={statusId}
-            style={[cd.statusPill, { backgroundColor: cfg.bg, borderColor: cfg.border }]}
-            onPress={openStatus}>
-            <View style={[cd.statusDot, { backgroundColor: cfg.dot }]} />
-            <Text style={[cd.statusTxt, { color: cfg.text }]}>{cfg.label}</Text>
-            <Ionicons name="chevron-down" size={10} color={cfg.text} />
-          </Pressable>
-        )}
-
-        {Platform.OS === 'web' && (
-          <Pressable style={cd.iconBtn} onPress={() => onPrint(order)}>
-            <Ionicons name="print-outline" size={14} color="#64748b" />
-          </Pressable>
+          <View ref={statusAnchorRef} collapsable={false}>
+            <Pressable nativeID={statusId}
+              style={[cd.statusPill, { borderColor: pill.border, backgroundColor: pill.bg }]}
+              onPress={openStatus}>
+              {pill.showDot && (
+                <View style={[cd.statusDot, { backgroundColor: pill.dot }]} />
+              )}
+              <Text style={[cd.statusTxt, { color: pill.text }]}>{cfg.label}</Text>
+              <Ionicons name="chevron-down" size={11} color={pill.text} />
+            </Pressable>
+          </View>
         )}
       </View>
 
@@ -621,33 +716,41 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
 
 // ── Order List Row ────────────────────────────────────────────────────────────
 function OrderListRow({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint, isUpdating }: { order: Order } & ActionProps) {
-  const { colors: c } = useTheme();
-  const lr = useMemo(() => mkLr(c), [c]);
+  const { colors: c, isDark } = useTheme();
+  const lr = useMemo(() => mkLr(c, isDark), [c, isDark]);
   const [showAction, setShowAction] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   const [actionPos,  setActionPos]  = useState<DropPos | null>(null);
   const [statusPos,  setStatusPos]  = useState<DropPos | null>(null);
 
+  const menuAnchorRef   = useRef<View>(null);
+  const statusAnchorRef = useRef<View>(null);
+
   const menuId   = `ord-lact-${order.id}`;
   const statusId = `ord-lsts-${order.id}`;
 
   function openAction() {
-    setActionPos(measureDrop(menuId, 228, 280));
-    setShowAction(true);
+    measureAnchor(menuAnchorRef, 228, 280, (p) => {
+      setActionPos(p);
+      setShowAction(true);
+    });
   }
   function openStatus() {
-    setStatusPos(measureDrop(statusId, 200, 260));
-    setShowStatus(true);
+    measureAnchor(statusAnchorRef, 200, 260, (p) => {
+      setStatusPos(p);
+      setShowStatus(true);
+    });
   }
   function openStatusFromAction() {
     setShowAction(false);
     setTimeout(() => openStatus(), 50);
   }
 
-  const cfg    = sCfg(order.status);
+  const cfg    = sCfg(order.status, isDark);
+  const pill   = statusPillLook(order.status, isDark, c);
   const isPaid = order.payment_status === 'paid';
   const agg    = isAgg(order);
-  const srcC   = SOURCE_CFG[(order.source ?? 'pos') as keyof typeof SOURCE_CFG] ?? SOURCE_CFG.pos;
+  const srcC   = srcCfg(order.source ?? 'pos', isDark);
 
   return (
     <View style={lr.row}>
@@ -681,29 +784,35 @@ function OrderListRow({ order, onStatusChange, onPaymentChange, onMarkPaid, onPr
         <Text style={lr.total}>₹{Number(order.total ?? 0).toFixed(2)}</Text>
       </View>
       <View style={lr.c6}>
-        {/* Status chip — nativeID for measurement */}
-        <Pressable nativeID={statusId}
-          style={[lr.statusChip, { backgroundColor: cfg.bg, borderColor: cfg.border }]}
-          onPress={openStatus}>
-          <View style={[lr.statusDot, { backgroundColor: cfg.dot }]} />
-          <Text style={[lr.statusTxt, { color: cfg.text }]}>{cfg.label}</Text>
-        </Pressable>
+        {/* Status chip */}
+        <View ref={statusAnchorRef} collapsable={false}>
+          <Pressable nativeID={statusId}
+            style={[lr.statusChip, { backgroundColor: pill.bg, borderColor: pill.border }]}
+            onPress={openStatus}>
+            {pill.showDot && (
+              <View style={[lr.statusDot, { backgroundColor: pill.dot }]} />
+            )}
+            <Text style={[lr.statusTxt, { color: pill.text }]}>{cfg.label}</Text>
+            <Ionicons name="chevron-down" size={10} color={pill.text} style={{ marginLeft: 2 }} />
+          </Pressable>
+        </View>
       </View>
       <View style={lr.c7}>
         <View style={[lr.payChip, isPaid ? lr.paidChip : lr.unpaidChip]}>
-          <Text style={[lr.payTxt, { color: isPaid ? '#16a34a' : '#d97706' }]}>
+          <Text style={[lr.payTxt, { color: isPaid ? c.success : c.warning }]}>
             {isPaid ? 'Paid' : 'Unpaid'}
           </Text>
         </View>
         {!agg && (
-          <View style={{ flexDirection: 'row', gap: 3, marginTop: 4 }}>
-            {(['cash','card','upi'] as const).map(pm => {
+          <View style={lr.paySegRow}>
+            {(['cash','card','upi'] as const).map((pm, idx, arr) => {
               const active = (order.payment_method ?? '') === pm;
+              const isLast = idx === arr.length - 1;
               return (
                 <Pressable key={pm} disabled={isUpdating}
-                  style={[lr.pmBtn, active && lr.pmBtnActive]}
+                  style={[lr.pmBtn, isLast && lr.pmBtnLast, active && lr.pmBtnActive]}
                   onPress={() => onPaymentChange(order.id, pm)}>
-                  <Text style={[lr.pmTxt, active && { color: '#fff' }]}>
+                  <Text style={[lr.pmTxt, active && lr.pmTxtActive]}>
                     {pm === 'upi' ? 'UPI' : pm.charAt(0).toUpperCase()+pm.slice(1)}
                   </Text>
                 </Pressable>
@@ -727,17 +836,19 @@ function OrderListRow({ order, onStatusChange, onPaymentChange, onMarkPaid, onPr
         )}
         <View style={{ flexDirection: 'row', gap: 4 }}>
           {Platform.OS === 'web' && (
-            <Pressable style={[lr.iconBtn, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}
-              onPress={() => onPrint(order)}>
-              <Ionicons name="print-outline" size={13} color={PRIMARY} />
+            <Pressable style={lr.printBtn} onPress={() => onPrint(order)}>
+              <Ionicons name="print-outline" size={13} color="#fff" />
+              <Text style={lr.printBtnTxt}>Print</Text>
             </Pressable>
           )}
-          {/* Three-dot button — nativeID for measurement */}
-          <Pressable nativeID={menuId}
-            style={[lr.iconBtn, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}
-            onPress={openAction}>
-            <Ionicons name="ellipsis-horizontal" size={13} color={c.textMuted} />
-          </Pressable>
+          {/* Three-dot menu */}
+          <View ref={menuAnchorRef} collapsable={false}>
+            <Pressable nativeID={menuId}
+              style={[lr.iconBtn, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}
+              onPress={openAction}>
+              <Ionicons name="ellipsis-horizontal" size={13} color={c.textMuted} />
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -769,9 +880,9 @@ function OrderListRow({ order, onStatusChange, onPaymentChange, onMarkPaid, onPr
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function OrdersScreen() {
-  const { colors: c } = useTheme();
-  const s  = useMemo(() => mkS(c),  [c]);
-  const lr = useMemo(() => mkLr(c), [c]);
+  const { colors: c, isDark } = useTheme();
+  const s  = useMemo(() => mkS(c, isDark),  [c, isDark]);
+  const lr = useMemo(() => mkLr(c, isDark), [c, isDark]);
   const [orders,     setOrders]     = useState<Order[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1010,7 +1121,7 @@ export default function OrdersScreen() {
           <Text style={s.toastTxt} numberOfLines={2}>{toastMsg}</Text>
         </View>
       )}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, alignSelf: 'stretch', maxWidth: '100%' }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={c.brand} />}
         showsVerticalScrollIndicator={false}>
 
@@ -1024,7 +1135,7 @@ export default function OrdersScreen() {
                   <Text style={s.statLabel}>{sc.label}</Text>
                   <Text style={s.statNum}>{statCounts[sc.key] ?? 0}</Text>
                 </View>
-                <View style={[s.statIconBox, { backgroundColor: sc.bg }]}>
+                <View style={[s.statIconBox, { backgroundColor: isDark ? sc.bgDark : sc.bg }]}>
                   <Ionicons name={sc.icon} size={22} color={sc.color} />
                 </View>
               </View>
@@ -1038,9 +1149,9 @@ export default function OrdersScreen() {
             {TABS.map(t => {
               const active = tab === t.key;
               const count  = tabCounts[t.key];
-              const accent = t.key === 'paid' ? '#16a34a' : t.key === 'unpaid' ? '#d97706' : c.sidebar;
+              const accent = t.key === 'paid' ? c.success : t.key === 'unpaid' ? c.warning : c.primary;
               return (
-                <Pressable key={t.key} style={[s.tabPill, active && { backgroundColor: accent }]}
+                <Pressable key={t.key} style={[s.tabPill, active && s.tabPillActive, active && { backgroundColor: accent, borderColor: accent }]}
                   onPress={() => setTab(t.key)}>
                   <Text style={[s.tabPillTxt, active && { color: '#fff' }]}>{t.label}</Text>
                   {count > 0 && (
@@ -1062,7 +1173,7 @@ export default function OrdersScreen() {
               if (src.key !== 'all' && cnt === 0) return null;
               return (
                 <Pressable key={src.key}
-                  style={[s.srcChip, active && (sc ? { backgroundColor: sc.color, borderColor: sc.color } : { backgroundColor: c.sidebar, borderColor: c.sidebar })]}
+                  style={[s.srcChip, active && s.srcChipActive, active && (sc ? { backgroundColor: sc.color, borderColor: sc.color } : { backgroundColor: c.primary, borderColor: c.primary })]}
                   onPress={() => setSrcFilter(src.key)}>
                   {sc && !active && <View style={[s.srcDot, { backgroundColor: sc.dot }]} />}
                   <Text style={[s.srcChipTxt, active && { color: '#fff' }]}>{src.label}</Text>
@@ -1123,7 +1234,7 @@ export default function OrdersScreen() {
               />
               {search ? (
                 <Pressable onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="close-circle" size={18} color="#9ca3af" />
+                  <Ionicons name="close-circle" size={18} color={c.textMuted} />
                 </Pressable>
               ) : null}
             </View>
@@ -1203,8 +1314,8 @@ export default function OrdersScreen() {
           </View>
         ) : (
           <View style={s.listWrap}>
-            <ScrollView horizontal showsHorizontalScrollIndicator>
-              <View style={{ minWidth: isDesktop ? contentW - 24 : 940 }}>
+            {isDesktop ? (
+              <View style={s.listTableWrap}>
                 <View style={lr.header}>
                   {['Order','Customer','Type','Items','Total','Status','Payment','Actions'].map((h, i) => (
                     <Text key={h} style={[lr.hCell, [lr.c1,lr.c2,lr.c3,lr.c4,lr.c5,lr.c6,lr.c7,lr.c8][i]]}>{h}</Text>
@@ -1216,7 +1327,22 @@ export default function OrdersScreen() {
                   </View>
                 ))}
               </View>
-            </ScrollView>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator>
+                <View style={[s.listTableWrap, s.listTableInner]}>
+                  <View style={lr.header}>
+                    {['Order','Customer','Type','Items','Total','Status','Payment','Actions'].map((h, i) => (
+                      <Text key={h} style={[lr.hCell, [lr.c1,lr.c2,lr.c3,lr.c4,lr.c5,lr.c6,lr.c7,lr.c8][i]]}>{h}</Text>
+                    ))}
+                  </View>
+                  {filtered.map((o, idx) => (
+                    <View key={o.id} style={idx % 2 === 1 ? { backgroundColor: c.surfaceAlt } : {}}>
+                      <OrderListRow order={o} {...actionProps} />
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
           </View>
         )}
         <View style={{ height: 48 }} />
@@ -1226,18 +1352,18 @@ export default function OrdersScreen() {
 }
 
 // ── StyleSheet factory functions (theme-aware) ────────────────────────────────
-function mkS(c: ThemeColors) {
+function mkS(c: ThemeColors, isDark: boolean) {
   return StyleSheet.create({
     shell:          { flex: 1, backgroundColor: c.background },
-    toast:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#dc2626', paddingHorizontal: 16, paddingVertical: 12, zIndex: 99 },
+    toast:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.danger, paddingHorizontal: 16, paddingVertical: 12, zIndex: 99 },
     toastTxt:       { flex: 1, fontSize: 13, color: '#fff', fontWeight: '600' },
     aggBanner:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14, zIndex: 100 },
-    aggBannerZomato:{ backgroundColor: '#dc2626' },
-    aggBannerSwiggy:{ backgroundColor: '#ea580c' },
+    aggBannerZomato:{ backgroundColor: c.danger },
+    aggBannerSwiggy:{ backgroundColor: S.orange },
     aggBannerIcon:  { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
     aggBannerTitle: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
     aggBannerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 3 },
-    qrBanner:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14, zIndex: 100, backgroundColor: '#7c3aed' },
+    qrBanner:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14, zIndex: 100, backgroundColor: S.purple },
     qrBannerIcon:   { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
     statsScroll:    { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
     statsRow:       { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 14, paddingVertical: 14, gap: 10 },
@@ -1245,7 +1371,7 @@ function mkS(c: ThemeColors) {
       minWidth: 152, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       backgroundColor: c.surface, borderRadius: 14, padding: 14,
       borderWidth: 1, borderColor: c.border,
-      shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+      shadowColor: '#000', shadowOpacity: isDark ? 0.2 : 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
     },
     statLabel:      { fontSize: 11.5, fontWeight: '600', color: c.textMuted, marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.4 },
     statNum:        { fontSize: 28, fontWeight: '900', color: c.heading, letterSpacing: -1 },
@@ -1254,12 +1380,13 @@ function mkS(c: ThemeColors) {
     tabRow:         { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, gap: 6 },
     tabPill:        {
       flexDirection: 'row', alignItems: 'center', gap: 5,
-      paddingHorizontal: 14, paddingVertical: 8, borderRadius: 22,
-      backgroundColor: c.surfaceAlt, borderWidth: 1.5, borderColor: 'transparent',
+      paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+      backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
     },
-    tabPillTxt:     { fontSize: 13, fontWeight: '700', color: c.text },
+    tabPillActive:  { shadowColor: '#000', shadowOpacity: isDark ? 0.25 : 0.08, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 2 },
+    tabPillTxt:     { fontSize: 13, fontWeight: '600', color: c.heading },
     tabCount:       {
-      backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 10,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)', borderRadius: 10,
       minWidth: 20, paddingHorizontal: 6, paddingVertical: 1,
       alignItems: 'center', justifyContent: 'center',
     },
@@ -1267,25 +1394,27 @@ function mkS(c: ThemeColors) {
     row2:           { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, gap: 6 },
     srcChip:        {
       flexDirection: 'row', alignItems: 'center', gap: 4,
-      paddingHorizontal: 11, paddingVertical: 6, borderRadius: 18,
-      borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surfaceAlt,
+      paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
+      borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
     },
+    srcChipActive:  { shadowColor: '#000', shadowOpacity: isDark ? 0.2 : 0.06, shadowRadius: 3, elevation: 1 },
     srcDot:         { width: 6, height: 6, borderRadius: 3 },
     srcChipTxt:     { fontSize: 12.5, fontWeight: '700', color: c.text },
-    srcCount:       { backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1 },
+    srcCount:       { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1 },
     srcCountTxt:    { fontSize: 10, fontWeight: '800', color: c.text },
     divider:        { width: 1, height: 22, backgroundColor: c.border, marginHorizontal: 4 },
     datePill:       {
       flexDirection: 'row', alignItems: 'center', gap: 4,
-      paddingHorizontal: 11, paddingVertical: 6, borderRadius: 18,
-      borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surfaceAlt,
+      paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
+      borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
     },
-    datePillActive: { backgroundColor: c.sidebar, borderColor: c.sidebar },
+    datePillActive: { backgroundColor: c.primary, borderColor: c.primary },
     datePillTxt:    { fontSize: 12.5, fontWeight: '600', color: c.text },
-    row3:           { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 12 },
+    row3:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingHorizontal: 14, paddingBottom: 12 },
     row3Mobile:     { paddingHorizontal: 12, paddingBottom: 8, paddingTop: 0 },
     searchBox:      {
-      flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      width: 280, maxWidth: 280, flexGrow: 0, flexShrink: 0,
       backgroundColor: c.surfaceAlt, borderRadius: 12,
       paddingHorizontal: 12, paddingVertical: 10,
       borderWidth: 1.5, borderColor: c.border,
@@ -1309,10 +1438,10 @@ function mkS(c: ThemeColors) {
       padding: 3, gap: 2,
     },
     viewBtn:        { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
-    viewBtnActive:  { backgroundColor: c.sidebar },
+    viewBtnActive:  { backgroundColor: c.primary },
     activeFilters:  { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingBottom: 10 },
     activeFiltersTxt: { flex: 1, fontSize: 12, color: c.textMuted, fontWeight: '500' },
-    clearFilters:   { fontSize: 12, fontWeight: '700', color: '#dc2626' },
+    clearFilters:   { fontSize: 12, fontWeight: '700', color: c.danger },
     resultsBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 10 },
     resultsCount:   { fontSize: 12, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.7 },
     loadWrap:       { paddingTop: 100, alignItems: 'center', gap: 14 },
@@ -1324,17 +1453,19 @@ function mkS(c: ThemeColors) {
     grid:           { padding: 8, width: '100%' },
     gridRow:        { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
     listWrap:       {
-      margin: 14, backgroundColor: c.surface, borderRadius: 16, overflow: 'hidden',
-      borderWidth: 1, borderColor: c.border,
-      shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+      marginHorizontal: 14, marginTop: 8, marginBottom: 14,
+      backgroundColor: c.surface, borderRadius: 16, overflow: 'hidden',
+      borderWidth: 1, borderColor: c.border, alignSelf: 'stretch', maxWidth: '100%',
+      shadowColor: '#000', shadowOpacity: isDark ? 0.2 : 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: 2,
     },
+    listTableWrap:  { width: '100%', alignSelf: 'stretch' },
+    listTableInner: { minWidth: 940 },
   });
 }
 
 function mkDd(c: ThemeColors) {
   return StyleSheet.create({
     panel: {
-      position: 'absolute',
       backgroundColor: c.surface,
       borderRadius: 16,
       borderWidth: 1,
@@ -1345,7 +1476,6 @@ function mkDd(c: ThemeColors) {
       shadowOffset: { width: 0, height: 8 },
       elevation: 24,
       paddingVertical: 6,
-      zIndex: 9999,
     },
     header:      { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6 },
     headerTitle: { fontSize: 13.5, fontWeight: '800', color: c.heading },
@@ -1358,85 +1488,106 @@ function mkDd(c: ThemeColors) {
   });
 }
 
-function mkCd(c: ThemeColors) {
+function mkCd(c: ThemeColors, isDark: boolean) {
+  const notesBg    = isDark ? 'rgba(253,175,34,0.12)' : '#fffbeb';
+  const notesText  = isDark ? c.warning : '#92400e';
+  const riderBg    = isDark ? 'rgba(32,136,238,0.12)' : '#f0f9ff';
+  const riderText  = isDark ? c.info : '#0369a1';
+
   return StyleSheet.create({
     wrap:        {
       backgroundColor: c.surface, borderRadius: 16, overflow: 'hidden',
       borderWidth: 1, borderColor: c.border,
-      shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 3 }, elevation: 3,
+      shadowColor: '#000', shadowOpacity: isDark ? 0.25 : 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 3 }, elevation: 3,
     },
-    head:        { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.sidebar, paddingHorizontal: 14, paddingVertical: 13 },
-    headL:       { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
+    head:        { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: c.surface, paddingHorizontal: 14, paddingTop: 13, paddingBottom: 8 },
+    headL:       { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 10, minWidth: 0 },
     avatar:      {
       width: 36, height: 36, borderRadius: 18,
-      backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center',
-      flexShrink: 0, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+      backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0,
     },
-    orderNum:    { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+    orderNum:    { fontSize: 14.5, fontWeight: '800', color: c.heading, letterSpacing: 0.1 },
     srcBadge:    { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7 },
     srcDot:      { width: 5, height: 5, borderRadius: 3 },
     srcTxt:      { fontSize: 10, fontWeight: '800' },
-    headSub:     { fontSize: 12, color: 'rgba(255,255,255,0.60)', marginTop: 2 },
-    headR:       { alignItems: 'flex-end', gap: 5, flexShrink: 0 },
-    time:        { fontSize: 11, color: 'rgba(255,255,255,0.65)', fontWeight: '600' },
-    menuBtn:     { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
-    customerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingTop: 11, paddingBottom: 2 },
-    customerName:{ fontSize: 13, fontWeight: '600', color: c.text, flex: 1 },
-    extId:       { fontSize: 11, color: c.textMuted },
-    itemsWrap:   { paddingHorizontal: 14, paddingTop: 7, paddingBottom: 11, borderBottomWidth: 1, borderBottomColor: c.border },
-    itemRow:     { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 3.5 },
-    itemDot:     { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
-    itemName:    { flex: 1, fontSize: 12.5, color: c.text, lineHeight: 17.5 },
-    itemQty:     { fontSize: 12, fontWeight: '700', color: c.textMuted },
-    itemPrice:   { fontSize: 12, color: c.text, fontWeight: '600' },
-    moreItems:   { fontSize: 12.5, fontWeight: '700', color: PRIMARY, marginTop: 5 },
-    noItems:     { fontSize: 12.5, color: '#f59e0b', fontStyle: 'italic' },
-    notesBox:    { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#fffbeb', borderRadius: 8, padding: 8, marginTop: 7 },
-    notesText:   { flex: 1, fontSize: 12, color: '#92400e', lineHeight: 17 },
-    riderBox:    { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f0f9ff', borderRadius: 8, padding: 8, marginTop: 7 },
-    riderText:   { flex: 1, fontSize: 12, color: '#0369a1', lineHeight: 17 },
-    totalBar:    {
-      flexDirection: 'row', alignItems: 'center',
-      paddingHorizontal: 14, paddingVertical: 11, gap: 8,
-      backgroundColor: c.surfaceAlt, borderBottomWidth: 1, borderBottomColor: c.border,
+    headSub:     { fontSize: 12, color: c.textMuted, marginTop: 3 },
+    menuBtn:     { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    totalRow:    {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+      paddingHorizontal: 14, paddingBottom: 10,
+      borderBottomWidth: 1, borderBottomColor: c.border,
     },
-    totalAmt:    { fontSize: 20, fontWeight: '800', color: c.heading, letterSpacing: -0.5 },
-    payMethodRow:{ flexDirection: 'row', gap: 5 },
-    pmBtn:       { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surface },
-    pmBtnActive: { backgroundColor: c.sidebar, borderColor: c.sidebar },
-    pmText:      { fontSize: 11.5, fontWeight: '700', color: c.text },
+    time:        { fontSize: 11, color: c.textMuted, fontWeight: '500', flexShrink: 1, textAlign: 'right' },
+    itemsWrap:   { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10 },
+    itemLine:    { fontSize: 12.5, lineHeight: 20, marginBottom: 4, color: c.text },
+    itemName:    { color: c.text },
+    itemQty:     { color: c.textMuted, fontWeight: '600' },
+    itemPriceOrange: { color: S.orange, fontWeight: '700' },
+    moreItems:   { fontSize: 12.5, fontWeight: '700', color: c.primary, marginTop: 5 },
+    noItems:     { fontSize: 12.5, color: c.warning, fontStyle: 'italic' },
+    notesBox:    { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: notesBg, borderRadius: 8, padding: 8, marginTop: 7 },
+    notesText:   { flex: 1, fontSize: 12, color: notesText, lineHeight: 17 },
+    riderBox:    { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: riderBg, borderRadius: 8, padding: 8, marginTop: 7 },
+    riderText:   { flex: 1, fontSize: 12, color: riderText, lineHeight: 17 },
+    totalAmt:    { fontSize: 16, fontWeight: '800', color: c.heading, letterSpacing: -0.3, flex: 1 },
+    actionRow:   { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border },
+    outlineOrangeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: S.orange, backgroundColor: 'transparent' },
+    outlineOrangeTxt: { fontSize: 12, fontWeight: '700', color: S.orange },
+    solidPrimaryBtn:  { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, borderRadius: 6, backgroundColor: c.primary },
+    solidPrimaryTxt:  { fontSize: 12, fontWeight: '700', color: '#fff' },
+    outlineNeutralBtn:{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.35)' : c.border, backgroundColor: 'transparent' },
+    outlineNeutralTxt:{ fontSize: 12, fontWeight: '700', color: isDark ? '#fff' : c.heading },
+    payRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border, flexWrap: 'wrap' },
+    payLabel:    { fontSize: 12, fontWeight: '700', color: S.orange },
+    payMethodRow:{ flexDirection: 'row', borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: S.orange },
+    pmBtn:       { paddingHorizontal: 14, paddingVertical: 7, backgroundColor: 'transparent', borderRightWidth: 1, borderRightColor: S.orange },
+    pmBtnLast:   { borderRightWidth: 0 },
+    pmBtnActive: { backgroundColor: c.primary, borderRightColor: c.primary },
+    pmText:      { fontSize: 12, fontWeight: '700', color: S.orange },
+    pmTextActive:{ color: '#fff' },
     footer:      { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10, flexWrap: 'wrap' },
-    payPill:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
+    payPill:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 0, paddingVertical: 0 },
     payDot:      { width: 6, height: 6, borderRadius: 3 },
-    payText:     { fontSize: 11.5, fontWeight: '700' },
-    paidPill:    { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
-    unpaidPill:  { backgroundColor: '#fff7ed', borderColor: '#fde68a' },
-    markPaidBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: '#16a34a' },
-    markPaidTxt: { fontSize: 11.5, fontWeight: '700', color: '#fff' },
-    statusPill:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
+    payText:     { fontSize: 12, fontWeight: '700' },
+    paidPill:    { backgroundColor: 'transparent', borderWidth: 0 },
+    unpaidPill:  { backgroundColor: 'transparent', borderWidth: 0 },
+    markPaidBtn:   { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: c.primary },
+    markPaidTxt:   { fontSize: 12, fontWeight: '700', color: '#fff' },
+    markUnpaidBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: S.orange, backgroundColor: 'transparent' },
+    markUnpaidTxt: { fontSize: 12, fontWeight: '700', color: S.orange },
+    statusPill:  {
+      flexDirection: 'row', alignItems: 'center', gap: 5,
+      paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1,
+      backgroundColor: 'transparent',
+    },
     statusDot:   { width: 7, height: 7, borderRadius: 4 },
     statusTxt:   { fontSize: 12, fontWeight: '700' },
-    acceptBtn:   { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#16a34a' },
+    acceptBtn:   { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6, backgroundColor: c.success },
     acceptTxt:   { fontSize: 12, fontWeight: '700', color: '#fff' },
-    rejectBtn:   { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1.5, borderColor: '#dc2626' },
-    rejectTxt:   { fontSize: 12, fontWeight: '700', color: '#dc2626' },
-    iconBtn:     { width: 32, height: 32, borderRadius: 8, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+    rejectBtn:   { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6, borderWidth: 1, borderColor: c.danger, backgroundColor: c.surface },
+    rejectTxt:   { fontSize: 12, fontWeight: '700', color: c.danger },
   });
 }
 
-function mkLr(c: ThemeColors) {
+function mkLr(c: ThemeColors, isDark: boolean) {
+  const paidBg     = isDark ? 'rgba(20,181,29,0.15)'  : '#ecfdf5';
+  const paidBorder = isDark ? 'rgba(20,181,29,0.35)'  : '#bbf7d0';
+  const unpaidBg     = isDark ? 'rgba(253,175,34,0.15)' : '#fff7ed';
+  const unpaidBorder = isDark ? 'rgba(253,175,34,0.35)' : '#fde68a';
+
   return StyleSheet.create({
-    header:    { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceAlt, paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: c.border },
-    hCell:     { fontSize: 11, fontWeight: '800', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
-    row:       { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 13, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: c.border },
-    c1: { width: 155, paddingRight: 8 },
-    c2: { width: 130, paddingRight: 8 },
-    c3: { width: 110, paddingRight: 8 },
-    c4: { width: 58,  paddingRight: 8 },
-    c5: { width: 80,  paddingRight: 8 },
-    c6: { width: 110, paddingRight: 8 },
-    c7: { width: 140, paddingRight: 8 },
-    c8: { width: 150 },
+    header:    { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceAlt, paddingVertical: 11, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: c.border, width: '100%' },
+    hCell:     { fontSize: 11, fontWeight: '800', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+    row:       { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: c.border, width: '100%' },
+    c1: { flex: 1.35, minWidth: 0, paddingRight: 8 },
+    c2: { flex: 1.2, minWidth: 0, paddingRight: 8 },
+    c3: { flex: 0.85, minWidth: 0, paddingRight: 8 },
+    c4: { flex: 0.45, minWidth: 40, paddingRight: 8, alignItems: 'center' },
+    c5: { flex: 0.65, minWidth: 72, paddingRight: 8, alignItems: 'flex-end' },
+    c6: { flex: 0.95, minWidth: 0, paddingRight: 8 },
+    c7: { flex: 1.15, minWidth: 0, paddingRight: 8 },
+    c8: { flex: 1, minWidth: 100, alignItems: 'flex-end' },
     orderNum:  { fontSize: 13.5, fontWeight: '800', color: c.brand },
     srcChip:   { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
     srcDot:    { width: 5, height: 5, borderRadius: 3 },
@@ -1447,21 +1598,26 @@ function mkLr(c: ThemeColors) {
     countBadge:{ backgroundColor: c.surfaceAlt, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 3, alignSelf: 'center' },
     countTxt:  { fontSize: 12.5, fontWeight: '700', color: c.textMuted },
     total:     { fontSize: 14, fontWeight: '800', color: c.heading },
-    statusChip:{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 9, borderWidth: 1, alignSelf: 'flex-start' },
+    statusChip:{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, alignSelf: 'flex-start' },
     statusDot: { width: 6, height: 6, borderRadius: 3 },
     statusTxt: { fontSize: 12, fontWeight: '700' },
     payChip:   { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20, borderWidth: 1, alignSelf: 'flex-start' },
-    paidChip:  { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
-    unpaidChip:{ backgroundColor: '#fff7ed', borderColor: '#fde68a' },
+    paidChip:  { backgroundColor: paidBg, borderColor: paidBorder },
+    unpaidChip:{ backgroundColor: unpaidBg, borderColor: unpaidBorder },
     payTxt:    { fontSize: 11.5, fontWeight: '700' },
-    pmBtn:     { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
-    pmBtnActive: { backgroundColor: c.sidebar, borderColor: c.sidebar },
-    pmTxt:     { fontSize: 10.5, fontWeight: '700', color: c.text },
-    acceptBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 7, backgroundColor: '#16a34a' },
-    acceptTxt: { fontSize: 11.5, fontWeight: '700', color: '#fff' },
-    rejectBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 7, borderWidth: 1.5, borderColor: '#dc2626', backgroundColor: 'transparent' },
-    rejectTxt: { fontSize: 11.5, fontWeight: '700', color: '#dc2626' },
-    iconBtn:   { width: 30, height: 30, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+    paySegRow:   { flexDirection: 'row', borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: S.orange, marginTop: 4, alignSelf: 'flex-start' },
+    pmBtn:       { paddingHorizontal: 10, paddingVertical: 5, backgroundColor: c.surface, borderRightWidth: 1, borderRightColor: S.orange },
+    pmBtnLast:   { borderRightWidth: 0 },
+    pmBtnActive: { backgroundColor: c.primary, borderRightColor: c.primary },
+    pmTxt:       { fontSize: 10.5, fontWeight: '700', color: S.orange },
+    pmTxtActive: { color: '#fff' },
+    acceptBtn:   { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: c.success },
+    acceptTxt:   { fontSize: 11.5, fontWeight: '700', color: '#fff' },
+    rejectBtn:   { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: c.danger, backgroundColor: c.surface },
+    rejectTxt:   { fontSize: 11.5, fontWeight: '700', color: c.danger },
+    printBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: c.primary },
+    printBtnTxt: { fontSize: 11.5, fontWeight: '700', color: '#fff' },
+    iconBtn:     { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
   });
 }
 

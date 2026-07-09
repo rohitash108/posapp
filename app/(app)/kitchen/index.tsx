@@ -40,12 +40,12 @@ const SOURCE_CFG = {
   qr:     { label: 'QR',     color: '#7c3aed', bg: 'rgba(124,58,237,0.1)'  },
 };
 
-// Stat card config
+// Stat card config (matches Coupons stats bar style)
 const STAT_CARDS = [
-  { key: 'pending',   label: 'Pending',    icon: 'time-outline'           as const, accent: '#f59e0b', bg: 'rgba(245,158,11,0.12)'  },
-  { key: 'inKitchen', label: 'In Kitchen', icon: 'flame-outline'          as const, accent: '#8b5cf6', bg: 'rgba(139,92,246,0.12)'  },
-  { key: 'ready',     label: 'Ready',      icon: 'checkmark-circle-outline'as const, accent: '#10b981', bg: 'rgba(16,185,129,0.12)' },
-  { key: 'completed', label: 'Done Today', icon: 'trophy-outline'         as const, accent: '#06b6d4', bg: 'rgba(6,182,212,0.12)'   },
+  { key: 'pending',   label: 'Pending',    icon: 'time-outline'            as const, accent: '#f59e0b' },
+  { key: 'inKitchen', label: 'In Kitchen', icon: 'flame-outline'           as const, accent: '#8b5cf6' },
+  { key: 'ready',     label: 'Ready',      icon: 'checkmark-circle-outline' as const, accent: '#16a34a' },
+  { key: 'completed', label: 'Done Today', icon: 'trophy-outline'          as const, accent: '#06b6d4' },
 ] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -91,20 +91,19 @@ function createStyles(c: ThemeColors) {
     retryBtn:  { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 6, backgroundColor: '#dc2626' },
     retryTxt:  { fontSize: 12, fontWeight: '700', color: '#fff' },
 
-    // ── Header (dark green accent) ──────────────────────
-    header:    { backgroundColor: '#1A2B1A', paddingHorizontal: 16, paddingBottom: 14 },
-    titleRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-    titleLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    iconBubble:{ width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
-    title:     { fontSize: 20, fontWeight: '800', color: '#ffffff', letterSpacing: 0.2 },
-    subtitle:  { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1, letterSpacing: 0.5 },
-    refreshBtn:{ width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+    // ── Page header (Inventory style) ───────────────────
+    topbar:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    pageTitle:   { fontSize: 18, fontWeight: '800', color: c.heading },
+    pageSub:     { fontSize: 11, color: c.textMuted, marginTop: 1 },
+    refreshBtn:  { width: 34, height: 34, borderRadius: 10, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.border },
 
-    // ── Stat cards ──────────────────────────────────────
-    statsRow:  { flexDirection: 'row', gap: 8 },
-    statCard:  { flex: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 10, alignItems: 'center', gap: 4 },
-    statNum:   { fontSize: 20, fontWeight: '800', color: '#fff' },
-    statLbl:   { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.65)', letterSpacing: 0.3, textAlign: 'center' },
+    // ── Stats bar (Coupons parity) ───────────────────────
+    statsBar:    { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border },
+    statItem:    { flex: 1, alignItems: 'center', gap: 1 },
+    statIcon:    { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginBottom: 1 },
+    statVal:     { fontSize: 14, fontWeight: '800' },
+    statLbl:     { fontSize: 9, color: c.textMuted, textAlign: 'center' },
+    statDivider: { width: 1, height: 28, backgroundColor: c.border },
 
     // ── Filter bar ──────────────────────────────────────
     filterBar:   { backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, paddingVertical: 10, gap: 8 },
@@ -122,20 +121,20 @@ function createStyles(c: ThemeColors) {
     listContent: { padding: 10, gap: 10, flexGrow: 1 },
     colWrap:     { gap: 10, alignItems: 'stretch' },
 
-    // ── Card ────────────────────────────────────────────
-    card:        { backgroundColor: c.surface, borderRadius: 14, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 4, borderWidth: 1, borderColor: c.border },
-    cardUrgent:  { borderColor: '#fca5a5' },
-    cardAccent:  { height: 3 },
+    // ── Card (Coupons card shell) ───────────────────────
+    card:        { backgroundColor: c.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: c.border, borderLeftWidth: 4, borderLeftColor: c.brand, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+    cardUrgent:  { borderLeftColor: '#ef4444' },
+    cardAccent:  { display: 'none' },
 
     // Card header
-    cardHead:     { flexDirection: 'row', alignItems: 'center', backgroundColor: c.sidebar, paddingHorizontal: 13, paddingVertical: 11, gap: 10 },
+    cardHead:     { flexDirection: 'row', alignItems: 'center', paddingBottom: 10, gap: 10, borderBottomWidth: 1, borderBottomColor: c.border, marginBottom: 10 },
     cardHeadL:    { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
-    cardAvatar:   { width: 38, height: 38, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-    cardCustomer: { fontSize: 13.5, fontWeight: '700', color: c.sidebarText },
-    cardOrderType:{ fontSize: 11, color: c.sidebarTextMuted, marginTop: 2, letterSpacing: 0.2 },
+    cardAvatar:   { width: 34, height: 34, borderRadius: 9, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    cardCustomer: { fontSize: 14, fontWeight: '800', color: c.heading },
+    cardOrderType:{ fontSize: 11, color: c.textMuted, marginTop: 2 },
     cardHeadR:    { alignItems: 'flex-end', gap: 4, flexShrink: 0 },
-    orderNumBadge:{ backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 6, paddingHorizontal: 9, paddingVertical: 3 },
-    orderNumTxt:  { fontSize: 11, fontWeight: '800', color: '#111827' },
+    orderNumBadge:{ backgroundColor: '#fefce8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#fef08a' },
+    orderNumTxt:  { fontSize: 12, fontWeight: '900', color: c.heading, letterSpacing: 0.5 },
     srcBadge:     { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1 },
     srcBadgeTxt:  { fontSize: 10, fontWeight: '800' },
     extId:        { fontSize: 10, color: c.sidebarTextMuted },
@@ -145,12 +144,12 @@ function createStyles(c: ThemeColors) {
     timerTxt:     { fontSize: 10.5, fontWeight: '700' },
 
     // Card info row
-    cardInfo:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 13, paddingVertical: 8, backgroundColor: c.surfaceAlt, borderBottomWidth: 1, borderBottomColor: c.border },
+    cardInfo:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 8, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: c.border },
     cardInfoLbl:  { fontSize: 12, color: c.text, fontWeight: '600' },
     cardInfoDate: { fontSize: 11, color: c.textMuted },
 
     // Items
-    cardBody:  { paddingHorizontal: 13, paddingTop: 10, paddingBottom: 8, gap: 6 },
+    cardBody:  { gap: 6 },
     noItems:   { fontSize: 12, color: '#f59e0b', fontStyle: 'italic' },
     itemRow:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
     itemDot:   { width: 7, height: 7, borderRadius: 4, backgroundColor: '#10b981', flexShrink: 0 },
@@ -168,7 +167,7 @@ function createStyles(c: ThemeColors) {
     notesTxt:  { color: '#92400e', fontStyle: 'italic' },
 
     // Footer
-    cardFoot:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 13, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border, gap: 6 },
+    cardFoot:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, marginTop: 8, borderTopWidth: 1, borderTopColor: c.border, gap: 6 },
     statusBadge:{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
     statusDot:  { width: 7, height: 7, borderRadius: 4 },
     statusTxt:  { fontSize: 11.5, fontWeight: '700' },
@@ -331,42 +330,37 @@ export default function KitchenScreen() {
         </View>
       ) : null}
 
-      {/* ── Header (dark green) ──────────────────────────── */}
-      <View style={[s.header, { paddingTop: insets.top + 14 }]}>
-        {/* Title row */}
-        <View style={s.titleRow}>
-          <View style={s.titleLeft}>
-            <View style={s.iconBubble}>
-              <Ionicons name="restaurant-outline" size={18} color="#fff" />
-            </View>
-            <View>
-              <Text style={s.title}>Kitchen</Text>
-              <Text style={s.subtitle}>LIVE ORDER DISPLAY</Text>
-            </View>
-          </View>
-          <Pressable
-            onPress={() => { setRefreshing(true); load(); }}
-            style={({ pressed }) => [s.refreshBtn, (loading || refreshing || pressed) && { opacity: 0.6 }]}
-            disabled={loading || refreshing}
-          >
-            {refreshing
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Ionicons name="refresh-outline" size={17} color="#fff" />}
-          </Pressable>
+      {/* ── Page header ─────────────────────────────────── */}
+      <View style={[s.topbar, { paddingTop: insets.top + 12 }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.pageTitle}>Kitchen</Text>
+          <Text style={s.pageSub}>{filtered.length} orders · Live kitchen display</Text>
         </View>
+        <Pressable
+          onPress={() => { setRefreshing(true); load(); }}
+          style={({ pressed }) => [s.refreshBtn, (loading || refreshing || pressed) && { opacity: 0.6 }]}
+          disabled={loading || refreshing}
+        >
+          {refreshing
+            ? <ActivityIndicator size="small" color={colors.brand} />
+            : <Ionicons name="refresh-outline" size={17} color={colors.text} />}
+        </Pressable>
+      </View>
 
-        {/* Stat cards row */}
-        <View style={s.statsRow}>
-          {STAT_CARDS.map(card => (
-            <View key={card.key} style={[s.statCard, { backgroundColor: card.bg }]}>
-              <Ionicons name={card.icon} size={17} color={card.accent} />
-              <Text style={[s.statNum, { color: card.accent }]}>
-                {counts[card.key]}
-              </Text>
-              <Text style={[s.statLbl, { color: card.accent }]}>{card.label}</Text>
+      {/* ── Stats bar (Coupons style) ───────────────────── */}
+      <View style={s.statsBar}>
+        {STAT_CARDS.map((card, i) => (
+          <React.Fragment key={card.key}>
+            {i > 0 && <View style={s.statDivider} />}
+            <View style={s.statItem}>
+              <View style={[s.statIcon, { backgroundColor: card.accent + '18' }]}>
+                <Ionicons name={card.icon} size={14} color={card.accent} />
+              </View>
+              <Text style={[s.statVal, { color: card.accent }]}>{counts[card.key]}</Text>
+              <Text style={s.statLbl}>{card.label}</Text>
             </View>
-          ))}
-        </View>
+          </React.Fragment>
+        ))}
       </View>
 
       {/* ── Filter bar ───────────────────────────────────── */}
@@ -476,6 +470,7 @@ function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
   onAction: (order: Order, status: OrderStatus) => void;
   s: ReturnType<typeof createStyles>;
 }) {
+  const { colors: c } = useTheme();
   const src = order.source ?? 'pos';
   const srcCfg = SOURCE_CFG[src as keyof typeof SOURCE_CFG] ?? SOURCE_CFG.pos;
   const isAgg = src === 'zomato' || src === 'swiggy';
@@ -493,17 +488,14 @@ function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
   return (
     <View style={[s.card, numCols > 1 && { flex: 1 }, isUrgent && s.cardUrgent]}>
 
-      {/* Status accent strip */}
-      <View style={[s.cardAccent, { backgroundColor: statusColor }]} />
-
       {/* ── Card header ─────────────────────────────────── */}
       <View style={s.cardHead}>
         <View style={s.cardHeadL}>
           <View style={s.cardAvatar}>
             <Ionicons
               name={isAgg ? 'bicycle-outline' : 'person-outline'}
-              size={18}
-              color="rgba(255,255,255,0.8)"
+              size={16}
+              color={c.textMuted}
             />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>

@@ -2,7 +2,7 @@
  * Customers Screen — exact match of CSPos Restaurant Admin
  * Columns: #, Customer (name+email), Phone, Orders, Last Order, Balance, Status, Actions
  * Actions: Receive Payment (green wallet) · Edit (yellow pencil) · Delete (red trash)
- * Grid view: card with same info + three actions
+ * Grid view: card with three-dot action menu (Receive payment · Edit · Delete)
  */
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
@@ -20,7 +20,9 @@ import type { ThemeColors } from '@/theme/tokens';
 import type { Customer } from '@/types';
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
-const FOREST  = '#1A2B1A';
+const SIDEBAR_W = 220;
+const GRID_PAD  = 16;
+const GRID_GAP  = 10;
 const GOLD    = '#C9A52A';
 const PRIMARY = '#2563eb';
 const DUE_RED = '#dc2626';
@@ -115,21 +117,25 @@ function mkFm(c: ThemeColors) {
 
 function mkGv(c: ThemeColors) {
   return StyleSheet.create({
-    card:        { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: 'hidden' },
-    cardTop:     { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderBottomWidth: 1, borderBottomColor: c.border },
+    card:        { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: 'visible' },
+    cardTop:     { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderBottomWidth: 1, borderBottomColor: c.border },
     name:        { fontSize: 14, fontWeight: '700', color: c.heading },
     id:          { fontSize: 11, color: c.textMuted, marginTop: 1 },
     cardBody:    { padding: 12, gap: 7 },
     infoRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
     infoVal:     { fontSize: 12.5, color: c.text, flex: 1 },
-    cardActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: c.border },
-    actionBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 9, borderRightWidth: 1, borderRightColor: c.border },
-    payBtn:      { backgroundColor: '#f0fdf4' },
-    editBtn:     { backgroundColor: '#fefce8' },
-    delBtn:      { backgroundColor: '#fff1f2', borderRightWidth: 0 },
-    payTxt:      { fontSize: 12, fontWeight: '700', color: CRE_GRN },
-    editTxt:     { fontSize: 12, fontWeight: '700', color: '#b45309' },
-    delTxt:      { fontSize: 12, fontWeight: '700', color: DUE_RED },
+    topRight:    { alignItems: 'flex-end', gap: 6 },
+    menuWrap:    { position: 'relative', zIndex: 30 },
+    menuBtn:     { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+    dropMenu:    {
+      position: 'absolute', top: 30, right: 0, minWidth: 172, zIndex: 100,
+      backgroundColor: c.surface, borderRadius: 10, borderWidth: 1, borderColor: c.border,
+      shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 12,
+    },
+    dropItem:    { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: c.border },
+    dropItemLast:{ borderBottomWidth: 0 },
+    dropItemTxt: { fontSize: 13.5, color: c.text, fontWeight: '500' },
+    unregNote:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border },
   });
 }
 
@@ -178,10 +184,11 @@ function mkDc(c: ThemeColors) {
 
 function mkS(c: ThemeColors) {
   return StyleSheet.create({
-    header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, paddingVertical: 11, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-    headerTitle: { fontSize: 20, fontWeight: '800', color: c.heading },
+    topbar:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    pageTitle:   { fontSize: 18, fontWeight: '800', color: c.heading },
+    pageSub:     { fontSize: 11, color: c.textMuted, marginTop: 1 },
     iconBtn:     { width: 30, height: 30, borderRadius: 7, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
-    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+    topActions:  { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
     viewToggle:  { flexDirection: 'row', borderRadius: 7, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
     toggleBtn:   { paddingHorizontal: 9, paddingVertical: 7, backgroundColor: c.surface },
     toggleActive:{ backgroundColor: PRIMARY },
@@ -492,9 +499,11 @@ function CustomerFormModal({
 // ── Customer Card (grid view) ──────────────────────────────────────────────────
 function CustomerCard({
   customer: cust, index, isRegistered, onEdit, onDelete, onPay, deleting,
+  menuOpen, onMenuOpen, onMenuClose,
 }: {
   customer: Customer; index: number; isRegistered: boolean;
   onEdit: () => void; onDelete: () => void; onPay: () => void; deleting: boolean;
+  menuOpen: boolean; onMenuOpen: () => void; onMenuClose: () => void;
 }) {
   const { colors: c } = useTheme();
   const gv = useMemo(() => mkGv(c), [c]);
@@ -505,11 +514,51 @@ function CustomerCard({
     <View style={gv.card}>
       <View style={gv.cardTop}>
         <Avatar name={cust.name} size={42} />
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={gv.name} numberOfLines={1}>{cust.name}</Text>
           <Text style={gv.id}>{numStr}</Text>
         </View>
-        <StatusBadge status={cust.status} />
+        <View style={gv.topRight}>
+          <StatusBadge status={cust.status} />
+          {isRegistered ? (
+            <View style={gv.menuWrap}>
+              <Pressable
+                style={({ pressed }) => [gv.menuBtn, pressed && { opacity: 0.6 }]}
+                onPress={(e) => { e.stopPropagation?.(); menuOpen ? onMenuClose() : onMenuOpen(); }}
+                hitSlop={8}
+              >
+                <Ionicons name="ellipsis-vertical" size={18} color={c.textMuted} />
+              </Pressable>
+              {menuOpen && (
+                <View style={gv.dropMenu}>
+                  <Pressable
+                    style={({ pressed }) => [gv.dropItem, pressed && { backgroundColor: c.surfaceAlt }]}
+                    onPress={(e) => { e.stopPropagation?.(); onMenuClose(); onPay(); }}
+                  >
+                    <Ionicons name="wallet-outline" size={16} color={CRE_GRN} />
+                    <Text style={gv.dropItemTxt}>Receive payment</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [gv.dropItem, pressed && { backgroundColor: c.surfaceAlt }]}
+                    onPress={(e) => { e.stopPropagation?.(); onMenuClose(); onEdit(); }}
+                  >
+                    <Ionicons name="create-outline" size={16} color="#b45309" />
+                    <Text style={gv.dropItemTxt}>Edit</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [gv.dropItem, gv.dropItemLast, pressed && { backgroundColor: '#fff1f2' }]}
+                    onPress={(e) => { e.stopPropagation?.(); onMenuClose(); onDelete(); }}
+                  >
+                    {deleting
+                      ? <ActivityIndicator size={14} color={DUE_RED} />
+                      : <Ionicons name="trash-outline" size={16} color={DUE_RED} />}
+                    <Text style={[gv.dropItemTxt, { color: DUE_RED }]}>Delete</Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          ) : null}
+        </View>
       </View>
       <View style={gv.cardBody}>
         <View style={gv.infoRow}>
@@ -531,23 +580,8 @@ function CustomerCard({
           <Text style={[gv.infoVal, { color: bal.color, fontWeight: '700' }]}>{bal.label}</Text>
         </View>
       </View>
-      {isRegistered ? (
-        <View style={gv.cardActions}>
-          <Pressable style={({ pressed }) => [gv.actionBtn, gv.payBtn, pressed && { opacity: 0.7 }]} onPress={onPay}>
-            <Ionicons name="wallet-outline" size={14} color={CRE_GRN} />
-            <Text style={gv.payTxt}>Pay</Text>
-          </Pressable>
-          <Pressable style={({ pressed }) => [gv.actionBtn, gv.editBtn, pressed && { opacity: 0.7 }]} onPress={onEdit}>
-            <Ionicons name="create-outline" size={14} color="#b45309" />
-            <Text style={gv.editTxt}>Edit</Text>
-          </Pressable>
-          <Pressable style={({ pressed }) => [gv.actionBtn, gv.delBtn, pressed && { opacity: 0.7 }]} onPress={onDelete}>
-            {deleting ? <ActivityIndicator size={12} color={DUE_RED} /> : <Ionicons name="trash-outline" size={14} color={DUE_RED} />}
-            <Text style={gv.delTxt}>Delete</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={[gv.cardActions, { justifyContent: 'center', alignItems: 'center', gap: 5, paddingVertical: 10 }]}>
+      {!isRegistered && (
+        <View style={gv.unregNote}>
           <Ionicons name="information-circle-outline" size={13} color={c.textMuted} />
           <Text style={{ fontSize: 12, color: c.textMuted }}>From orders only — not registered</Text>
         </View>
@@ -566,7 +600,9 @@ export default function CustomersScreen() {
   const { width } = useWindowDimensions();
   const insets   = useSafeAreaInsets();
   const isMobile = width < 640;
-  const numCols = width >= 1400 ? 4 : width >= 1060 ? 3 : width >= 700 ? 2 : 1;
+  const hasSidebar = width >= 640;
+  const contentW = hasSidebar ? width - SIDEBAR_W : width;
+  const numCols = contentW >= 1400 ? 4 : contentW >= 1060 ? 3 : contentW >= 700 ? 2 : 1;
 
   const [customers,    setCustomers]    = useState<Customer[]>([]);
   const [loading,      setLoading]      = useState(true);
@@ -578,6 +614,7 @@ export default function CustomersScreen() {
   const [deleting,     setDeleting]     = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
   const [payTarget,    setPayTarget]    = useState<Customer | null>(null);
+  const [menuOpenId,   setMenuOpenId]   = useState<string | number | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -696,22 +733,23 @@ export default function CustomersScreen() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <Pressable style={{ flex: 1, backgroundColor: c.background }}>
+    <Pressable style={{ flex: 1, backgroundColor: c.background }} onPress={() => setMenuOpenId(null)}>
       {/* ── Header ── */}
       {isMobile ? (
-        /* Mobile: two rows */
-        <View style={[s.header, { flexDirection: 'column', alignItems: 'stretch', gap: 8, paddingTop: insets.top + 11, paddingBottom: 11 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={s.headerTitle}>Customer</Text>
+        /* Mobile: title row + search below */
+        <View style={[s.topbar, { flexDirection: 'column', alignItems: 'stretch', gap: 10, paddingTop: insets.top + 12 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.pageTitle}>Customers</Text>
+              <Text style={s.pageSub}>{customers.length} customers</Text>
+            </View>
+            <View style={s.topActions}>
               <Pressable style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]}
                 onPress={() => { setRefreshing(true); load(true); }}>
                 {refreshing
                   ? <ActivityIndicator size="small" color={c.text} />
                   : <Ionicons name="refresh-outline" size={16} color={c.text} />}
               </Pressable>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <View style={s.viewToggle}>
                 <Pressable style={[s.toggleBtn, viewMode === 'grid' && s.toggleActive]} onPress={() => setViewMode('grid')}>
                   <Ionicons name="grid-outline" size={15} color={viewMode === 'grid' ? '#fff' : c.textMuted} />
@@ -726,7 +764,6 @@ export default function CustomersScreen() {
               </Pressable>
             </View>
           </View>
-          {/* Search — full width on mobile */}
           <View style={s.searchBoxMobile}>
             <Ionicons name="search-outline" size={17} color={c.textMuted} />
             <TextInput
@@ -748,18 +785,19 @@ export default function CustomersScreen() {
           </View>
         </View>
       ) : (
-        /* Desktop: single row */
-        <View style={[s.header, { paddingTop: insets.top + 11 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Text style={s.headerTitle}>Customer</Text>
+        /* Desktop: Inventory-style topbar */
+        <View style={[s.topbar, { paddingTop: insets.top + 12 }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.pageTitle}>Customers</Text>
+            <Text style={s.pageSub}>{customers.length} customers</Text>
+          </View>
+          <View style={s.topActions}>
             <Pressable style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.7 }]}
               onPress={() => { setRefreshing(true); load(true); }}>
               {refreshing
                 ? <ActivityIndicator size="small" color={c.text} />
                 : <Ionicons name="refresh-outline" size={16} color={c.text} />}
             </Pressable>
-          </View>
-          <View style={s.headerRight}>
             <View style={s.viewToggle}>
               <Pressable style={[s.toggleBtn, viewMode === 'grid' && s.toggleActive]} onPress={() => setViewMode('grid')}>
                 <Ionicons name="grid-outline" size={15} color={viewMode === 'grid' ? '#fff' : c.textMuted} />
@@ -842,7 +880,8 @@ export default function CustomersScreen() {
         </ScrollView>
       ) : (
         <ScrollView
-          contentContainerStyle={{ padding: 12, gap: 10, flexDirection: 'row', flexWrap: 'wrap' }}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: GRID_PAD, paddingVertical: 12, flexGrow: 1 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={c.brand} />}>
           {filtered.length === 0 ? (
             <View style={[s.emptyWrap, { flex: 1 }]}>
@@ -850,21 +889,33 @@ export default function CustomersScreen() {
               <Text style={s.emptyTitle}>{search ? 'No customers matched' : 'No customers yet'}</Text>
             </View>
           ) : (
-            filtered.map((cust, idx) => {
-              const cardW = Math.floor((width - 24 - 10 * (numCols - 1)) / numCols);
-              return (
-                <View key={cust.id ?? `od_${idx}`} style={{ width: cardW }}>
-                  <CustomerCard
-                    customer={cust} index={idx}
-                    isRegistered={isReg(cust)}
-                    onEdit={() => openEdit(cust)}
-                    onDelete={() => confirmDelete(cust)}
-                    onPay={() => openPay(cust)}
-                    deleting={deleting === cust.id}
-                  />
-                </View>
-              );
-            })
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: '100%' }}>
+              {filtered.map((cust, idx) => {
+                const cardKey = cust.id ?? `od_${idx}`;
+                return (
+                  <View
+                    key={String(cardKey)}
+                    style={{
+                      width: `${100 / numCols}%` as any,
+                      padding: GRID_GAP / 2,
+                      zIndex: menuOpenId === cardKey ? 50 : 1,
+                    }}
+                  >
+                    <CustomerCard
+                      customer={cust} index={idx}
+                      isRegistered={isReg(cust)}
+                      onEdit={() => openEdit(cust)}
+                      onDelete={() => confirmDelete(cust)}
+                      onPay={() => openPay(cust)}
+                      deleting={deleting === cust.id}
+                      menuOpen={menuOpenId === cardKey}
+                      onMenuOpen={() => setMenuOpenId(cardKey)}
+                      onMenuClose={() => setMenuOpenId(null)}
+                    />
+                  </View>
+                );
+              })}
+            </View>
           )}
         </ScrollView>
       )}

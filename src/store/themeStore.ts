@@ -9,6 +9,9 @@ function applyWebTheme(mode: ThemeMode) {
   if (Platform.OS === 'web' && typeof document !== 'undefined') {
     document.documentElement.setAttribute('data-bs-theme', mode);
     document.body?.setAttribute('data-bs-theme', mode);
+    const bg = themes[mode].background;
+    document.documentElement.style.backgroundColor = bg;
+    if (document.body) document.body.style.backgroundColor = bg;
   }
 }
 

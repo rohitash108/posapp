@@ -55,6 +55,7 @@ const S = {
   indigo:  '#1B36E0',
   gold:    '#d4b45a',
   dark:    '#1B2E1B',
+  muted:   '#64748B',
 };
 
 const POLL_MS  = 20_000; // 20s — fast enough to catch QR orders on dashboard
@@ -199,24 +200,24 @@ const PM_CFG: Record<string, { label: string; icon: any; color: string }> = {
   paytm:   { label: 'Paytm',     icon: 'wallet-outline',      color: S.indigo  },
   zomato:  { label: 'Zomato',    icon: 'bicycle-outline',     color: S.danger  },
   swiggy:  { label: 'Swiggy',    icon: 'bicycle-outline',     color: S.orange  },
-  other:   { label: 'Other',     icon: 'help-circle-outline', color: '#64748B' },
+  other:   { label: 'Other',     icon: 'help-circle-outline', color: S.muted },
 };
 
 const BILL_TYPE_CFG: Record<string, { label: string; icon: any; color: string }> = {
   dine_in:  { label: 'Dine In',    icon: 'restaurant-outline', color: S.primary },
-  takeaway: { label: 'Quick Bill', icon: 'bag-outline',         color: '#64748B' },
+  takeaway: { label: 'Quick Bill', icon: 'bag-outline',         color: S.muted },
   pickup:   { label: 'Pickup',     icon: 'cube-outline',        color: S.warning },
   delivery: { label: 'Delivery',   icon: 'bicycle-outline',     color: S.success },
   qr_order: { label: 'QR Order',   icon: 'qr-code-outline',     color: S.purple  },
 };
 
 const STATUS_CFG: Record<string, { color: string; bg: string; bgDark: string }> = {
-  pending:   { color: '#d97706', bg: '#fef9ec', bgDark: 'rgba(217,119,6,0.15)' },
+  pending:   { color: S.warning, bg: '#fef9ec', bgDark: 'rgba(253,175,34,0.15)' },
   confirmed: { color: S.primary, bg: '#eff6ff', bgDark: 'rgba(13,118,225,0.15)' },
   preparing: { color: S.purple,  bg: '#f5f3ff', bgDark: 'rgba(169,28,255,0.15)' },
   ready:     { color: S.info,    bg: '#ecfeff', bgDark: 'rgba(32,136,238,0.15)' },
   served:    { color: S.success, bg: '#ecfdf5', bgDark: 'rgba(20,181,29,0.15)' },
-  completed: { color: '#16a34a', bg: '#f0fdf4', bgDark: 'rgba(22,163,74,0.15)' },
+  completed: { color: S.success, bg: '#f0fdf4', bgDark: 'rgba(20,181,29,0.15)' },
   cancelled: { color: S.danger,  bg: '#fff1f2', bgDark: 'rgba(255,54,54,0.15)' },
 };
 
@@ -354,7 +355,7 @@ function BigCard({ label, value, sub, icon, color, bg, growthPct, subColor, onPr
     <TouchableOpacity
       style={[bc.wrap, {
         backgroundColor: D.white,
-        borderColor: isDark ? D.border : '#EBEBEB',
+        borderColor: D.border,
         shadowColor: '#000',
         shadowOpacity: isDark ? 0.22 : 0.06,
         shadowRadius: 14,
@@ -399,7 +400,7 @@ function SmallCard({ label, value, sub, icon, color, bg, danger, onPress }: {
     <TouchableOpacity
       style={[smc.wrap, {
         backgroundColor: D.white,
-        borderColor: danger ? S.danger : (isDark ? D.border : '#EBEBEB'),
+        borderColor: danger ? S.danger : D.border,
         borderWidth: danger ? 1.5 : 1,
         shadowColor: '#000',
         shadowOpacity: isDark ? 0.18 : 0.05,
@@ -442,8 +443,8 @@ function LineChart({ labels, revData, ordData }: {
   const maxOrd    = Math.max(...ordData, 1);
   const gridLines = 4; // horizontal lines
 
-  const gridBg = isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9';
-  const axisClr = isDark ? 'rgba(255,255,255,0.2)' : '#e2e8f0';
+  const gridBg = colors.surfaceAlt;
+  const axisClr = colors.border;
 
   // Pixel positions for each data point
   const revPts = revData.map((v, i) => ({
@@ -583,7 +584,7 @@ function DonutChart({ methods, totalRevenue }: {
   const RING_W    = 20;
 
   const hasData = methods.length > 0 && totalRevenue > 0;
-  const ringBg  = isDark ? 'rgba(255,255,255,0.07)' : '#f1f5f9';
+  const ringBg  = colors.surfaceAlt;
 
   return (
     <View style={donut.wrap}>
@@ -641,7 +642,7 @@ function ProgressItem({ label, sub, value, percent, color, icon }: {
 }) {
   const { colors, isDark } = useTheme();
   const D = colors.dashboard;
-  const trackBg = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9';
+  const trackBg = colors.surfaceAlt;
   return (
     <View style={pi.wrap}>
       <View style={pi.top}>
@@ -676,7 +677,7 @@ function PaymentCard({ label, icon, color, count, total, percent }: {
 }) {
   const { colors, isDark } = useTheme();
   const D = colors.dashboard;
-  const trackBg = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9';
+  const trackBg = colors.surfaceAlt;
   return (
     <View style={[pmc.wrap, { backgroundColor: D.white, borderColor: D.border, shadowColor: D.cardShadow }]}>
       <View style={pmc.top}>
@@ -724,7 +725,7 @@ function TopItemRow({ name, qty, maxQty, rank }: { name: string; qty: number; ma
   const palette = [S.primary, S.success, S.warning, S.purple, S.orange, S.info];
   const color  = palette[(rank - 1) % palette.length];
   const w      = maxQty > 0 ? (qty / maxQty) * 100 : 0;
-  const trackBg = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9';
+  const trackBg = colors.surfaceAlt;
   return (
     <View style={ti.wrap}>
       <View style={[ti.rank, { backgroundColor: color + '18' }]}>
@@ -746,10 +747,10 @@ function TopItemRow({ name, qty, maxQty, rank }: { name: string; qty: number; ma
 function ActiveOrderRow({ order }: { order: Order }) {
   const { colors, isDark } = useTheme();
   const D = colors.dashboard;
-  const stCfg = STATUS_CFG[order.status] ?? { color: '#64748B', bg: '#f3f4f6', bgDark: 'rgba(100,116,139,0.15)' };
+  const stCfg = STATUS_CFG[order.status] ?? { color: S.muted, bg: '#f3f4f6', bgDark: 'rgba(100,116,139,0.15)' };
   const stBg = isDark ? stCfg.bgDark : stCfg.bg;
   return (
-    <TouchableOpacity style={[ar.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.04)' : '#f9fafb' }]}
+    <TouchableOpacity style={[ar.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.04)' : colors.surfaceAlt }]}
       onPress={() => router.push('/(app)/orders' as any)} activeOpacity={0.8}>
       <View style={[ar.avatar, { backgroundColor: stBg }]}>
         <Ionicons name="restaurant-outline" size={13} color={stCfg.color} />
@@ -764,7 +765,7 @@ function ActiveOrderRow({ order }: { order: Order }) {
         </Text>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 3 }}>
-        <Text style={[ar.amount, { color: S.gold }]}>{fmtFull(Number(order.total ?? 0))}</Text>
+        <Text style={[ar.amount, { color: D.text }]}>{fmtFull(Number(order.total ?? 0))}</Text>
         <View style={[ar.badge, { backgroundColor: stBg }]}>
           <Text style={[ar.badgeText, { color: stCfg.color }]}>{order.status}</Text>
         </View>
@@ -776,17 +777,17 @@ function ActiveOrderRow({ order }: { order: Order }) {
 function RecentOrderRow({ order }: { order: Order }) {
   const { colors, isDark } = useTheme();
   const D = colors.dashboard;
-  const stCfg  = STATUS_CFG[order.status] ?? { color: '#64748B', bg: '#f3f4f6', bgDark: 'rgba(100,116,139,0.15)' };
+  const stCfg  = STATUS_CFG[order.status] ?? { color: S.muted, bg: '#f3f4f6', bgDark: 'rgba(100,116,139,0.15)' };
   const stBg   = isDark ? stCfg.bgDark : stCfg.bg;
   const src    = order.source ?? 'pos';
   const srcClr: Record<string, string> = { pos: D.text, zomato: S.danger, swiggy: S.orange, qr: S.purple };
   const color  = srcClr[src] ?? D.text;
   const isPaid = order.payment_status === 'paid';
   const paidBg = isDark
-    ? (isPaid ? 'rgba(20,181,29,0.15)' : 'rgba(217,119,6,0.15)')
-    : (isPaid ? '#f0fdf4' : '#fef9ec');
+    ? (isPaid ? 'rgba(20,181,29,0.15)' : 'rgba(253,175,34,0.15)')
+    : (isPaid ? '#ecfdf5' : '#fff7ed');
   return (
-    <TouchableOpacity style={[rr.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.04)' : '#f9fafb' }]}
+    <TouchableOpacity style={[rr.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.04)' : colors.surfaceAlt }]}
       onPress={() => router.push('/(app)/orders' as any)} activeOpacity={0.8}>
       <View style={[rr.avatar, { backgroundColor: S.primary + '15' }]}>
         <Ionicons name="bag-outline" size={14} color={S.primary} />
@@ -804,17 +805,17 @@ function RecentOrderRow({ order }: { order: Order }) {
           {order.customer_name ?? 'Walk-in'} · {(order.order_type ?? '').replace(/_/g, ' ')}
           {order.table_name ? ` · ${order.table_name}` : ''}
         </Text>
-        <Text style={[rr.time, { color: isDark ? 'rgba(255,255,255,0.35)' : '#9ca3af' }]}>
+        <Text style={[rr.time, { color: D.muted }]}>
           {order.created_at ? format(new Date(order.created_at), 'dd MMM, hh:mm a') : '—'}
         </Text>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 4 }}>
-        <Text style={[rr.amount, { color: S.gold }]}>{fmtFull(Number(order.total ?? 0))}</Text>
+        <Text style={[rr.amount, { color: D.text }]}>{fmtFull(Number(order.total ?? 0))}</Text>
         <View style={[rr.badge, { backgroundColor: stBg }]}>
           <Text style={[rr.badgeText, { color: stCfg.color }]}>{order.status}</Text>
         </View>
         <View style={[rr.badge, { backgroundColor: paidBg }]}>
-          <Text style={[rr.badgeText, { color: isPaid ? '#16a34a' : '#d97706' }]}>
+          <Text style={[rr.badgeText, { color: isPaid ? S.success : S.warning }]}>
             {isPaid ? 'PAID' : 'UNPAID'}
           </Text>
         </View>
@@ -827,12 +828,12 @@ function ReservationRow({ res }: { res: Reservation }) {
   const { colors, isDark } = useTheme();
   const D = colors.dashboard;
   const statusColors: Record<string, string> = {
-    pending: '#d97706', confirmed: S.primary, seated: S.success,
-    cancelled: S.danger, no_show: '#64748B',
+    pending: S.warning, confirmed: S.primary, seated: S.success,
+    cancelled: S.danger, no_show: S.muted,
   };
-  const color = statusColors[res.status] ?? '#64748B';
+  const color = statusColors[res.status] ?? S.muted;
   return (
-    <View style={[resR.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.04)' : '#f9fafb' }]}>
+    <View style={[resR.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.04)' : colors.surfaceAlt }]}>
       <View style={[resR.avatar, { backgroundColor: color + '18' }]}>
         <Ionicons name="calendar-outline" size={14} color={color} />
       </View>
@@ -841,7 +842,7 @@ function ReservationRow({ res }: { res: Reservation }) {
         <Text style={[resR.meta, { color: D.muted }]}>
           {res.guest_count} guests{res.table_name ? ` · ${res.table_name}` : ''}
         </Text>
-        <Text style={[resR.time, { color: isDark ? 'rgba(255,255,255,0.35)' : '#9ca3af' }]}>
+        <Text style={[resR.time, { color: D.muted }]}>
           {res.reserved_at ? format(new Date(res.reserved_at), 'dd MMM, hh:mm a') : '—'}
         </Text>
       </View>
@@ -871,7 +872,7 @@ function TableChip({ table }: { table: RestaurantTable }) {
       onPress={() => router.push('/(app)/tables' as any)} activeOpacity={0.82}
     >
       {/* Icon area — light bg with restaurant table icon, like CSPos web */}
-      <View style={[tablC.iconArea, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#f8f9fb' }]}>
+      <View style={[tablC.iconArea, { backgroundColor: colors.surfaceAlt }]}>
         <Ionicons name="grid-outline" size={38} color={cfg.color} />
       </View>
       {/* Info area */}
@@ -893,7 +894,7 @@ function TrendingMenuCard({ name, qty, rank, maxQty }: { name: string; qty: numb
   const palette = [S.primary, S.success, S.warning, S.purple, S.orange, S.info];
   const color = palette[(rank - 1) % palette.length];
   const barW  = maxQty > 0 ? Math.round((qty / maxQty) * 100) : 0;
-  const trackBg = isDark ? 'rgba(255,255,255,0.07)' : '#f1f5f9';
+  const trackBg = colors.surfaceAlt;
   return (
     <View style={[tmc.wrap, {
       backgroundColor: isDark ? D.white : color + '08',
@@ -928,13 +929,13 @@ function NotificationRow({ notif }: { notif: { id: number; title?: string; messa
   const isUnread = !notif.read_at;
   const typeColor: Record<string, string> = {
     order: S.primary, reservation: S.success, payment: S.warning,
-    alert: S.danger,  info: S.info,           system: '#64748B',
+    alert: S.danger,  info: S.info,           system: S.muted,
   };
   const color = typeColor[notif.type ?? 'info'] ?? S.primary;
   const title = notif.title ?? notif.message ?? 'Notification';
   const msg   = notif.title && notif.message ? notif.message : undefined;
   return (
-    <View style={[nr.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : '#f3f4f6' }]}>
+    <View style={[nr.row, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : colors.surfaceAlt }]}>
       <View style={[nr.iconWrap, { backgroundColor: color + '14' }]}>
         <Ionicons
           name={notif.type === 'order' ? 'receipt-outline'
@@ -961,21 +962,21 @@ function NotificationRow({ notif }: { notif: { id: number; title?: string; messa
 
 const QUICK_LINKS = [
   { label: 'POS',          icon: 'cart-outline',      route: '/(app)/pos',          color: S.dark    },
-  { label: 'Kitchen',      icon: 'flame-outline',     route: '/(app)/kitchen',      color: '#f59e0b' },
+  { label: 'Kitchen',      icon: 'flame-outline',     route: '/(app)/kitchen',      color: S.warning },
   { label: 'Orders',       icon: 'receipt-outline',   route: '/(app)/orders',       color: S.primary },
   { label: 'Tables',       icon: 'grid-outline',      route: '/(app)/tables',       color: S.purple  },
   { label: 'Customers',    icon: 'people-outline',    route: '/(app)/customers',    color: S.success },
-  ...(Platform.OS !== 'web' ? [{ label: 'Wallet', icon: 'wallet-outline' as const, route: '/(app)/wallet', color: '#d97706' }] : []),
+  ...(Platform.OS !== 'web' ? [{ label: 'Wallet', icon: 'wallet-outline' as const, route: '/(app)/wallet', color: S.orange }] : []),
   { label: 'Reservations', icon: 'calendar-outline',  route: '/(app)/reservations', color: S.danger  },
-  { label: 'Invoices',     icon: 'document-text-outline', route: '/(app)/invoices', color: '#4f46e5' },
-  { label: 'Payments',     icon: 'card-outline',      route: '/(app)/payments',     color: '#0284c7' },
-  { label: 'Coupons',      icon: 'pricetag-outline',  route: '/(app)/coupons',      color: '#db2777' },
+  { label: 'Invoices',     icon: 'document-text-outline', route: '/(app)/invoices', color: S.indigo  },
+  { label: 'Payments',     icon: 'card-outline',      route: '/(app)/payments',     color: S.info    },
+  { label: 'Coupons',      icon: 'pricetag-outline',  route: '/(app)/coupons',      color: S.purple  },
   { label: 'Expenses',     icon: 'wallet-outline',    route: '/(app)/expenses',     color: S.warning },
   { label: 'Reports',      icon: 'bar-chart-outline', route: '/(app)/reports',      color: S.info    },
   { label: 'Menu',         icon: 'restaurant-outline',route: '/(app)/menu',         color: S.info    },
   { label: 'Staff',        icon: 'people-circle-outline', route: '/(app)/staff',  color: S.dark    },
-  { label: 'Settings',     icon: 'settings-outline',  route: '/(app)/settings',     color: '#64748b' },
-  { label: 'All Modules',  icon: 'apps-outline',      route: '/(app)/more',         color: '#1A2B1A' },
+  { label: 'Settings',     icon: 'settings-outline',  route: '/(app)/settings',     color: S.muted   },
+  { label: 'All Modules',  icon: 'apps-outline',      route: '/(app)/more',         color: S.dark    },
 ];
 
 // ── Main screen ───────────────────────────────────────────────────────────────
@@ -1133,7 +1134,7 @@ export default function DashboardScreen() {
             .map(([key, v]) => ({
               key, count: v.count, total: v.total,
               percent: pct(v.total, pmTotal),
-              ...(PM_CFG[key] ?? { label: key, icon: 'wallet-outline', color: '#64748B' }),
+              ...(PM_CFG[key] ?? { label: key, icon: 'wallet-outline', color: S.muted }),
             }))
             .sort((a, b) => b.total - a.total));
 
@@ -1208,7 +1209,7 @@ export default function DashboardScreen() {
         setPayMethods(rows
           .map(r => {
             const key  = (r.payment_method ?? r.method ?? 'other').toLowerCase();
-            const cfg  = PM_CFG[key] ?? { label: key, icon: 'wallet-outline', color: '#64748B' };
+            const cfg  = PM_CFG[key] ?? { label: key, icon: 'wallet-outline', color: S.muted };
             return { key, ...cfg, count: Number(r.count ?? 0), total: Number(r.total ?? 0), percent: pct(Number(r.total ?? 0), pmTotal) };
           })
           .sort((a, b) => b.total - a.total));
@@ -1316,8 +1317,8 @@ export default function DashboardScreen() {
       <View style={{ flex: 1, backgroundColor: D.bg, alignItems: 'center', justifyContent: 'center', gap: 20 }}>
         <View style={{
           width: 80, height: 80, borderRadius: 22,
-          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f8f9fb',
-          borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb',
+          backgroundColor: colors.surfaceAlt,
+          borderWidth: 1, borderColor: colors.border,
           alignItems: 'center', justifyContent: 'center',
         }}>
           <ActivityIndicator color={S.primary} size="large" />
@@ -1333,7 +1334,7 @@ export default function DashboardScreen() {
   const st       = summary;
   const cardS    = { backgroundColor: D.white, borderColor: D.border, shadowColor: D.cardShadow };
   const netProfit = (st?.total_sales ?? 0) - expenses.total;
-  const dividerColor = isDark ? 'rgba(255,255,255,0.04)' : '#f3f4f6';
+  const dividerColor = isDark ? 'rgba(255,255,255,0.04)' : colors.surfaceAlt;
 
   return (
     <View style={{ flex: 1, backgroundColor: D.bg }}>
@@ -1341,7 +1342,7 @@ export default function DashboardScreen() {
       {/* ── QR Order notification banner ── */}
       {qrAlert.length > 0 && (
         <Pressable
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14, zIndex: 200, backgroundColor: '#7c3aed' }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14, zIndex: 200, backgroundColor: S.purple }}
           onPress={() => setQrAlert([])}
         >
           <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
@@ -1370,7 +1371,7 @@ export default function DashboardScreen() {
 
             <Text style={[cdm.label, { color: D.muted }]}>From Date</Text>
             <TextInput
-              style={[cdm.input, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f8f9fb', color: D.text, borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#e0e0e0' }]}
+              style={[cdm.input, { backgroundColor: colors.surfaceAlt, color: D.text, borderColor: colors.border }]}
               placeholder="YYYY-MM-DD"
               placeholderTextColor={D.muted}
               value={customFromInput}
@@ -1381,7 +1382,7 @@ export default function DashboardScreen() {
 
             <Text style={[cdm.label, { color: D.muted }]}>To Date</Text>
             <TextInput
-              style={[cdm.input, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f8f9fb', color: D.text, borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#e0e0e0' }]}
+              style={[cdm.input, { backgroundColor: colors.surfaceAlt, color: D.text, borderColor: colors.border }]}
               placeholder="YYYY-MM-DD"
               placeholderTextColor={D.muted}
               value={customToInput}
@@ -1393,11 +1394,11 @@ export default function DashboardScreen() {
             <Text style={[cdm.hint, { color: D.muted }]}>Enter dates in YYYY-MM-DD format (e.g. 2025-06-01)</Text>
 
             <View style={cdm.actions}>
-              <TouchableOpacity style={[cdm.btn, cdm.cancelBtn, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#e0e0e0' }]} onPress={() => setShowCustomModal(false)}>
+              <TouchableOpacity style={[cdm.btn, cdm.cancelBtn, { borderColor: colors.border }]} onPress={() => setShowCustomModal(false)}>
                 <Text style={[cdm.btnText, { color: D.muted }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[cdm.btn, cdm.applyBtn]} onPress={applyCustomDates}>
-                <Text style={cdm.applyText}>Apply</Text>
+              <TouchableOpacity style={[cdm.btn, cdm.applyBtn, { backgroundColor: S.primary }]} onPress={applyCustomDates}>
+                <Text style={[cdm.applyText, { color: '#fff' }]}>Apply</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -1407,11 +1408,11 @@ export default function DashboardScreen() {
     <ScrollView
       style={{ flex: 1, backgroundColor: D.bg }}
       contentContainerStyle={{ flexGrow: 1 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={S.gold} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={S.primary} />}
       showsVerticalScrollIndicator={false}
     >
       {/* ── Dashboard header — matches web design ── */}
-      <View style={[s.dashHeader, { backgroundColor: D.white, borderBottomColor: isDark ? D.border : '#E8E3DA', paddingTop: (insets.top || 0) + 14 }]}>
+      <View style={[s.dashHeader, { backgroundColor: D.white, borderBottomColor: D.border, paddingTop: (insets.top || 0) + 14 }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Text style={[s.dashTitle, { color: D.text }]}>Dashboard</Text>
           <TouchableOpacity onPress={() => load(true, preset)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -1430,7 +1431,7 @@ export default function DashboardScreen() {
       </View>
 
       {/* ── Date-range filter — segmented chips matching web "Today" button style ── */}
-      <View style={[s.filterBar, { backgroundColor: D.white, borderBottomColor: isDark ? D.border : '#E8E3DA' }]}>
+      <View style={[s.filterBar, { backgroundColor: D.white, borderBottomColor: D.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ gap: 7, alignItems: 'center', paddingVertical: 2, paddingRight: 4 }}>
           {PRESETS.map(p => {
             const isActive = preset === p.key;
@@ -1443,8 +1444,8 @@ export default function DashboardScreen() {
                 style={[
                   s.filterChip,
                   isActive
-                    ? { backgroundColor: 'transparent', borderColor: S.warning }
-                    : { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F5F5F5', borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E0E0E0' },
+                    ? { backgroundColor: S.primary, borderColor: S.primary }
+                    : { backgroundColor: D.white, borderColor: D.border },
                 ]}
                 onPress={() => changePreset(p.key)}
                 activeOpacity={0.8}
@@ -1453,11 +1454,11 @@ export default function DashboardScreen() {
                   <Ionicons
                     name="calendar-outline"
                     size={12}
-                    color={isActive ? S.warning : D.muted}
+                    color={isActive ? '#fff' : D.muted}
                     style={{ marginRight: 3 }}
                   />
                 )}
-                <Text style={[s.filterChipText, { color: isActive ? S.warning : D.muted, fontWeight: isActive ? '700' : '600' }]}>
+                <Text style={[s.filterChipText, { color: isActive ? '#fff' : D.text, fontWeight: isActive ? '700' : '600' }]}>
                   {chipLabel}
                 </Text>
               </TouchableOpacity>
@@ -1465,7 +1466,7 @@ export default function DashboardScreen() {
           })}
         </ScrollView>
         <TouchableOpacity
-          style={[s.filterRefreshBtn, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0' }]}
+          style={[s.filterRefreshBtn, { borderColor: D.border }]}
           onPress={handleRefresh}
         >
           <Ionicons name="refresh-outline" size={14} color={D.muted} />
@@ -1690,7 +1691,7 @@ export default function DashboardScreen() {
                   {[
                     { label: 'Cancelled Bills', value: st?.cancelled_count ?? 0, icon: 'close-circle-outline', color: S.danger  },
                     { label: 'Free Bills',       value: st?.free_bills     ?? 0, icon: 'gift-outline',          color: S.success },
-                    { label: 'Deleted Bills',    value: st?.deleted_count  ?? 0, icon: 'trash-outline',          color: '#64748B' },
+                    { label: 'Deleted Bills',    value: st?.deleted_count  ?? 0, icon: 'trash-outline',          color: S.muted },
                   ].map((item, i, arr) => (
                     <View key={i} style={[bsR.row, i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: dividerColor }]}>
                       <View style={[bsR.avatar, { backgroundColor: item.color + '18' }]}>
@@ -1737,7 +1738,7 @@ export default function DashboardScreen() {
                   {[
                     { label: 'Cancelled Bills', value: st?.cancelled_count ?? 0, icon: 'close-circle-outline', color: S.danger  },
                     { label: 'Free Bills',       value: st?.free_bills     ?? 0, icon: 'gift-outline',          color: S.success },
-                    { label: 'Deleted Bills',    value: st?.deleted_count  ?? 0, icon: 'trash-outline',          color: '#64748B' },
+                    { label: 'Deleted Bills',    value: st?.deleted_count  ?? 0, icon: 'trash-outline',          color: S.muted },
                   ].map((item, i, arr) => (
                     <View key={i} style={[bsR.row, i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: dividerColor }]}>
                       <View style={[bsR.avatar, { backgroundColor: item.color + '18' }]}>
@@ -1795,11 +1796,11 @@ export default function DashboardScreen() {
                 {topItems.length > 0 ? (
                   <>
                     <View style={[moB.banner, {
-                      backgroundColor: isDark ? 'rgba(22,163,74,0.12)' : '#f0fdf4',
-                      borderColor: isDark ? 'rgba(22,163,74,0.2)' : '#bbf7d0',
+                      backgroundColor: isDark ? 'rgba(20,181,29,0.12)' : '#f0fdf4',
+                      borderColor: isDark ? 'rgba(20,181,29,0.2)' : '#bbf7d0',
                     }]}>
-                      <Ionicons name="star" size={13} color="#16a34a" />
-                      <Text style={[moB.text, { color: isDark ? '#4ade80' : '#166534' }]}>
+                      <Ionicons name="star" size={13} color={S.success} />
+                      <Text style={[moB.text, { color: isDark ? S.success : S.success }]}>
                         Most Ordered: <Text style={moB.name}>{topItems[0]?.name}</Text>
                       </Text>
                     </View>
@@ -1856,11 +1857,11 @@ export default function DashboardScreen() {
                 {topItems.length > 0 ? (
                   <>
                     <View style={[moB.banner, {
-                      backgroundColor: isDark ? 'rgba(22,163,74,0.12)' : '#f0fdf4',
-                      borderColor: isDark ? 'rgba(22,163,74,0.2)' : '#bbf7d0',
+                      backgroundColor: isDark ? 'rgba(20,181,29,0.12)' : '#f0fdf4',
+                      borderColor: isDark ? 'rgba(20,181,29,0.2)' : '#bbf7d0',
                     }]}>
-                      <Ionicons name="star" size={13} color="#16a34a" />
-                      <Text style={[moB.text, { color: isDark ? '#4ade80' : '#166534' }]}>
+                      <Ionicons name="star" size={13} color={S.success} />
+                      <Text style={[moB.text, { color: isDark ? S.success : S.success }]}>
                         Most Ordered: <Text style={moB.name}>{topItems[0]?.name}</Text>
                       </Text>
                     </View>
@@ -2067,7 +2068,7 @@ const bc = StyleSheet.create({
   growthBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   growthText:  { fontSize: 11, fontWeight: '800' },
   value:       { fontSize: 28, fontWeight: '900', letterSpacing: -0.8, marginTop: 5, marginBottom: 0 },
-  label:       { fontSize: 11, fontWeight: '600', letterSpacing: 0.2, color: '#64748B' },
+  label:       { fontSize: 11, fontWeight: '600', letterSpacing: 0.2, color: S.muted },
   sub:         { fontSize: 12.5, fontWeight: '600' },
   iconBox:     { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
 });
@@ -2078,7 +2079,7 @@ const smc = StyleSheet.create({
                  paddingTop: 14, paddingBottom: 14, paddingLeft: 13, paddingRight: 13,
                  overflow: 'hidden' },
   value:       { fontSize: 20, fontWeight: '900', letterSpacing: -0.4, marginTop: 3, marginBottom: 1 },
-  label:       { fontSize: 10, fontWeight: '600', letterSpacing: 0.2, color: '#64748B' },
+  label:       { fontSize: 10, fontWeight: '600', letterSpacing: 0.2, color: S.muted },
   sub:         { fontSize: 11, fontWeight: '600', marginTop: 2 },
   iconBox:     { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
 });
@@ -2260,7 +2261,7 @@ const cdm = StyleSheet.create({
   actions:    { flexDirection: 'row', gap: 10 },
   btn:        { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
   cancelBtn:  { borderWidth: 1.5 },
-  applyBtn:   { backgroundColor: '#1A2B1A' },
+  applyBtn:   { backgroundColor: S.primary },
   btnText:    { fontSize: 14, fontWeight: '700' },
-  applyText:  { fontSize: 14, fontWeight: '800', color: '#C9A52A' },
+  applyText:  { fontSize: 14, fontWeight: '800', color: '#fff' },
 });
