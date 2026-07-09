@@ -1,4 +1,4 @@
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.3';
 
 type GtcPosBridge = {
   isDesktop: boolean;
