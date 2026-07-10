@@ -48,6 +48,7 @@ async function fetchRemoteReleaseId(): Promise<string | null> {
 export function useAppUpdate() {
   const [info, setInfo] = useState<AppUpdateInfo>({ state: 'idle' });
   const [dismissed, setDismissed] = useState(false);
+  const [manualFeedback, setManualFeedback] = useState(false);
   const localReleaseRef = useRef(releaseId(APP_BUILD));
   const lastWebCheckRef = useRef(0);
 
@@ -77,7 +78,10 @@ export function useAppUpdate() {
 
     const remote = await fetchRemoteReleaseId();
     if (!remote) {
-      if (!silent) setInfo({ state: 'error', message: 'Could not check for updates.' });
+      if (!silent) {
+        setManualFeedback(true);
+        setInfo({ state: 'error', message: 'Could not check for updates.' });
+      }
       return;
     }
 
@@ -93,6 +97,7 @@ export function useAppUpdate() {
     }
 
     if (!silent) {
+      setManualFeedback(true);
       setInfo({
         state: 'up-to-date',
         currentVersion: APP_BUILD.version,
@@ -116,15 +121,16 @@ export function useAppUpdate() {
 
   const dismiss = useCallback(() => {
     setDismissed(true);
+    setManualFeedback(false);
     setInfo((prev) => (prev.state === 'up-to-date' || prev.state === 'error' ? { state: 'idle' } : prev));
   }, []);
 
   const manualCheck = useCallback(() => {
     if (isDesktopApp()) {
-      setInfo((prev) => ({ ...prev, state: 'checking' }));
       checkForUpdates();
       return;
     }
+    setManualFeedback(true);
     void checkWebUpdate(false);
   }, [checkWebUpdate]);
 
@@ -163,20 +169,7 @@ export function useAppUpdate() {
           });
           return;
         }
-        if (payload.state === 'up-to-date') {
-          setInfo({
-            state: 'up-to-date',
-            currentVersion: payload.currentVersion,
-            message: 'You are on the latest version.',
-          });
-          return;
-        }
-        if (payload.state === 'error') {
-          setInfo({
-            state: 'error',
-            message: payload.message ?? 'Update check failed.',
-          });
-        }
+        // Desktop "up to date" / errors use the native Windows dialog only (manual check).
       });
     }
 
@@ -189,7 +182,10 @@ export function useAppUpdate() {
     };
     document.addEventListener('visibilitychange', onVisible);
 
-    const onManualCheck = () => { void checkWebUpdate(false); };
+    const onManualCheck = () => {
+      setManualFeedback(true);
+      void checkWebUpdate(false);
+    };
     window.addEventListener('gtc-pos:check-updates', onManualCheck);
 
     let reg: ServiceWorkerRegistration | undefined;
@@ -242,7 +238,9 @@ export function useAppUpdate() {
     (info.state === 'available' || info.state === 'ready' || info.state === 'downloading');
 
   const bannerVisible =
-    info.state === 'up-to-date' || info.state === 'error';
+    !isDesktopApp() &&
+    manualFeedback &&
+    (info.state === 'up-to-date' || info.state === 'error');
 
   return {
     info,

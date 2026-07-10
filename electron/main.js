@@ -324,10 +324,7 @@ function setupAutoUpdater(win) {
   };
 
   autoUpdater.on('checking-for-update', () => {
-    sendUpdateStatus({
-      state: 'checking',
-      currentVersion: app.getVersion(),
-    });
+    // Silent background checks — no UI noise.
   });
 
   autoUpdater.on('update-available', (info) => {
@@ -352,12 +349,7 @@ function setupAutoUpdater(win) {
   });
 
   autoUpdater.on('update-not-available', () => {
-    sendUpdateStatus({
-      state: 'up-to-date',
-      currentVersion: app.getVersion(),
-      message: 'You are on the latest version.',
-    });
-
+    // Only tell the user when they explicitly asked (Ctrl+Shift+U / Settings).
     if (!manualUpdateCheck) return;
     manualUpdateCheck = false;
     prompt({
@@ -401,12 +393,6 @@ function setupAutoUpdater(win) {
 
   autoUpdater.on('error', (err) => {
     console.error('[autoUpdater]', err?.message || err);
-    sendUpdateStatus({
-      state: 'error',
-      currentVersion: app.getVersion(),
-      message: err?.message || 'Could not check for updates.',
-    });
-
     if (!manualUpdateCheck) return;
     manualUpdateCheck = false;
     prompt({
