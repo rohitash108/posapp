@@ -76,6 +76,17 @@ jobs:
       - name: Write release version metadata
         run: node scripts/write-version.js
 
+      - name: Verify Electron package version matches root
+        shell: pwsh
+        run: |
+          $root = (Get-Content package.json | ConvertFrom-Json).version
+          $electron = (Get-Content electron/package.json | ConvertFrom-Json).version
+          if ($root -ne $electron) {
+            Write-Error "Version mismatch: package.json=$root electron/package.json=$electron"
+            exit 1
+          }
+          Write-Host "Version OK: v$root"
+
       - name: Build Expo web app
         run: npx expo export -p web
 
