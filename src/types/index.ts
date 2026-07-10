@@ -307,6 +307,9 @@ export interface Ingredient {
   low_stock_threshold: number;
   reorder_point: number;
   on_hand: number;
+  track_expiry?: boolean;
+  is_active?: boolean;
+  notes?: string;
 }
 
 export interface ExpiringBatch {
@@ -330,6 +333,7 @@ export interface StockMovement {
 }
 
 export interface InventoryData {
+  branch_name?: string;
   ingredients: Ingredient[];
   low_stock: Ingredient[];
   expiring: ExpiringBatch[];
@@ -338,6 +342,156 @@ export interface InventoryData {
 
 // Legacy alias kept for any existing references
 export type InventoryItem = Ingredient;
+
+/** Menu item stock (csPos /stock) */
+export interface MenuStockItem {
+  id: number;
+  name: string;
+  category_id?: number;
+  category_name: string;
+  is_master: boolean;
+  tracked: boolean;
+  on_hand: number | null;
+  threshold: number;
+}
+
+export interface MenuStockLowRow {
+  item_name: string;
+  on_hand: number;
+  threshold: number;
+}
+
+export interface MenuStockMovement {
+  when: string;
+  item_name: string;
+  type: string;
+  quantity_change: number;
+  quantity_before: number;
+  quantity_after: number;
+  order_number?: string | null;
+  notes?: string | null;
+  user_name: string;
+}
+
+export interface StockHistoryRow extends MenuStockMovement {
+  id: number;
+  item_id?: number;
+  created_at?: string;
+}
+
+export interface StockHistoryData {
+  data: StockHistoryRow[];
+  meta: { current_page: number; last_page: number; per_page: number; total: number };
+  items: { id: number; name: string }[];
+  types: string[];
+}
+
+export interface SupplyHistoryRow {
+  id: number;
+  when: string;
+  sku_id: number;
+  sku_name: string;
+  type: string;
+  quantity_change: number;
+  quantity_before: number;
+  quantity_after: number;
+  order_number?: string | null;
+  notes?: string | null;
+  user_name: string;
+  created_at?: string;
+}
+
+export interface SupplyHistoryData {
+  data: SupplyHistoryRow[];
+  meta: { current_page: number; last_page: number; per_page: number; total: number };
+  skus: { id: number; name: string }[];
+  types: string[];
+}
+
+export interface MenuStockData {
+  summary: {
+    menu_item_count: number;
+    tracked_count: number;
+    untracked_count: number;
+    total_on_hand: number;
+    low_stock_count: number;
+    out_of_stock_count: number;
+  };
+  filters: Record<string, unknown>;
+  categories: { id: number; name: string }[];
+  items: MenuStockItem[];
+  low_stock: MenuStockLowRow[];
+  recent_movements: MenuStockMovement[];
+}
+
+/** Packing / consumable supplies (csPos /stock/supplies) */
+export interface SupplySku {
+  id: number;
+  name: string;
+  sku_code?: string;
+  category: string;
+  category_label: string;
+  unit: string;
+  track_stock: boolean;
+  low_stock_threshold: number;
+  is_active: boolean;
+  notes?: string;
+  on_hand: number;
+}
+
+export interface SupplyMovement {
+  id: number;
+  type: string;
+  quantity_change: number;
+  quantity_before: number;
+  quantity_after: number;
+  notes?: string;
+  sku_id: number;
+  sku_name: string;
+  user_name: string;
+  created_at?: string;
+}
+
+export interface SupplyConsumptionRule {
+  id: number;
+  inventory_sku_id: number;
+  sku_name: string;
+  menu_item_id?: number | null;
+  menu_item_name?: string | null;
+  order_type?: string | null;
+  order_type_label?: string | null;
+  quantity_per_unit: number;
+  notes?: string;
+  is_active: boolean;
+}
+
+export interface SuppliesData {
+  categories: Record<string, string>;
+  filters: { category: string; stock_status: string; q: string };
+  summary: {
+    total: number;
+    tracked_count: number;
+    low_stock_count: number;
+    out_of_stock_count: number;
+  };
+  skus: SupplySku[];
+  low_stock: SupplySku[];
+  out_of_stock: SupplySku[];
+  recent_movements: SupplyMovement[];
+}
+
+export interface StockAlertsData {
+  menu: {
+    out_of_stock: { item_id: number; item_name: string; category_name: string; on_hand: number; threshold: number }[];
+    low_stock: { item_id: number; item_name: string; category_name: string; on_hand: number; threshold: number }[];
+    tracked_count: number;
+  };
+  supplies: {
+    out_of_stock: { sku_id: number; sku_name: string; category: string; category_label: string; on_hand: number; threshold: number }[];
+    low_stock: { sku_id: number; sku_name: string; category: string; category_label: string; on_hand: number; threshold: number }[];
+    tracked_count: number;
+  };
+}
 
 export interface MenuItem {
   id: number;
@@ -440,4 +594,47 @@ export interface Ticket {
   replies_count?: number;
   created_at?: string;
   updated_at?: string;
+}
+
+// ── Restaurant Royalties (csPos RoyaltyService parity) ────────────────────────
+export type RoyaltyStatus = 'pending' | 'approved' | 'rejected';
+
+export interface RoyaltyPreview {
+  sales_base: number;
+  royalty_percentage: number;
+  calculation_basis: string;
+  calculation_basis_label?: string;
+  royalty_amount: number;
+}
+
+export interface RoyaltyRequest {
+  id: number;
+  period_month: number;
+  period_year: number;
+  period_label: string;
+  reference_sales_amount: number;
+  calculation_basis: string;
+  calculation_basis_label: string;
+  royalty_percentage: number;
+  royalty_amount: number;
+  status: RoyaltyStatus;
+  status_label: string;
+  notes?: string | null;
+  admin_notes?: string | null;
+  rejection_reason?: string | null;
+  submitted_by_name?: string | null;
+  created_at?: string;
+  reviewed_at?: string | null;
+  can_edit_notes: boolean;
+  can_resubmit: boolean;
+}
+
+export interface RoyaltyMeta {
+  effective_percentage: number;
+  calculation_basis: string;
+  calculation_basis_label: string;
+  currency_symbol: string;
+  current_preview: RoyaltyPreview;
+  current_month_request: RoyaltyRequest | null;
+  highlight_red: boolean;
 }

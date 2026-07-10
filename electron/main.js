@@ -25,9 +25,12 @@ let PORT = 57891;
 let server;
 let mainWindow = null;
 let manualUpdateCheck = false;
+let lastBackgroundCheckAt = 0;
+let updateWin = null;
 
-const UPDATE_CHECK_DELAY_MS = 8_000;
-const UPDATE_RECHECK_MS = 4 * 60 * 60 * 1000; // every 4 hours
+const UPDATE_CHECK_DELAY_MS = 3_000;
+const UPDATE_RECHECK_MS = 2 * 60 * 60 * 1000; // every 2 hours
+const UPDATE_FOCUS_THROTTLE_MS = 5 * 60 * 1000;
 
 const MIME = {
   '.html':  'text/html; charset=utf-8',
@@ -300,9 +303,17 @@ function serveEntry(req, res, entry, ext) {
 }
 
 // ── Auto-updater (GitHub Releases via electron-updater) ───────────────────────
+function sendUpdateStatus(payload) {
+  const win = updateWin && !updateWin.isDestroyed() ? updateWin : mainWindow;
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('gtc-pos:update-status', payload);
+  }
+}
+
 function setupAutoUpdater(win) {
   if (!app.isPackaged) return;
 
+  updateWin = win;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowDowngrade = false;
@@ -312,7 +323,21 @@ function setupAutoUpdater(win) {
     return dialog.showMessageBox(target || undefined, options);
   };
 
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateStatus({
+      state: 'checking',
+      currentVersion: app.getVersion(),
+    });
+  });
+
   autoUpdater.on('update-available', (info) => {
+    sendUpdateStatus({
+      state: 'available',
+      version: info.version,
+      currentVersion: app.getVersion(),
+      message: `Version ${info.version} is available.`,
+    });
+
     prompt({
       type: 'info',
       title: 'GTC POS — Update Available',
@@ -327,6 +352,12 @@ function setupAutoUpdater(win) {
   });
 
   autoUpdater.on('update-not-available', () => {
+    sendUpdateStatus({
+      state: 'up-to-date',
+      currentVersion: app.getVersion(),
+      message: 'You are on the latest version.',
+    });
+
     if (!manualUpdateCheck) return;
     manualUpdateCheck = false;
     prompt({
@@ -338,7 +369,23 @@ function setupAutoUpdater(win) {
     });
   });
 
+  autoUpdater.on('download-progress', (progress) => {
+    sendUpdateStatus({
+      state: 'downloading',
+      currentVersion: app.getVersion(),
+      progress: Math.round(progress.percent || 0),
+      message: 'Downloading update…',
+    });
+  });
+
   autoUpdater.on('update-downloaded', (info) => {
+    sendUpdateStatus({
+      state: 'ready',
+      version: info.version,
+      currentVersion: app.getVersion(),
+      message: 'Update downloaded. Restart to apply.',
+    });
+
     prompt({
       type: 'info',
       title: 'GTC POS — Update Ready',
@@ -354,6 +401,12 @@ function setupAutoUpdater(win) {
 
   autoUpdater.on('error', (err) => {
     console.error('[autoUpdater]', err?.message || err);
+    sendUpdateStatus({
+      state: 'error',
+      currentVersion: app.getVersion(),
+      message: err?.message || 'Could not check for updates.',
+    });
+
     if (!manualUpdateCheck) return;
     manualUpdateCheck = false;
     prompt({
@@ -365,14 +418,20 @@ function setupAutoUpdater(win) {
     });
   });
 
-  const checkForUpdates = () => {
+  const checkForUpdates = (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastBackgroundCheckAt < UPDATE_FOCUS_THROTTLE_MS) return;
+    lastBackgroundCheckAt = now;
+
     autoUpdater.checkForUpdates().catch((err) => {
       console.error('[autoUpdater] check failed:', err?.message || err);
     });
   };
 
-  setTimeout(checkForUpdates, UPDATE_CHECK_DELAY_MS);
-  setInterval(checkForUpdates, UPDATE_RECHECK_MS);
+  setTimeout(() => checkForUpdates(true), UPDATE_CHECK_DELAY_MS);
+  setInterval(() => checkForUpdates(true), UPDATE_RECHECK_MS);
+
+  win.on('focus', () => checkForUpdates(false));
 }
 
 function checkForUpdatesManual() {
@@ -479,6 +538,14 @@ app.whenReady().then(async () => {
   ipcMain.handle('gtc-pos:get-version', () => app.getVersion());
   ipcMain.handle('gtc-pos:check-for-updates', () => {
     checkForUpdatesManual();
+  });
+  ipcMain.handle('gtc-pos:download-update', async () => {
+    if (!app.isPackaged) return;
+    await autoUpdater.downloadUpdate();
+  });
+  ipcMain.handle('gtc-pos:install-update', () => {
+    if (!app.isPackaged) return;
+    autoUpdater.quitAndInstall(false, true);
   });
 
   globalShortcut.register('CommandOrControl+Shift+U', checkForUpdatesManual);

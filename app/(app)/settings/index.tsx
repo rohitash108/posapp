@@ -15,7 +15,7 @@ import { useTheme } from '@/store/themeStore';
 import { syncService } from '@/sync/SyncService';
 import { webSyncService } from '@/sync/WebSyncService';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { checkForUpdates, getAppVersion, isDesktopApp } from '@/utils/desktopBridge';
+import { getAppVersion, isDesktopApp, triggerManualUpdateCheck } from '@/utils/desktopBridge';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const FOREST  = '#1A2B1A';
@@ -289,14 +289,14 @@ export default function SettingsScreen() {
           label="Version"
           value={`v${appVersion}`}
         />
-        {desktopApp ? (
+        {(desktopApp || Platform.OS === 'web') ? (
           <PressableRow
             icon="cloud-download-outline"
             iconBg="#eff6ff"
             iconColor="#2563eb"
             label="Check for Updates"
-            sub="Shows if you are on the latest version"
-            onPress={checkForUpdates}
+            sub={desktopApp ? 'Auto-checks on startup and when the app is focused' : 'Checks for the latest web release'}
+            onPress={triggerManualUpdateCheck}
           />
         ) : null}
         <SettingRow

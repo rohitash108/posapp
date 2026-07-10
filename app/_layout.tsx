@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { setItem, getItem, deleteItem } from '@/utils/storage';
 import Toast from 'react-native-toast-message';
+import UpdateNotifier from '@/components/UpdateNotifier';
 import { initDatabase } from '@/database/schema';
 import { useAppStore } from '@/store/appStore';
 import { syncService } from '@/sync/SyncService';
@@ -119,6 +120,7 @@ export default function RootLayout() {
     <>
       <Stack screenOptions={{ headerShown: false }} />
       <StatusBar style={statusBarStyle} />
+      <UpdateNotifier />
       <Toast />
     </>
   );

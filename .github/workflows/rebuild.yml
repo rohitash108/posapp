@@ -62,13 +62,16 @@ jobs:
         run: |
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
 
+      - name: Write release version metadata
+        run: node scripts/write-version.js
+
       - name: Build Expo web app
         run: npx expo export -p web
 
       - name: Copy PWA assets
         shell: pwsh
         run: |
-          $files = @('manifest.json', 'sw.js', 'icon-192.png', 'icon-512.png', 'global-tea-cafe-logo.png')
+          $files = @('manifest.json', 'sw.js', 'version.json', 'icon-192.png', 'icon-512.png', 'global-tea-cafe-logo.png')
           foreach ($f in $files) {
             $src = "public\$f"
             if (Test-Path $src) { Copy-Item $src dist\; Write-Host "Copied $f" }

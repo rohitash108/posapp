@@ -1,4 +1,10 @@
-const CACHE = 'gtc-pos-v2';
+const CACHE = 'gtc-pos-v3';
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 self.addEventListener('install', (e) => {
   e.waitUntil(

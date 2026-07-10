@@ -5,6 +5,7 @@ import { useGlobalOrderPolling } from '@/hooks/useGlobalOrderPolling';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Pressable, useWindowDimensions, ScrollView, StyleSheet, Platform, Modal, Animated, TouchableWithoutFeedback } from 'react-native';
 import { useAppStore } from '@/store/appStore';
+import { useRestaurantAdmin } from '@/hooks/useRestaurantAdmin';
 import { useOrderBadgeStore } from '@/store/orderBadgeStore';
 import { useTicketBadgeStore } from '@/store/ticketBadgeStore';
 import { ticketsApi } from '@/api/tickets';
@@ -29,7 +30,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'MENU',
     items: [
-      { name: 'inventory/index',  route: '/(app)/inventory',  label: 'Inventory',  icon: 'document-text-outline' as const },
+      { name: 'inventory/index',  route: '/(app)/inventory',  label: 'Stock',  icon: 'cube-outline' as const },
       { name: 'coupons/index',    route: '/(app)/coupons',    label: 'Coupons',    icon: 'pricetag-outline'      as const },
     ],
   },
@@ -45,6 +46,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'FINANCE',
     items: [
       { name: 'expenses/index',       route: '/(app)/expenses',       label: 'Expenses',       icon: 'wallet-outline'    as const },
+      { name: 'royalties/index',      route: '/(app)/royalties',      label: 'Royalty',        icon: 'ribbon-outline'    as const },
       { name: 'expense-report/index', route: '/(app)/expense-report', label: 'Expense Report', icon: 'pie-chart-outline' as const },
     ],
   },
@@ -63,6 +65,13 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
+
+function filteredNavSections(isRestaurantAdmin: boolean): NavSection[] {
+  return NAV_SECTIONS.map(section => ({
+    ...section,
+    items: section.items.filter(item => item.name !== 'royalties/index' || isRestaurantAdmin),
+  }));
+}
 
 // Triple-beep alert matching CSPos order-bell (square wave, 5-note rising pattern × 3)
 let ticketBeepLockedUntil = 0;
@@ -148,6 +157,8 @@ function Sidebar() {
   const restaurant = useAppStore((s) => s.restaurant);
   const { isSyncing, isOnline, clearAuth } = useAppStore();
   const { colors } = useTheme();
+  const isRestaurantAdmin = useRestaurantAdmin();
+  const navSections = useMemo(() => filteredNavSections(isRestaurantAdmin), [isRestaurantAdmin]);
   const sb = useMemo(() => createSidebarStyles(colors), [colors]);
   const pathname = usePathname();
 
@@ -194,7 +205,7 @@ function Sidebar() {
 
       {/* Navigation sections */}
       <ScrollView style={sb.navScroll} showsVerticalScrollIndicator={false}>
-        {NAV_SECTIONS.map((section, sIdx) => (
+        {navSections.map((section, sIdx) => (
           <View key={section.label || sIdx}>
             {section.label ? <Text style={sb.navSection}>{section.label}</Text> : null}
             {section.items.map((item) => {
@@ -286,7 +297,7 @@ const MORE_SECTIONS: { title: string; links: MoreLink[] }[] = [
   {
     title: 'MENU',
     links: [
-      { label: 'Inventory',  route: '/(app)/inventory',  icon: 'cube-outline',          color: '#64748b' },
+      { label: 'Stock',  route: '/(app)/inventory',  icon: 'cube-outline',          color: '#64748b' },
       { label: 'Coupons',    route: '/(app)/coupons',    icon: 'pricetag-outline',      color: '#db2777' },
     ],
   },
@@ -303,6 +314,7 @@ const MORE_SECTIONS: { title: string; links: MoreLink[] }[] = [
     title: 'FINANCE',
     links: [
       { label: 'Expenses',   route: '/(app)/expenses',       icon: 'wallet-outline',      color: '#ca8a04' },
+      { label: 'Royalty',    route: '/(app)/royalties',      icon: 'ribbon-outline',      color: '#9333ea' },
       { label: 'Exp. Report',route: '/(app)/expense-report', icon: 'stats-chart-outline', color: '#059669' },
       { label: 'Reports',    route: '/(app)/reports',        icon: 'bar-chart-outline',   color: '#2563eb' },
     ],
@@ -318,8 +330,17 @@ const MORE_SECTIONS: { title: string; links: MoreLink[] }[] = [
   },
 ];
 
+function filteredMoreSections(isRestaurantAdmin: boolean) {
+  return MORE_SECTIONS.map(section => ({
+    ...section,
+    links: section.links.filter(link => link.route !== '/(app)/royalties' || isRestaurantAdmin),
+  }));
+}
+
 function MoreBottomSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { colors, isDark } = useTheme();
+  const isRestaurantAdmin = useRestaurantAdmin();
+  const moreSections = useMemo(() => filteredMoreSections(isRestaurantAdmin), [isRestaurantAdmin]);
   const slideY = useRef(new Animated.Value(700)).current;
   const backdropOp = useRef(new Animated.Value(0)).current;
 
@@ -365,7 +386,7 @@ function MoreBottomSheet({ visible, onClose }: { visible: boolean; onClose: () =
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={ms.scrollContent}>
-          {MORE_SECTIONS.map(section => (
+          {moreSections.map(section => (
             <View key={section.title} style={ms.section}>
               <Text style={[ms.sectionTitle, { color: colors.textMuted }]}>{section.title}</Text>
               <View style={[ms.grid, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -507,6 +528,7 @@ export default function AppLayout() {
             <Tabs.Screen name="payments/index"      options={{ headerShown: false }} />
             <Tabs.Screen name="coupons/index"       options={{ headerShown: false }} />
             <Tabs.Screen name="expenses/index"      options={{ headerShown: false }} />
+            <Tabs.Screen name="royalties/index"     options={{ headerShown: false }} />
             <Tabs.Screen name="expense-report/index" options={{ headerShown: false }} />
             <Tabs.Screen name="tickets/index"       options={{ headerShown: false }} />
             <Tabs.Screen name="reports/index"       options={{ title: 'Reports' }} />
@@ -557,6 +579,7 @@ export default function AppLayout() {
       <Tabs.Screen name="payments/index"       options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
       <Tabs.Screen name="coupons/index"        options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
       <Tabs.Screen name="expenses/index"       options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="royalties/index"      options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
       <Tabs.Screen name="expense-report/index" options={{ headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
       <Tabs.Screen name="tickets/index"        options={{ title: 'Support Tickets',    headerShown: false, tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
       <Tabs.Screen name="reports/index"        options={{ title: 'Reports',        tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />

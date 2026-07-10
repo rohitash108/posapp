@@ -1,14 +1,15 @@
 {
   "name": "cspos-mobile",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:web": "npx expo export -p web",
+    "build:web": "node scripts/write-version.js && npx expo export -p web",
     "make:ico": "node scripts/make-ico.js",
+    "write-version": "node scripts/write-version.js",
     "electron:dev": "npm run build:web && electron electron/main.js",
     "electron:build:portable": "npm run make:ico && npm run build:web && electron-builder --win portable --x64",
     "electron:build:installer": "npm run make:ico && npm run build:web && electron-builder --win nsis --x64",

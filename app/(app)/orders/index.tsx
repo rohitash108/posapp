@@ -478,10 +478,20 @@ function SheetRow({ icon, label, color, onPress, ms }: {
 }
 
 // ── Order Card (Grid) ─────────────────────────────────────────────────────────
+/** Uniform grid card height — scales slightly by viewport */
+function orderCardHeight(screenW: number) {
+  if (screenW >= 1700) return 448;
+  if (screenW >= 1200) return 432;
+  if (screenW >= 700)  return 416;
+  return 400;
+}
+
 function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint, isUpdating }: { order: Order } & ActionProps) {
   const { colors: c, isDark } = useTheme();
+  const { width: screenW } = useWindowDimensions();
   const { restaurant } = useAppStore();
   const cd = useMemo(() => mkCd(c, isDark), [c, isDark]);
+  const cardHeight = orderCardHeight(screenW);
   const [showAction, setShowAction] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   const [actionPos,  setActionPos]  = useState<DropPos | null>(null);
@@ -524,7 +534,7 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
   const srcC   = srcCfg(order.source ?? 'pos', isDark);
 
   return (
-    <View style={cd.wrap}>
+    <View style={[cd.wrap, { height: cardHeight }]}>
       {/* ── Card header (csPos: flat surface + blue icon) ── */}
       <View style={cd.head}>
         <View style={cd.headL}>
@@ -560,8 +570,13 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
         <Text style={cd.time}>{fmtCardTime(order.created_at)}</Text>
       </View>
 
-      {/* ── Items ── */}
-      <View style={cd.itemsWrap}>
+      {/* ── Items (scrollable — card height stays fixed) ── */}
+      <ScrollView
+        style={cd.itemsScroll}
+        contentContainerStyle={cd.itemsScrollContent}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+      >
         {shown.length === 0 ? (
           <Text style={cd.noItems}>{agg ? 'Items not synced' : 'No items'}</Text>
         ) : shown.map((i, idx) => {
@@ -595,47 +610,53 @@ function OrderCard({ order, onStatusChange, onPaymentChange, onMarkPaid, onPrint
             </Text>
           </View>
         ) : null}
-      </View>
+      </ScrollView>
 
-      {/* ── Action buttons (web) ── */}
-      {Platform.OS === 'web' && !agg && (
+      {/* ── Action buttons (web) — reserved height keeps cards aligned ── */}
+      {Platform.OS === 'web' && (
         <View style={cd.actionRow}>
-          <Pressable style={cd.outlineOrangeBtn} onPress={() => onPrint(order)}>
-            <Ionicons name="document-text-outline" size={13} color={S.orange} />
-            <Text style={cd.outlineOrangeTxt}>Receipt</Text>
-          </Pressable>
-          <Pressable style={cd.solidPrimaryBtn} onPress={() => onPrint(order)}>
-            <Ionicons name="print-outline" size={13} color="#fff" />
-            <Text style={cd.solidPrimaryTxt}>Print</Text>
-          </Pressable>
-          <Pressable style={cd.outlineNeutralBtn} onPress={() => printKOT(order, restaurant)}>
-            <Ionicons name="restaurant-outline" size={13} color={isDark ? '#fff' : c.heading} />
-            <Text style={cd.outlineNeutralTxt}>KOT</Text>
-          </Pressable>
+          {!agg && (
+            <>
+              <Pressable style={cd.outlineOrangeBtn} onPress={() => onPrint(order)}>
+                <Ionicons name="document-text-outline" size={13} color={S.orange} />
+                <Text style={cd.outlineOrangeTxt}>Receipt</Text>
+              </Pressable>
+              <Pressable style={cd.solidPrimaryBtn} onPress={() => onPrint(order)}>
+                <Ionicons name="print-outline" size={13} color="#fff" />
+                <Text style={cd.solidPrimaryTxt}>Print</Text>
+              </Pressable>
+              <Pressable style={cd.outlineNeutralBtn} onPress={() => printKOT(order, restaurant)}>
+                <Ionicons name="restaurant-outline" size={13} color={isDark ? '#fff' : c.heading} />
+                <Text style={cd.outlineNeutralTxt}>KOT</Text>
+              </Pressable>
+            </>
+          )}
         </View>
       )}
 
-      {/* ── Payment methods ── */}
-      {!agg && (
-        <View style={cd.payRow}>
-          <Text style={cd.payLabel}>Payment:</Text>
-          <View style={cd.payMethodRow}>
-            {(['cash','card','upi'] as const).map((pm, idx, arr) => {
-              const active = (order.payment_method ?? '') === pm;
-              const isLast = idx === arr.length - 1;
-              return (
-                <Pressable key={pm} disabled={isUpdating}
-                  style={[cd.pmBtn, isLast && cd.pmBtnLast, active && cd.pmBtnActive]}
-                  onPress={() => onPaymentChange(order.id, pm)}>
-                  <Text style={[cd.pmText, active && cd.pmTextActive]}>
-                    {pm === 'upi' ? 'UPI' : pm.charAt(0).toUpperCase() + pm.slice(1)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      )}
+      {/* ── Payment methods — reserved height for POS orders ── */}
+      <View style={[cd.payRow, agg && cd.payRowEmpty]}>
+        {!agg && (
+          <>
+            <Text style={cd.payLabel}>Payment:</Text>
+            <View style={cd.payMethodRow}>
+              {(['cash','card','upi'] as const).map((pm, idx, arr) => {
+                const active = (order.payment_method ?? '') === pm;
+                const isLast = idx === arr.length - 1;
+                return (
+                  <Pressable key={pm} disabled={isUpdating}
+                    style={[cd.pmBtn, isLast && cd.pmBtnLast, active && cd.pmBtnActive]}
+                    onPress={() => onPaymentChange(order.id, pm)}>
+                    <Text style={[cd.pmText, active && cd.pmTextActive]}>
+                      {pm === 'upi' ? 'UPI' : pm.charAt(0).toUpperCase() + pm.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
+      </View>
 
       {/* ── Footer ── */}
       <View style={cd.footer}>
@@ -1307,7 +1328,7 @@ export default function OrdersScreen() {
         ) : viewMode === 'grid' ? (
           <View style={[s.grid, numCols > 1 && s.gridRow]}>
             {filtered.map(o => (
-              <View key={o.id} style={{ width: `${100 / numCols}%` as any, padding: 6 }}>
+              <View key={o.id} style={[s.gridCell, { width: `${100 / numCols}%` as any }]}>
                 <OrderCard order={o} {...actionProps} />
               </View>
             ))}
@@ -1451,7 +1472,8 @@ function mkS(c: ThemeColors, isDark: boolean) {
     emptyTitle:     { fontSize: 17, fontWeight: '700', color: c.text },
     emptySub:       { fontSize: 13.5, color: c.textMuted, textAlign: 'center', paddingHorizontal: 40, lineHeight: 20 },
     grid:           { padding: 8, width: '100%' },
-    gridRow:        { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
+    gridRow:        { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'stretch' },
+    gridCell:       { padding: 6, alignSelf: 'stretch' },
     listWrap:       {
       marginHorizontal: 14, marginTop: 8, marginBottom: 14,
       backgroundColor: c.surface, borderRadius: 16, overflow: 'hidden',
@@ -1498,9 +1520,10 @@ function mkCd(c: ThemeColors, isDark: boolean) {
     wrap:        {
       backgroundColor: c.surface, borderRadius: 16, overflow: 'hidden',
       borderWidth: 1, borderColor: c.border,
+      flexDirection: 'column',
       shadowColor: '#000', shadowOpacity: isDark ? 0.25 : 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 3 }, elevation: 3,
     },
-    head:        { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: c.surface, paddingHorizontal: 14, paddingTop: 13, paddingBottom: 8 },
+    head:        { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: c.surface, paddingHorizontal: 14, paddingTop: 13, paddingBottom: 8, flexShrink: 0 },
     headL:       { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 10, minWidth: 0 },
     avatar:      {
       width: 36, height: 36, borderRadius: 18,
@@ -1517,9 +1540,11 @@ function mkCd(c: ThemeColors, isDark: boolean) {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8,
       paddingHorizontal: 14, paddingBottom: 10,
       borderBottomWidth: 1, borderBottomColor: c.border,
+      flexShrink: 0,
     },
     time:        { fontSize: 11, color: c.textMuted, fontWeight: '500', flexShrink: 1, textAlign: 'right' },
-    itemsWrap:   { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10 },
+    itemsScroll:        { flex: 1, minHeight: 0 },
+    itemsScrollContent: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8, flexGrow: 1 },
     itemLine:    { fontSize: 12.5, lineHeight: 20, marginBottom: 4, color: c.text },
     itemName:    { color: c.text },
     itemQty:     { color: c.textMuted, fontWeight: '600' },
@@ -1531,14 +1556,15 @@ function mkCd(c: ThemeColors, isDark: boolean) {
     riderBox:    { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: riderBg, borderRadius: 8, padding: 8, marginTop: 7 },
     riderText:   { flex: 1, fontSize: 12, color: riderText, lineHeight: 17 },
     totalAmt:    { fontSize: 16, fontWeight: '800', color: c.heading, letterSpacing: -0.3, flex: 1 },
-    actionRow:   { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border },
+    actionRow:   { flexDirection: 'row', gap: 6, minHeight: 44, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border, flexShrink: 0 },
     outlineOrangeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: S.orange, backgroundColor: 'transparent' },
     outlineOrangeTxt: { fontSize: 12, fontWeight: '700', color: S.orange },
     solidPrimaryBtn:  { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, borderRadius: 6, backgroundColor: c.primary },
     solidPrimaryTxt:  { fontSize: 12, fontWeight: '700', color: '#fff' },
     outlineNeutralBtn:{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.35)' : c.border, backgroundColor: 'transparent' },
     outlineNeutralTxt:{ fontSize: 12, fontWeight: '700', color: isDark ? '#fff' : c.heading },
-    payRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border, flexWrap: 'wrap' },
+    payRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border, flexWrap: 'wrap', flexShrink: 0 },
+    payRowEmpty: { borderBottomWidth: 0, paddingVertical: 0 },
     payLabel:    { fontSize: 12, fontWeight: '700', color: S.orange },
     payMethodRow:{ flexDirection: 'row', borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: S.orange },
     pmBtn:       { paddingHorizontal: 14, paddingVertical: 7, backgroundColor: 'transparent', borderRightWidth: 1, borderRightColor: S.orange },
@@ -1546,7 +1572,7 @@ function mkCd(c: ThemeColors, isDark: boolean) {
     pmBtnActive: { backgroundColor: c.primary, borderRightColor: c.primary },
     pmText:      { fontSize: 12, fontWeight: '700', color: S.orange },
     pmTextActive:{ color: '#fff' },
-    footer:      { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10, flexWrap: 'wrap' },
+    footer:      { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 46, paddingHorizontal: 12, paddingVertical: 10, flexWrap: 'wrap', flexShrink: 0, marginTop: 'auto' },
     payPill:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 0, paddingVertical: 0 },
     payDot:      { width: 6, height: 6, borderRadius: 3 },
     payText:     { fontSize: 12, fontWeight: '700' },

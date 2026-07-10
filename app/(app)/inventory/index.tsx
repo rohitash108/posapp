@@ -7,11 +7,25 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { inventoryApi } from '@/api/inventory';
+import MenuStockPanel from '@/components/stock/MenuStockPanel';
+import SuppliesPanel from '@/components/stock/SuppliesPanel';
+import IngredientFormModal from '@/components/stock/IngredientFormModal';
+import {
+  STOCK_BRAND,
+  ingredientStockTone,
+  filterChipColor,
+  pickerSelectedBg,
+  errBannerColors,
+  moveBadgeBg,
+  qtyDeltaColor,
+} from '@/components/stock/stockUi';
 import { useTheme } from '@/store/themeStore';
 import type { ThemeColors } from '@/theme/tokens';
 import type { Ingredient, ExpiringBatch, StockMovement, InventoryData } from '@/types';
 
-const BRAND = '#0f8f73';
+type StockModule = 'ingredients' | 'menu' | 'supplies';
+
+const BRAND = STOCK_BRAND;
 
 // ─── Movement type config ─────────────────────────────────────────────────────
 const MOVE_CFG: Record<string, { color: string; label: string; sign: string }> = {
@@ -38,17 +52,14 @@ function timeAgo(iso?: string | null): string {
   return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-function stockStatus(ing: Ingredient): { label: string; color: string; bg: string } {
-  if (ing.on_hand <= 0)
-    return { label: 'Out of Stock', color: '#dc2626', bg: '#fef2f2' };
-  if (ing.low_stock_threshold > 0 && ing.on_hand <= ing.low_stock_threshold)
-    return { label: 'Low Stock', color: '#d97706', bg: '#fef9ec' };
-  return { label: 'In Stock', color: '#16a34a', bg: '#f0fdf4' };
+function stockStatus(ing: Ingredient, isDark: boolean) {
+  return ingredientStockTone(ing, isDark);
 }
 
 // ─── Style factories ──────────────────────────────────────────────────────────
 
-function mkS(c: ThemeColors) {
+function mkS(c: ThemeColors, isDark: boolean) {
+  const err = errBannerColors(isDark);
   return StyleSheet.create({
     shell:    { flex: 1, backgroundColor: c.background },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -67,12 +78,12 @@ function mkS(c: ThemeColors) {
     statLbl:     { fontSize: 9, color: c.textMuted, textAlign: 'center' },
     statDivider: { width: 1, height: 28, backgroundColor: c.border },
 
-    errBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fef2f2', borderBottomWidth: 1, borderBottomColor: '#fecaca', paddingHorizontal: 14, paddingVertical: 9 },
-    errText:   { flex: 1, fontSize: 12.5, color: '#dc2626' },
+    errBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: err.backgroundColor, borderBottomWidth: 1, borderBottomColor: err.borderColor, paddingHorizontal: 14, paddingVertical: 9 },
+    errText:   { flex: 1, fontSize: 12.5, color: isDark ? '#FF3636' : '#dc2626' },
     retryBtn:  { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 6, backgroundColor: '#dc2626' },
     retryTxt:  { fontSize: 12, fontWeight: '700', color: '#fff' },
 
-    alertRow:  { gap: 14 },
+    alertRow:  { flexDirection: 'row', gap: 14 },
     alertCard: { backgroundColor: c.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: c.border },
     alertCardHdr: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10 },
     alertCardTitle: { fontSize: 13.5, fontWeight: '700', color: c.heading, flex: 1 },
@@ -82,13 +93,18 @@ function mkS(c: ThemeColors) {
     alertRow2:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.border },
     alertItemName: { fontSize: 13, fontWeight: '600', color: c.text },
     alertItemUnit: { fontSize: 11.5, color: c.textMuted, marginTop: 1 },
-    warnBadge: { backgroundColor: '#fef3c7', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-    warnBadgeTxt: { fontSize: 11.5, fontWeight: '700', color: '#92400e' },
+    warnBadge: { backgroundColor: isDark ? 'rgba(253,175,34,0.15)' : '#fef3c7', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+    warnBadgeTxt: { fontSize: 11.5, fontWeight: '700', color: isDark ? '#FDAF22' : '#92400e' },
 
     tabBar:   { flexDirection: 'row', backgroundColor: c.surface, borderRadius: 10, borderWidth: 1, borderColor: c.border, overflow: 'hidden' },
     tabBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
     tabActive:{ borderBottomWidth: 2, borderBottomColor: BRAND },
     tabTxt:   { fontSize: 13, fontWeight: '600', color: c.textMuted },
+
+    moduleBar:   { flexDirection: 'row', backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, paddingHorizontal: 10, paddingVertical: 8, gap: 6 },
+    moduleBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 9, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceAlt },
+    moduleActive:{ backgroundColor: BRAND, borderColor: BRAND },
+    moduleTxt:   { fontSize: 12, fontWeight: '700', color: c.text },
 
     card:     { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: 'hidden', width: '100%', alignSelf: 'stretch' },
     cardHdr:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
@@ -185,13 +201,17 @@ function StockOpModal({
   onSave: () => void;
   onClose: () => void;
 }) {
-  const { colors: c } = useTheme();
+  const { colors: c, isDark } = useTheme();
   const m = useMemo(() => mkM(c), [c]);
+  const pickSel = pickerSelectedBg(isDark);
 
   const [op, setOp]           = useState<OpType>(defaultOp ?? 'stock-in');
   const [ingId, setIngId]     = useState<number | null>(defaultId ?? null);
   const [qty, setQty]         = useState('');
   const [notes, setNotes]     = useState('');
+  const [reference, setReference] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [unitCost, setUnitCost] = useState('');
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState('');
   const [showPicker, setShowPicker] = useState(false);
@@ -203,6 +223,9 @@ function StockOpModal({
       setIngId(defaultId ?? null);
       setQty('');
       setNotes('');
+      setReference('');
+      setExpiryDate('');
+      setUnitCost('');
       setError('');
     }
   }, [visible, defaultId, defaultOp]);
@@ -216,11 +239,22 @@ function StockOpModal({
   async function save() {
     if (!ingId)  { setError('Select an ingredient'); return; }
     const q = parseFloat(qty);
-    if (!qty || isNaN(q) || q <= 0) { setError('Enter a valid quantity'); return; }
+    if (op === 'adjustment') {
+      if (!qty || isNaN(q) || q === 0) { setError('Enter a non-zero quantity change'); return; }
+    } else if (!qty || isNaN(q) || q <= 0) {
+      setError('Enter a valid quantity'); return;
+    }
     setSaving(true); setError('');
     try {
       if (op === 'stock-in') {
-        await inventoryApi.stockIn({ ingredient_id: ingId, quantity: q, notes });
+        await inventoryApi.stockIn({
+          ingredient_id: ingId,
+          quantity: q,
+          notes,
+          reference: reference || undefined,
+          expiry_date: expiryDate || undefined,
+          unit_cost: unitCost ? parseFloat(unitCost) : undefined,
+        });
       } else if (op === 'waste') {
         await inventoryApi.waste({ ingredient_id: ingId, quantity: q, notes });
       } else {
@@ -298,7 +332,7 @@ function StockOpModal({
                     {filteredIngs.map(i => (
                       <TouchableOpacity
                         key={i.id}
-                        style={[m.pickerItem, ingId === i.id && { backgroundColor: '#f0fdf4' }]}
+                        style={[m.pickerItem, ingId === i.id && { backgroundColor: pickSel }]}
                         onPress={() => { setIngId(i.id); setShowPicker(false); setIngSearch(''); }}
                       >
                         <Text style={[m.pickerItemTxt, ingId === i.id && { color: BRAND, fontWeight: '700' }]}>
@@ -335,6 +369,23 @@ function StockOpModal({
                 </Text>
               )}
             </View>
+
+            {op === 'stock-in' && (
+              <>
+                <View style={m.field}>
+                  <Text style={m.label}>Reference</Text>
+                  <TextInput style={m.input} value={reference} onChangeText={setReference} placeholder="PO / invoice ref" placeholderTextColor={c.textMuted} />
+                </View>
+                <View style={m.field}>
+                  <Text style={m.label}>Expiry Date</Text>
+                  <TextInput style={m.input} value={expiryDate} onChangeText={setExpiryDate} placeholder="YYYY-MM-DD" placeholderTextColor={c.textMuted} />
+                </View>
+                <View style={m.field}>
+                  <Text style={m.label}>Unit Cost</Text>
+                  <TextInput style={m.input} value={unitCost} onChangeText={setUnitCost} placeholder="Optional" placeholderTextColor={c.textMuted} keyboardType="decimal-pad" />
+                </View>
+              </>
+            )}
 
             {/* Notes */}
             <View style={m.field}>
@@ -376,8 +427,8 @@ function StockOpModal({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function InventoryScreen() {
-  const { colors: c } = useTheme();
-  const s = useMemo(() => mkS(c), [c]);
+  const { colors: c, isDark } = useTheme();
+  const s = useMemo(() => mkS(c, isDark), [c, isDark]);
 
   const { width } = useWindowDimensions();
   const insets   = useSafeAreaInsets();
@@ -392,6 +443,9 @@ export default function InventoryScreen() {
   const [opIngId, setOpIngId]   = useState<number | undefined>();
   const [opType, setOpType]     = useState<OpType>('stock-in');
   const [tab, setTab]           = useState<'stock' | 'movements'>('stock');
+  const [module, setModule]     = useState<StockModule>('ingredients');
+  const [showIngForm, setShowIngForm] = useState(false);
+  const [editIng, setEditIng]   = useState<Ingredient | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -446,26 +500,71 @@ export default function InventoryScreen() {
     { icon: 'time-outline',           val: expiring.length,      lbl: 'Expiring',  color: '#ef4444' },
   ] as const;
 
+  const moduleLabels: { key: StockModule; label: string; icon: string }[] = [
+    { key: 'ingredients', label: 'Ingredients', icon: 'cube-outline' },
+    { key: 'menu', label: 'Menu Stock', icon: 'fast-food-outline' },
+    { key: 'supplies', label: 'Supplies', icon: 'layers-outline' },
+  ];
+
+  const pageSub =
+    module === 'ingredients'
+      ? `${ingredients.length} ingredients · Branch: ${data?.branch_name ?? 'Main'}`
+      : module === 'menu' ? 'Menu item stock levels' :
+    'Packing & consumable supplies';
+
   return (
     <View style={s.shell}>
       {/* ── Page header ────────────────────────────────────── */}
       <View style={[s.topbar, { paddingTop: insets.top + 12 }]}>
         <View style={{ flex: 1 }}>
-          <Text style={s.pageTitle}>Inventory</Text>
-          <Text style={s.pageSub}>{ingredients.length} ingredients tracked</Text>
+          <Text style={s.pageTitle}>Stock Management</Text>
+          <Text style={s.pageSub}>{pageSub}</Text>
         </View>
-        <View style={s.topActions}>
-          <TouchableOpacity style={[s.actionBtn, { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }]} onPress={() => openWaste()}>
-            <Ionicons name="trash-outline" size={14} color="#dc2626" />
-            <Text style={[s.actionBtnTxt, { color: '#dc2626' }]}>Waste</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.actionBtn, { backgroundColor: c.sidebar }]} onPress={() => openStockIn()}>
-            <Ionicons name="arrow-down-circle-outline" size={14} color="#fff" />
-            <Text style={[s.actionBtnTxt, { color: '#fff' }]}>Stock In</Text>
-          </TouchableOpacity>
-        </View>
+        {module === 'ingredients' && (
+          <View style={s.topActions}>
+            <TouchableOpacity
+              style={[s.actionBtn, { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }]}
+              onPress={() => { setEditIng(null); setShowIngForm(true); }}
+            >
+              <Ionicons name="add-circle-outline" size={14} color={BRAND} />
+              <Text style={[s.actionBtnTxt, { color: BRAND }]}>Add</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.actionBtn, { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }]} onPress={() => openWaste()}>
+              <Ionicons name="trash-outline" size={14} color="#dc2626" />
+              <Text style={[s.actionBtnTxt, { color: '#dc2626' }]}>Waste</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.actionBtn, { backgroundColor: c.sidebar }]} onPress={() => openStockIn()}>
+              <Ionicons name="arrow-down-circle-outline" size={14} color="#fff" />
+              <Text style={[s.actionBtnTxt, { color: '#fff' }]}>Stock In</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
+      {/* Module tabs — Ingredients | Menu Stock | Supplies */}
+      <View style={s.moduleBar}>
+        {moduleLabels.map(m => (
+          <TouchableOpacity
+            key={m.key}
+            style={[s.moduleBtn, module === m.key && s.moduleActive]}
+            onPress={() => setModule(m.key)}
+          >
+            <Ionicons name={m.icon as any} size={14} color={module === m.key ? '#fff' : c.textMuted} />
+            <Text style={[s.moduleTxt, module === m.key && { color: '#fff' }]}>{m.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {module === 'menu' ? (
+        <View style={{ flex: 1, backgroundColor: c.background }}>
+          <MenuStockPanel />
+        </View>
+      ) : module === 'supplies' ? (
+        <View style={{ flex: 1, backgroundColor: c.background }}>
+          <SuppliesPanel />
+        </View>
+      ) : (
+        <>
       {/* ── Stats bar (Kitchen / Coupons style) ───────────── */}
       <View style={s.statsBar}>
         {statItems.map((st, i) => (
@@ -527,7 +626,52 @@ export default function InventoryScreen() {
           </View>
 
           {tab === 'stock' ? (
-            /* ── On-hand by ingredient ─────────────────────── */
+            <>
+          {/* Low stock + expiring alert cards (csPos inventory.index parity) */}
+          {(lowStock.length > 0 || expiring.length > 0) && (
+            <View style={[s.alertRow, isMobile && { flexDirection: 'column' }]}>
+              <View style={[s.alertCard, { flex: 1 }]}>
+                <View style={s.alertCardHdr}>
+                  <Ionicons name="warning-outline" size={16} color={isDark ? '#FDAF22' : '#d97706'} />
+                  <Text style={s.alertCardTitle}>Low stock</Text>
+                  {lowStock.length > 0 && (
+                    <View style={s.alertBadge}><Text style={[s.alertBadgeTxt, { color: isDark ? '#FDAF22' : '#d97706' }]}>{lowStock.length}</Text></View>
+                  )}
+                </View>
+                {lowStock.length === 0 ? (
+                  <Text style={s.alertEmpty}>No low-stock alerts.</Text>
+                ) : lowStock.map(ing => (
+                  <View key={ing.id} style={s.alertRow2}>
+                    <View>
+                      <Text style={s.alertItemName}>{ing.name}</Text>
+                      <Text style={s.alertItemUnit}>{ing.unit}</Text>
+                    </View>
+                    <View style={s.warnBadge}>
+                      <Text style={s.warnBadgeTxt}>{ing.on_hand.toFixed(3)} / {ing.low_stock_threshold}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+              <View style={[s.alertCard, { flex: 1 }]}>
+                <View style={s.alertCardHdr}>
+                  <Ionicons name="time-outline" size={16} color={isDark ? '#FF3636' : '#dc2626'} />
+                  <Text style={s.alertCardTitle}>Expiring (7 days)</Text>
+                </View>
+                {expiring.length === 0 ? (
+                  <Text style={s.alertEmpty}>No batches expiring soon.</Text>
+                ) : expiring.map(b => (
+                  <View key={b.id} style={s.alertRow2}>
+                    <View>
+                      <Text style={s.alertItemName}>{b.ingredient_name}</Text>
+                      <Text style={s.alertItemUnit}>{b.expiry_date}</Text>
+                    </View>
+                    <Text style={[s.alertItemName, { fontSize: 12 }]}>{b.quantity_remaining.toFixed(3)} {b.unit}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
             <View style={s.card}>
               {/* Search + filter */}
               <View style={[s.tableToolbar, isMobile && { flexDirection: 'column', alignItems: 'stretch' }]}>
@@ -548,9 +692,9 @@ export default function InventoryScreen() {
                 </View>
                 <View style={s.filterChips}>
                   {([
-                    ['all', 'All',       ingredients.length,                                '#1B2E1B'],
-                    ['low', 'Low Stock', lowStock.length,                                    '#d97706'],
-                    ['out', 'Out',       ingredients.filter(i => i.on_hand <= 0).length,    '#dc2626'],
+                    ['all', 'All',       ingredients.length,                                filterChipColor('all', isDark, c)],
+                    ['low', 'Low Stock', lowStock.length,                                    filterChipColor('low', isDark, c)],
+                    ['out', 'Out',       ingredients.filter(i => i.on_hand <= 0).length,    filterChipColor('out', isDark, c)],
                   ] as const).map(([f, label, cnt, col]) => (
                     <TouchableOpacity
                       key={f}
@@ -584,7 +728,7 @@ export default function InventoryScreen() {
                     <Text style={s.emptyTxt}>{search ? 'No ingredients matched' : 'No inventory items'}</Text>
                   </View>
                 ) : displayed.map((ing, idx) => {
-                  const st = stockStatus(ing);
+                  const st = stockStatus(ing, isDark);
                   const pct = ing.low_stock_threshold > 0
                     ? Math.min(100, (ing.on_hand / (ing.low_stock_threshold * 3)) * 100)
                     : Math.min(100, (ing.on_hand / 100) * 100);
@@ -610,6 +754,9 @@ export default function InventoryScreen() {
                         )}
                       </View>
                       <View style={[s.cAct, { flexDirection: 'row', gap: 6 }]}>
+                        <TouchableOpacity style={s.actBtn} onPress={() => { setEditIng(ing); setShowIngForm(true); }}>
+                          <Ionicons name="create-outline" size={15} color={c.textMuted} />
+                        </TouchableOpacity>
                         <TouchableOpacity style={s.actBtn} onPress={() => openStockIn(ing)}>
                           <Ionicons name="arrow-down-circle-outline" size={15} color={BRAND} />
                         </TouchableOpacity>
@@ -622,6 +769,7 @@ export default function InventoryScreen() {
                 })}
               </View>
             </View>
+            </>
           ) : (
             /* ── Recent movements ──────────────────────────── */
             <View style={s.card}>
@@ -650,7 +798,7 @@ export default function InventoryScreen() {
                       {timeAgo(mv.created_at)}
                     </Text>
                     <View style={s.mType}>
-                      <View style={[s.movBadge, { backgroundColor: cfg.color + '18' }]}>
+                      <View style={[s.movBadge, { backgroundColor: moveBadgeBg(cfg.color, isDark) }]}>
                         <Text style={[s.movBadgeTxt, { color: cfg.color }]}>{cfg.label}</Text>
                       </View>
                     </View>
@@ -661,7 +809,7 @@ export default function InventoryScreen() {
                     <Text style={[s.tCell, s.mQty, {
                       fontFamily: 'monospace',
                       fontWeight: '700',
-                      color: mv.quantity_change > 0 ? '#059669' : mv.quantity_change < 0 ? '#dc2626' : c.textMuted,
+                      color: qtyDeltaColor(mv.quantity_change, isDark, c),
                     }]}>
                       {mv.quantity_change > 0 ? '+' : ''}{mv.quantity_change.toFixed(3)}
                     </Text>
@@ -674,6 +822,12 @@ export default function InventoryScreen() {
       )}
 
       {/* ── Stock operation modal ─────────────────────────── */}
+      <IngredientFormModal
+        visible={showIngForm}
+        ingredient={editIng}
+        onSave={() => { setShowIngForm(false); setEditIng(null); load(true); }}
+        onClose={() => { setShowIngForm(false); setEditIng(null); }}
+      />
       <StockOpModal
         visible={showOp}
         ingredients={ingredients}
@@ -682,6 +836,8 @@ export default function InventoryScreen() {
         onSave={() => { setShowOp(false); load(true); }}
         onClose={() => setShowOp(false)}
       />
+        </>
+      )}
     </View>
   );
 }
