@@ -132,7 +132,7 @@ function createStyles(c: ThemeColors) {
     cardCustomer: { fontSize: 14, fontWeight: '800', color: c.heading },
     cardOrderType:{ fontSize: 11, color: c.textMuted, marginTop: 2 },
     cardHeadR:    { alignItems: 'flex-end', gap: 4, flexShrink: 0 },
-    orderNumBadge:{ backgroundColor: '#fefce8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#fef08a' },
+    orderNumBadge:{ backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: c.border },
     orderNumTxt:  { fontSize: 12, fontWeight: '900', color: c.heading, letterSpacing: 0.5 },
     srcBadge:     { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1 },
     srcBadgeTxt:  { fontSize: 10, fontWeight: '800' },
@@ -162,8 +162,8 @@ function createStyles(c: ThemeColors) {
     // Info boxes
     infoBox:   { flexDirection: 'row', alignItems: 'flex-start', gap: 5, backgroundColor: c.surfaceAlt, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 6, marginTop: 4 },
     infoBoxTxt:{ flex: 1, fontSize: 11.5, color: c.text, lineHeight: 16 },
-    notesBox:  { backgroundColor: '#fffbeb' },
-    notesTxt:  { color: '#92400e', fontStyle: 'italic' },
+    notesBox:  { backgroundColor: 'rgba(245,158,11,0.1)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)' },
+    notesTxt:  { color: '#d97706', fontStyle: 'italic' },
 
     // Footer
     cardFoot:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, marginTop: 8, borderTopWidth: 1, borderTopColor: c.border, gap: 6 },
