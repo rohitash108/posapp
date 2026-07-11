@@ -256,6 +256,182 @@ function mkDm(c: ThemeColors) {
   });
 }
 
+// ── Category Manager Styles ───────────────────────────────────────────────────
+function mkCm(c: ThemeColors) {
+  return StyleSheet.create({
+    backdrop:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+    panel:        { backgroundColor: c.surface, borderRadius: 16, width: '100%', maxWidth: 480, maxHeight: '85%', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 30, elevation: 20 },
+    header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: c.sidebar },
+    headerTitle:  { fontSize: 16, fontWeight: '800', color: '#fff' },
+    headerSub:    { fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
+    closeBtn:     { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+    list:         { flex: 1 },
+    emptyWrap:    { paddingVertical: 30, alignItems: 'center', gap: 8 },
+    emptyTxt:     { fontSize: 13, color: c.textMuted, fontStyle: 'italic' },
+    catRow:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    catDot:       { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+    catName:      { flex: 1, fontSize: 14, fontWeight: '600', color: c.text },
+    catEditInput: { flex: 1, fontSize: 14, fontWeight: '600', color: c.text, borderBottomWidth: 1.5, borderBottomColor: c.primary, paddingVertical: 2, backgroundColor: 'transparent', padding: 0 },
+    actBtn:       { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    editBtn:      { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe' },
+    saveEditBtn:  { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#86efac' },
+    delBtn:       { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' },
+    addArea:      { padding: 14, borderTopWidth: 1, borderTopColor: c.border },
+    addLabel:     { fontSize: 11, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+    addRow:       { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    addInput:     { flex: 1, borderWidth: 1.5, borderColor: c.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: c.text, backgroundColor: c.surfaceAlt },
+    addBtn:       { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.sidebar, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
+    addBtnTxt:    { color: '#fff', fontWeight: '700', fontSize: 13 },
+  });
+}
+
+// ── Category Manager Modal ────────────────────────────────────────────────────
+function CategoryMgrModal({
+  visible, categories, onClose, onSaved,
+}: {
+  visible: boolean;
+  categories: ExpenseCategory[];
+  onClose: () => void;
+  onSaved: (cats: ExpenseCategory[]) => void;
+}) {
+  const { colors: c } = useTheme();
+  const cm = useMemo(() => mkCm(c), [c]);
+
+  const [newName,   setNewName]   = useState('');
+  const [adding,    setAdding]    = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName,  setEditName]  = useState('');
+  const [deleting,  setDeleting]  = useState<number | null>(null);
+
+  async function addCategory() {
+    const name = newName.trim();
+    if (!name) return;
+    setAdding(true);
+    try {
+      const res = await client.post('/expense-categories', { name });
+      const cat: ExpenseCategory = res.data?.data ?? res.data ?? { id: Date.now(), name };
+      onSaved([...categories, cat]);
+      setNewName('');
+    } catch { Alert.alert('Error', 'Failed to add category.'); }
+    finally { setAdding(false); }
+  }
+
+  async function saveEdit(id: number) {
+    const name = editName.trim();
+    if (!name) return;
+    try {
+      await client.put(`/expense-categories/${id}`, { name });
+      onSaved(categories.map(cat => cat.id === id ? { ...cat, name } : cat));
+      setEditingId(null);
+    } catch { Alert.alert('Error', 'Failed to update category.'); }
+  }
+
+  async function deleteCategory(id: number) {
+    setDeleting(id);
+    try {
+      await client.delete(`/expense-categories/${id}`);
+      onSaved(categories.filter(cat => cat.id !== id));
+    } catch { Alert.alert('Error', 'Failed to delete category.'); }
+    finally { setDeleting(null); }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={cm.backdrop} onPress={onClose}>
+        <Pressable style={cm.panel} onPress={() => {}}>
+          <View style={cm.header}>
+            <View>
+              <Text style={cm.headerTitle}>Manage Categories</Text>
+              <Text style={cm.headerSub}>{categories.length} {categories.length === 1 ? 'category' : 'categories'}</Text>
+            </View>
+            <Pressable style={cm.closeBtn} onPress={onClose}>
+              <Ionicons name="close" size={18} color="#fff" />
+            </Pressable>
+          </View>
+
+          <ScrollView style={cm.list} keyboardShouldPersistTaps="handled">
+            {categories.length === 0 && (
+              <View style={cm.emptyWrap}>
+                <Ionicons name="folder-open-outline" size={32} color={c.textMuted} />
+                <Text style={cm.emptyTxt}>No categories yet — add one below</Text>
+              </View>
+            )}
+            {categories.map((cat, idx) => {
+              const pal    = catPalette(idx);
+              const isEditing = editingId === cat.id;
+              return (
+                <View key={cat.id} style={cm.catRow}>
+                  <View style={[cm.catDot, { backgroundColor: pal.dot }]} />
+                  {isEditing ? (
+                    <TextInput
+                      style={cm.catEditInput}
+                      value={editName}
+                      onChangeText={setEditName}
+                      autoFocus
+                      onSubmitEditing={() => saveEdit(cat.id)}
+                      returnKeyType="done"
+                      placeholderTextColor={c.textMuted}
+                    />
+                  ) : (
+                    <Text style={cm.catName}>{cat.name}</Text>
+                  )}
+                  {isEditing ? (
+                    <>
+                      <Pressable style={[cm.actBtn, cm.saveEditBtn]} onPress={() => saveEdit(cat.id)}>
+                        <Ionicons name="checkmark" size={15} color="#15803d" />
+                      </Pressable>
+                      <Pressable style={[cm.actBtn, cm.delBtn]} onPress={() => setEditingId(null)}>
+                        <Ionicons name="close" size={15} color="#dc2626" />
+                      </Pressable>
+                    </>
+                  ) : (
+                    <>
+                      <Pressable style={[cm.actBtn, cm.editBtn]} onPress={() => { setEditingId(cat.id); setEditName(cat.name); }}>
+                        <Ionicons name="create-outline" size={15} color={PRIMARY} />
+                      </Pressable>
+                      {deleting === cat.id ? (
+                        <View style={cm.actBtn}><ActivityIndicator size={14} color="#dc2626" /></View>
+                      ) : (
+                        <Pressable style={[cm.actBtn, cm.delBtn]} onPress={() => deleteCategory(cat.id)}>
+                          <Ionicons name="trash-outline" size={15} color="#dc2626" />
+                        </Pressable>
+                      )}
+                    </>
+                  )}
+                </View>
+              );
+            })}
+          </ScrollView>
+
+          <View style={cm.addArea}>
+            <Text style={cm.addLabel}>Add New Category</Text>
+            <View style={cm.addRow}>
+              <TextInput
+                style={cm.addInput}
+                value={newName}
+                onChangeText={setNewName}
+                placeholder="Category name…"
+                placeholderTextColor={c.textMuted}
+                returnKeyType="done"
+                onSubmitEditing={addCategory}
+              />
+              <Pressable
+                style={[cm.addBtn, (!newName.trim() || adding) && { opacity: 0.5 }]}
+                onPress={addCategory}
+                disabled={!newName.trim() || adding}>
+                {adding
+                  ? <ActivityIndicator size={14} color="#fff" />
+                  : <Ionicons name="add" size={16} color="#fff" />}
+                <Text style={cm.addBtnTxt}>Add</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // ── Expense Form ──────────────────────────────────────────────────────────────
 function ExpenseForm({
   editingExpense,
@@ -807,6 +983,7 @@ export default function ExpensesScreen() {
   const [formOpen,   setFormOpen]   = useState(false);
   const [editing,    setEditing]    = useState<Expense | null>(null);
   const [delTarget,  setDelTarget]  = useState<Expense | null>(null);
+  const [catMgrOpen, setCatMgrOpen] = useState(false);
   const { width } = useWindowDimensions();
   const isDesktop = width >= 900;
 
@@ -939,7 +1116,8 @@ export default function ExpensesScreen() {
             <Ionicons name="bar-chart-outline" size={14} color={c.text} />
             <Text style={s.outlineBtnTxt}>Report</Text>
           </Pressable>
-          <Pressable style={({ pressed }) => [s.goldOutlineBtn, pressed && { opacity: 0.7 }]}>
+          <Pressable style={({ pressed }) => [s.goldOutlineBtn, pressed && { opacity: 0.7 }]}
+            onPress={() => setCatMgrOpen(true)}>
             <Ionicons name="folder-outline" size={14} color={c.brand} />
             <Text style={s.goldOutlineTxt}>Categories</Text>
           </Pressable>
@@ -1139,6 +1317,13 @@ export default function ExpensesScreen() {
       {delTarget && (
         <DeleteModal expense={delTarget} onConfirm={afterDelete} onCancel={() => setDelTarget(null)} />
       )}
+
+      <CategoryMgrModal
+        visible={catMgrOpen}
+        categories={categories}
+        onClose={() => setCatMgrOpen(false)}
+        onSaved={setCategories}
+      />
     </Pressable>
   );
 }

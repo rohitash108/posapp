@@ -376,16 +376,11 @@ export default function SuppliesPanel() {
     if (!silent) setLoading(true);
     setError('');
     try {
-      const [supRes, rulesRes] = await Promise.all([
-        suppliesApi.index({
-          stock_status: filter === 'all' ? 'all' : filter,
-          category: categoryFilter || undefined,
-          q: search || undefined,
-        }),
-        suppliesApi.rules(),
-      ]);
-      setData(supRes.data);
-      setRules(rulesRes.data.rules ?? []);
+      const res = await suppliesApi.index({
+        stock_status: filter === 'all' ? 'all' : filter,
+        category: categoryFilter || undefined,
+      });
+      setData(res.data);
     } catch (e: any) {
       const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load supplies';
       if (!silent) setError(msg);
@@ -394,6 +389,13 @@ export default function SuppliesPanel() {
       setRefreshing(false);
     }
   }, [filter, categoryFilter]);
+
+  const loadRules = useCallback(async () => {
+    try {
+      const res = await suppliesApi.rules();
+      setRules(res.data.rules ?? []);
+    } catch { /* silent — rules tab shows empty on failure */ }
+  }, []);
 
   const loadHistory = useCallback(async (page = 1, append = false) => {
     setHistoryLoading(true);
@@ -421,6 +423,14 @@ export default function SuppliesPanel() {
     if (tab === 'movements') loadHistory(1, false);
   }, [tab, historySkuId, historyType, loadHistory]);
 
+  const rulesLoaded = React.useRef(false);
+  useEffect(() => {
+    if (tab === 'rules' && !rulesLoaded.current) {
+      rulesLoaded.current = true;
+      loadRules();
+    }
+  }, [tab, loadRules]);
+
   const skus = data?.skus ?? [];
   const summary = data?.summary;
   const categories = data?.categories ?? {};
@@ -428,10 +438,14 @@ export default function SuppliesPanel() {
   const historySkus = history?.skus ?? skus.map(s => ({ id: s.id, name: s.name }));
   const historyTypes = history?.types ?? ['purchase', 'sale', 'waste', 'adjustment', 'reversal'];
 
-  const displayedSkus = skus.filter(s =>
-    !search || s.name.toLowerCase().includes(search.toLowerCase()) ||
-    (s.sku_code ?? '').toLowerCase().includes(search.toLowerCase())
-  );
+  const displayedSkus = useMemo(() => {
+    if (!search) return skus;
+    const q = search.toLowerCase();
+    return skus.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      (s.sku_code ?? '').toLowerCase().includes(q)
+    );
+  }, [skus, search]);
 
   function openStockIn(sku?: SupplySku) {
     setOpSkuId(sku?.id);
@@ -521,7 +535,7 @@ export default function SuppliesPanel() {
             <View style={s.tableToolbar}>
               <View style={s.searchWrap}>
                 <Ionicons name="search" size={14} color={c.textMuted} />
-                <TextInput style={s.searchInput} value={search} onChangeText={setSearch} placeholder="Search supply..." placeholderTextColor={c.textMuted} onSubmitEditing={() => load()} />
+                <TextInput style={s.searchInput} value={search} onChangeText={setSearch} placeholder="Search supply..." placeholderTextColor={c.textMuted} />
               </View>
               <View style={s.filterChips}>
                 <TouchableOpacity style={[s.chip, !categoryFilter && { backgroundColor: BRAND, borderColor: BRAND }]} onPress={() => setCategoryFilter('')}>

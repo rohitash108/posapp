@@ -6,7 +6,7 @@
  */
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TextInput, Modal,
+  View, Text, ScrollView, FlatList, StyleSheet, TextInput, Modal,
   RefreshControl, Alert, ActivityIndicator, useWindowDimensions,
   Pressable, Platform, KeyboardAvoidingView, Keyboard,
 } from 'react-native';
@@ -496,8 +496,10 @@ function CustomerFormModal({
   );
 }
 
+function isReg(cust: Customer) { return cust.is_registered !== false; }
+
 // ── Customer Card (grid view) ──────────────────────────────────────────────────
-function CustomerCard({
+const CustomerCard = React.memo(function CustomerCard({
   customer: cust, index, isRegistered, onEdit, onDelete, onPay, deleting,
   menuOpen, onMenuOpen, onMenuClose,
 }: {
@@ -588,7 +590,67 @@ function CustomerCard({
       )}
     </View>
   );
+});
+
+// ── Table Row (list view) ──────────────────────────────────────────────────────
+interface TRowProps {
+  cust: Customer; idx: number;
+  tbl: ReturnType<typeof mkTbl>; c: ThemeColors;
+  deleting: number | null;
+  openPay: (cust: Customer) => void;
+  openEdit: (cust: Customer) => void;
+  confirmDelete: (cust: Customer) => void;
 }
+const TableRow = React.memo(function TableRow({ cust, idx, tbl, c, deleting, openPay, openEdit, confirmDelete }: TRowProps) {
+  const numStr = `#${String(idx + 1).padStart(4, '0')}`;
+  return (
+    <View style={[tbl.row, idx % 2 === 1 && tbl.rowAlt]}>
+      <Text style={[tbl.cell, tbl.cId]}>{numStr}</Text>
+      <View style={[tbl.cName, { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 }]}>
+        <Avatar name={cust.name} size={30} />
+        <View style={{ flex: 1 }}>
+          <Text style={tbl.custName} numberOfLines={1}>{cust.name}</Text>
+          {!!cust.email && <Text style={tbl.custEmail} numberOfLines={1}>{cust.email}</Text>}
+        </View>
+      </View>
+      <Text style={[tbl.cell, tbl.cPhone]}>{cust.phone || '–'}</Text>
+      <View style={[tbl.cOrders, { alignItems: 'center', justifyContent: 'center' }]}>
+        <OrdersBadge count={cust.orders_count ?? 0} />
+      </View>
+      <Text style={[tbl.cell, tbl.cLast, cust.last_order_at ? { color: '#d97706', fontWeight: '500' } : { color: c.textMuted }]}>
+        {fmtDate(cust.last_order_at)}
+      </Text>
+      <View style={[tbl.cBal, { justifyContent: 'center' }]}>
+        {cust.balance != null ? <BalanceCell balance={cust.balance} /> : <Text style={tbl.dash}>–</Text>}
+      </View>
+      <View style={[tbl.cStatus, { justifyContent: 'center' }]}>
+        <StatusBadge status={cust.status} />
+      </View>
+      <View style={[tbl.cAct, { flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
+        {!isReg(cust) ? (
+          <Text style={tbl.dash}>—</Text>
+        ) : (
+          <>
+            <Pressable style={({ pressed }) => [tbl.actBtn, tbl.actPay, pressed && { opacity: 0.7 }]}
+              onPress={() => openPay(cust)}>
+              <Ionicons name="wallet-outline" size={14} color={CRE_GRN} />
+            </Pressable>
+            <Pressable style={({ pressed }) => [tbl.actBtn, tbl.actEdit, pressed && { opacity: 0.7 }]}
+              onPress={() => openEdit(cust)}>
+              <Ionicons name="create-outline" size={14} color="#b45309" />
+            </Pressable>
+            <Pressable style={({ pressed }) => [tbl.actBtn, tbl.actDel, pressed && { opacity: 0.7 }]}
+              onPress={() => confirmDelete(cust)}>
+              {deleting === cust.id
+                ? <ActivityIndicator size={12} color={DUE_RED} />
+                : <Ionicons name="trash-outline" size={14} color={DUE_RED} />}
+            </Pressable>
+          </>
+        )}
+      </View>
+    </View>
+  );
+});
 
 // ── Main Screen ────────────────────────────────────────────────────────────────
 export default function CustomersScreen() {
@@ -619,7 +681,7 @@ export default function CustomersScreen() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res  = await client.get('/customers');
+      const res  = await client.get('/customers', { params: { per_page: 200 } });
       const data = res.data?.data ?? res.data ?? [];
       setCustomers(Array.isArray(data) ? data : []);
     } catch { /* offline */ }
@@ -637,8 +699,6 @@ export default function CustomersScreen() {
       (cust.email ?? '').toLowerCase().includes(q)
     );
   }, [customers, search]);
-
-  function isReg(cust: Customer) { return cust.is_registered !== false; }
 
   function openAdd()                   { setEditing(null); setShowForm(true); }
   function openEdit(cust: Customer)    { if (isReg(cust) && cust.id) { setEditing(cust); setShowForm(true); } }
@@ -677,58 +737,6 @@ export default function CustomersScreen() {
     const id = payTarget.id;
     setCustomers(prev => prev.map(cust => cust.id === id ? { ...cust, balance: newBalance } : cust));
     setPayTarget(null);
-  }
-
-  // ── Table row (list view) — uses tbl/c from closure ────────────────────────
-  function TableRow({ cust, idx }: { cust: Customer; idx: number }) {
-    const numStr = `#${String(idx + 1).padStart(4, '0')}`;
-    return (
-      <View style={[tbl.row, idx % 2 === 1 && tbl.rowAlt]}>
-        <Text style={[tbl.cell, tbl.cId]}>{numStr}</Text>
-        <View style={[tbl.cName, { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 }]}>
-          <Avatar name={cust.name} size={30} />
-          <View style={{ flex: 1 }}>
-            <Text style={tbl.custName} numberOfLines={1}>{cust.name}</Text>
-            {!!cust.email && <Text style={tbl.custEmail} numberOfLines={1}>{cust.email}</Text>}
-          </View>
-        </View>
-        <Text style={[tbl.cell, tbl.cPhone]}>{cust.phone || '–'}</Text>
-        <View style={[tbl.cOrders, { alignItems: 'center', justifyContent: 'center' }]}>
-          <OrdersBadge count={cust.orders_count ?? 0} />
-        </View>
-        <Text style={[tbl.cell, tbl.cLast, cust.last_order_at ? { color: '#d97706', fontWeight: '500' } : { color: c.textMuted }]}>
-          {fmtDate(cust.last_order_at)}
-        </Text>
-        <View style={[tbl.cBal, { justifyContent: 'center' }]}>
-          {cust.balance != null ? <BalanceCell balance={cust.balance} /> : <Text style={tbl.dash}>–</Text>}
-        </View>
-        <View style={[tbl.cStatus, { justifyContent: 'center' }]}>
-          <StatusBadge status={cust.status} />
-        </View>
-        <View style={[tbl.cAct, { flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
-          {!isReg(cust) ? (
-            <Text style={tbl.dash}>—</Text>
-          ) : (
-            <>
-              <Pressable style={({ pressed }) => [tbl.actBtn, tbl.actPay, pressed && { opacity: 0.7 }]}
-                onPress={() => openPay(cust)}>
-                <Ionicons name="wallet-outline" size={14} color={CRE_GRN} />
-              </Pressable>
-              <Pressable style={({ pressed }) => [tbl.actBtn, tbl.actEdit, pressed && { opacity: 0.7 }]}
-                onPress={() => openEdit(cust)}>
-                <Ionicons name="create-outline" size={14} color="#b45309" />
-              </Pressable>
-              <Pressable style={({ pressed }) => [tbl.actBtn, tbl.actDel, pressed && { opacity: 0.7 }]}
-                onPress={() => confirmDelete(cust)}>
-                {deleting === cust.id
-                  ? <ActivityIndicator size={12} color={DUE_RED} />
-                  : <Ionicons name="trash-outline" size={14} color={DUE_RED} />}
-              </Pressable>
-            </>
-          )}
-        </View>
-      </View>
-    );
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -851,7 +859,7 @@ export default function CustomersScreen() {
                     <Text style={s.emptyTitle}>{search ? 'No customers matched' : 'No customers yet'}</Text>
                   </View>
                 ) : (
-                  filtered.map((cust, idx) => <TableRow key={cust.id ?? `od_${idx}`} cust={cust} idx={idx} />)
+                  filtered.map((cust, idx) => <TableRow key={cust.id ?? `od_${idx}`} cust={cust} idx={idx} tbl={tbl} c={c} deleting={deleting} openPay={openPay} openEdit={openEdit} confirmDelete={confirmDelete} />)
                 )}
               </View>
             </ScrollView>
@@ -873,51 +881,45 @@ export default function CustomersScreen() {
                   <Text style={s.emptyTitle}>{search ? 'No customers matched' : 'No customers yet'}</Text>
                 </View>
               ) : (
-                filtered.map((cust, idx) => <TableRow key={cust.id ?? `od_${idx}`} cust={cust} idx={idx} />)
+                filtered.map((cust, idx) => <TableRow key={cust.id ?? `od_${idx}`} cust={cust} idx={idx} tbl={tbl} c={c} deleting={deleting} openPay={openPay} openEdit={openEdit} confirmDelete={confirmDelete} />)
               )}
             </View>
           )}
         </ScrollView>
       ) : (
-        <ScrollView
+        <FlatList
+          key={String(numCols)}
+          data={filtered}
+          numColumns={numCols}
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingHorizontal: GRID_PAD, paddingVertical: 12, flexGrow: 1 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={c.brand} />}>
-          {filtered.length === 0 ? (
+          keyExtractor={(cust, idx) => String(cust.id ?? `od_${idx}`)}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={c.brand} />}
+          renderItem={({ item: cust, index: idx }) => {
+            const cardKey = cust.id ?? `od_${idx}`;
+            return (
+              <View style={{ width: `${100 / numCols}%` as any, padding: GRID_GAP / 2, zIndex: menuOpenId === cardKey ? 50 : 1 }}>
+                <CustomerCard
+                  customer={cust} index={idx}
+                  isRegistered={isReg(cust)}
+                  onEdit={() => openEdit(cust)}
+                  onDelete={() => confirmDelete(cust)}
+                  onPay={() => openPay(cust)}
+                  deleting={deleting === cust.id}
+                  menuOpen={menuOpenId === cardKey}
+                  onMenuOpen={() => setMenuOpenId(cardKey)}
+                  onMenuClose={() => setMenuOpenId(null)}
+                />
+              </View>
+            );
+          }}
+          ListEmptyComponent={
             <View style={[s.emptyWrap, { flex: 1 }]}>
               <Ionicons name="people-outline" size={44} color={c.textMuted} />
               <Text style={s.emptyTitle}>{search ? 'No customers matched' : 'No customers yet'}</Text>
             </View>
-          ) : (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: '100%' }}>
-              {filtered.map((cust, idx) => {
-                const cardKey = cust.id ?? `od_${idx}`;
-                return (
-                  <View
-                    key={String(cardKey)}
-                    style={{
-                      width: `${100 / numCols}%` as any,
-                      padding: GRID_GAP / 2,
-                      zIndex: menuOpenId === cardKey ? 50 : 1,
-                    }}
-                  >
-                    <CustomerCard
-                      customer={cust} index={idx}
-                      isRegistered={isReg(cust)}
-                      onEdit={() => openEdit(cust)}
-                      onDelete={() => confirmDelete(cust)}
-                      onPay={() => openPay(cust)}
-                      deleting={deleting === cust.id}
-                      menuOpen={menuOpenId === cardKey}
-                      onMenuOpen={() => setMenuOpenId(cardKey)}
-                      onMenuClose={() => setMenuOpenId(null)}
-                    />
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </ScrollView>
+          }
+        />
       )}
 
       {/* Form modal */}

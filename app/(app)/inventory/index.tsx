@@ -481,17 +481,24 @@ export default function InventoryScreen() {
   const expiring    = data?.expiring ?? [];
   const movements   = data?.recent_movements ?? [];
 
-  const displayed = ingredients.filter(i => {
-    const matchFilter =
-      filter === 'low' ? (i.low_stock_threshold > 0 && i.on_hand <= i.low_stock_threshold) :
-      filter === 'out' ? i.on_hand <= 0 :
-      true;
-    const matchSearch = !search || i.name.toLowerCase().includes(search.toLowerCase()) ||
-      (i.sku ?? '').toLowerCase().includes(search.toLowerCase());
-    return matchFilter && matchSearch;
-  });
+  const outCount = useMemo(
+    () => ingredients.filter(i => i.on_hand <= 0).length,
+    [ingredients],
+  );
 
-  const outCount = ingredients.filter(i => i.on_hand <= 0).length;
+  const displayed = useMemo(() => {
+    const q = search.toLowerCase();
+    return ingredients.filter(i => {
+      const matchFilter =
+        filter === 'low' ? (i.low_stock_threshold > 0 && i.on_hand <= i.low_stock_threshold) :
+        filter === 'out' ? i.on_hand <= 0 :
+        true;
+      const matchSearch = !search ||
+        i.name.toLowerCase().includes(q) ||
+        (i.sku ?? '').toLowerCase().includes(q);
+      return matchFilter && matchSearch;
+    });
+  }, [ingredients, filter, search]);
 
   const statItems = [
     { icon: 'cube-outline',           val: ingredients.length, lbl: 'Total',     color: '#2563eb' },

@@ -5,7 +5,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet,
-  ActivityIndicator, TextInput, RefreshControl, Modal, Platform,
+  ActivityIndicator, TextInput, RefreshControl, Modal, Platform, Alert,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,27 +17,32 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ordersApi } from '@/api/orders';
 import client from '@/api/client';
+import { buildCsv, downloadCsv } from '@/utils/export';
 import { useTheme } from '@/store/themeStore';
 import type { ThemeColors } from '@/theme/tokens';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Order {
-  id:              number;
-  order_number?:   string;
-  created_at?:     string;
-  date?:           string;
-  customer?:       { id?: number; name?: string } | null;
-  customer_name?:  string;
-  order_type?:     string;
-  type?:           string;
-  table?:          { id?: number; name?: string } | null;
-  table_name?:     string;
-  grand_total?:    number;
-  total?:          number;
-  final_total?:    number;
-  status:          string;
-  payment_method?: string;
+  id:               number;
+  order_number?:    string;
+  created_at?:      string;
+  date?:            string;
+  customer?:        { id?: number; name?: string } | null;
+  customer_name?:   string;
+  order_type?:      string;
+  type?:            string;
+  table?:           { id?: number; name?: string } | null;
+  table_name?:      string;
+  grand_total?:     number;
+  total?:           number;
+  final_total?:     number;
+  subtotal?:        number;
+  tax_amount?:      number;
+  discount_amount?: number;
+  status:           string;
+  payment_method?:  string;
+  payment_status?:  string;
 }
 
 interface Customer { id: number; name: string; }
@@ -52,6 +57,13 @@ const TABS = [
   { label: 'Sales Report',    key: 'sales'    },
   { label: 'Customer Report', key: 'customer' },
   { label: 'Payment Report',  key: 'payment'  },
+  { label: 'GST Report',      key: 'gst'      },
+];
+
+const PAYMENT_STATUSES = [
+  { label: 'All Status', value: '' },
+  { label: 'Paid',       value: 'paid'   },
+  { label: 'Unpaid',     value: 'unpaid' },
 ];
 
 const TAB_STATUS: Record<string, string> = {
@@ -244,6 +256,13 @@ function mk(c: ThemeColors) {
     periodLbl:   { fontSize: 13, color: c.textMuted },
     periodVal:   { fontSize: 13.5, fontWeight: '800', color: c.heading },
 
+    exportRow:  { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 8,
+                  justifyContent: 'flex-end', backgroundColor: c.surfaceAlt },
+    exportBtn:  { flexDirection: 'row', alignItems: 'center', gap: 5,
+                  borderWidth: 1, borderColor: c.border, borderRadius: 6,
+                  paddingHorizontal: 12, paddingVertical: 7, backgroundColor: c.surface },
+    exportTxt:  { fontSize: 12.5, color: c.text, fontWeight: '600' },
+
     // ── Calendar picker ───────────────────────────────────────────────────
     calPopup:   { position: 'absolute', backgroundColor: c.surface,
                   borderRadius: 12, borderWidth: 1, borderColor: c.border,
@@ -326,6 +345,57 @@ function mk(c: ThemeColors) {
                   backgroundColor: c.surfaceAlt,
                   borderTopWidth: 1, borderTopColor: c.border },
     cardTotal:  { fontSize: 15, fontWeight: '800', color: c.heading },
+
+    // ── GST summary cards ─────────────────────────────────────────────
+    gstCardsWrap: { flexDirection: 'row', flexWrap: 'wrap',
+                    paddingHorizontal: 10, paddingTop: 12, gap: 8 },
+    gstCard:  { flex: 1, minWidth: '45%',
+                backgroundColor: c.surface, borderRadius: 12,
+                borderWidth: 1, borderColor: c.border,
+                paddingHorizontal: 14, paddingVertical: 12 },
+    gstCardLbl: { fontSize: 11, fontWeight: '600', color: c.textMuted,
+                  textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
+    gstCardVal: { fontSize: 15, fontWeight: '800', color: c.heading },
+
+    // ── GST invoice card (mobile) ─────────────────────────────────────
+    gstInvWrap:   { backgroundColor: c.surface, borderRadius: 14,
+                    borderWidth: 1, borderColor: c.border,
+                    marginHorizontal: 12, marginTop: 10, overflow: 'hidden' },
+    gstInvTop:    { flexDirection: 'row', alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingHorizontal: 14, paddingTop: 13, paddingBottom: 10,
+                    borderBottomWidth: 1, borderBottomColor: c.border },
+    gstInvNo:     { fontSize: 15, fontWeight: '800', color: c.primary },
+    gstInvBody:   { paddingHorizontal: 14, paddingVertical: 11, gap: 6 },
+    gstInvRow:    { flexDirection: 'row', justifyContent: 'space-between',
+                    alignItems: 'center' },
+    gstInvLbl:    { fontSize: 12.5, color: c.textMuted },
+    gstInvVal:    { fontSize: 12.5, color: c.text, fontWeight: '600' },
+    gstInvFoot:   { paddingHorizontal: 14, paddingVertical: 10,
+                    backgroundColor: c.surfaceAlt,
+                    borderTopWidth: 1, borderTopColor: c.border },
+    gstInvFootRow:{ flexDirection: 'row', justifyContent: 'space-between',
+                    alignItems: 'center' },
+    gstTotalLbl:  { fontSize: 13, color: c.textMuted },
+    gstTotalVal:  { fontSize: 16, fontWeight: '800', color: c.heading },
+    gstNoteBanner:{ marginHorizontal: 12, marginTop: 10, marginBottom: 4,
+                    backgroundColor: c.surfaceAlt, borderRadius: 10,
+                    borderWidth: 1, borderColor: c.border,
+                    paddingHorizontal: 12, paddingVertical: 10 },
+    gstNoteTxt:   { fontSize: 11.5, color: c.textMuted, lineHeight: 17 },
+
+    // ── GST web table columns ─────────────────────────────────────────
+    gCInv:    { flex: 1.2, minWidth: 90  },
+    gCDate:   { flex: 1.4, minWidth: 100 },
+    gCType:   { flex: 1,   minWidth: 70  },
+    gCPay:    { flex: 1,   minWidth: 70  },
+    gCSt:     { flex: 1,   minWidth: 70  },
+    gCTax:    { flex: 1.2, minWidth: 80  },
+    gCRate:   { flex: 0.8, minWidth: 55  },
+    gCCgst:   { flex: 1,   minWidth: 70  },
+    gCSgst:   { flex: 1,   minWidth: 70  },
+    gCGst:    { flex: 1.1, minWidth: 80  },
+    gCGrand:  { flex: 1.2, minWidth: 90  },
   });
 }
 
@@ -599,13 +669,86 @@ function OrderCard({ order, isDark, c, s }: {
   );
 }
 
+// ─── GST Invoice Card (mobile) ────────────────────────────────────────────────
+
+function GstInvoiceCard({ order, isDark, c, s }: {
+  order: Order; isDark: boolean; c: ThemeColors; s: ReturnType<typeof mk>;
+}) {
+  const sc       = statusClr(order.payment_status ?? order.status, isDark);
+  const taxable  = Math.max(0, (order.subtotal ?? 0) - (order.discount_amount ?? 0));
+  const gst      = order.tax_amount ?? 0;
+  const cgst     = Math.round(gst / 2 * 100) / 100;
+  const sgst     = Math.round(gst / 2 * 100) / 100;
+  const grandTot = Number(order.grand_total ?? order.total ?? 0);
+  const gstRate  = taxable > 0 && gst > 0 ? `${Math.round(gst / taxable * 10000) / 100}%` : '—';
+  const pm       = order.payment_method ?? 'Other';
+
+  return (
+    <View style={s.gstInvWrap}>
+      {/* Top: invoice # + payment status */}
+      <View style={s.gstInvTop}>
+        <Text style={s.gstInvNo}>#{order.order_number ?? order.id}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontSize: 12, color: c.textMuted }}>
+            {fmtDate(order.created_at ?? order.date)}
+          </Text>
+          <View style={[s.pill, { backgroundColor: sc.bg }]}>
+            <Text style={[s.pillTxt, { color: sc.fg }]}>
+              {(order.payment_status ?? order.status).replace('_', ' ')}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Body: type, payment, GST breakdown */}
+      <View style={s.gstInvBody}>
+        <View style={s.gstInvRow}>
+          <Text style={s.gstInvLbl}>Type / Payment</Text>
+          <Text style={s.gstInvVal}>
+            {fmtType(order.order_type ?? order.type)} · {pm.charAt(0).toUpperCase() + pm.slice(1)}
+          </Text>
+        </View>
+        <View style={[s.gstInvRow, { marginTop: 4,
+          paddingTop: 8, borderTopWidth: 1, borderTopColor: c.border }]}>
+          <Text style={s.gstInvLbl}>Taxable Value</Text>
+          <Text style={s.gstInvVal}>{rupee2(taxable)}</Text>
+        </View>
+        <View style={s.gstInvRow}>
+          <Text style={s.gstInvLbl}>GST Rate</Text>
+          <Text style={s.gstInvVal}>{gstRate}</Text>
+        </View>
+        <View style={s.gstInvRow}>
+          <Text style={s.gstInvLbl}>CGST</Text>
+          <Text style={s.gstInvVal}>{rupee2(cgst)}</Text>
+        </View>
+        <View style={s.gstInvRow}>
+          <Text style={s.gstInvLbl}>SGST</Text>
+          <Text style={s.gstInvVal}>{rupee2(sgst)}</Text>
+        </View>
+      </View>
+
+      {/* Footer: total GST + grand total */}
+      <View style={s.gstInvFoot}>
+        <View style={s.gstInvFootRow}>
+          <Text style={s.gstTotalLbl}>Total GST</Text>
+          <Text style={[s.gstInvVal, { color: '#dc2626' }]}>{rupee2(gst)}</Text>
+        </View>
+        <View style={[s.gstInvFootRow, { marginTop: 4 }]}>
+          <Text style={s.gstTotalLbl}>Grand Total</Text>
+          <Text style={s.gstTotalVal}>{rupee2(grandTot)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ReportsScreen() {
   const { colors: c, isDark } = useTheme();
   const s        = useMemo(() => mk(c), [c]);
   const insets   = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  useWindowDimensions(); // keeps layout reflows on resize
   const isMobile = Platform.OS !== 'web';
 
   const [activeTab, setActiveTab] = useState(0);
@@ -615,12 +758,14 @@ export default function ReportsScreen() {
   const [endDate,   setEndDate]   = useState(TODAY);
   const [custId,    setCustId]    = useState('');
   const [payMethod, setPayMethod] = useState('');
+  const [payStatus, setPayStatus] = useState('');
 
   // Applied (sent to API after "Apply")
-  const [aFrom, setAFrom] = useState(TODAY);
-  const [aTo,   setATo]   = useState(TODAY);
-  const [aCust, setACust] = useState('');
-  const [aPay,  setAPay]  = useState('');
+  const [aFrom,      setAFrom]      = useState(TODAY);
+  const [aTo,        setATo]        = useState(TODAY);
+  const [aCust,      setACust]      = useState('');
+  const [aPay,       setAPay]       = useState('');
+  const [aPayStatus, setAPayStatus] = useState('');
 
   const [search,    setSearch]    = useState('');
   const [sortOrd,   setSortOrd]   = useState<'newest' | 'oldest'>('newest');
@@ -628,7 +773,6 @@ export default function ReportsScreen() {
   const [page,      setPage]      = useState(1);
 
   const [orders,      setOrders]      = useState<Order[]>([]);
-  const [totalCount,  setTotalCount]  = useState(0);
   const [lastPage,    setLastPage]    = useState(1);
   const [periodTotal, setPeriodTotal] = useState(0);
   const [loading,     setLoading]     = useState(true);
@@ -658,24 +802,24 @@ export default function ReportsScreen() {
         page, per_page: perPage,
         sort: sortOrd === 'oldest' ? 'asc' : 'desc',
       };
-      if (aFrom)     params.from           = aFrom;
-      if (aTo)       params.to             = aTo;
-      if (aCust)     params.customer_id    = aCust;
-      if (aPay)      params.payment_method = aPay;
-      if (tabStatus) params.status         = tabStatus;
+      if (aFrom)       params.from           = aFrom;
+      if (aTo)         params.to             = aTo;
+      if (aCust)       params.customer_id    = aCust;
+      if (aPay)        params.payment_method = aPay;
+      if (tabStatus)   params.status         = tabStatus;
+      if (aPayStatus)  params.payment_status = aPayStatus;
 
       const { data: raw } = await ordersApi.list(params);
       const list: Order[] = Array.isArray(raw?.data) ? raw.data
         : Array.isArray(raw) ? raw : [];
 
       setOrders(list);
-      setTotalCount(raw?.total ?? list.length);
       setLastPage(raw?.last_page ?? (raw?.total ? Math.ceil(raw.total / perPage) : 1) ?? 1);
       setPeriodTotal(list.reduce((s, o) =>
         s + Number(o.grand_total ?? o.total ?? o.final_total ?? 0), 0));
     } catch (e) { console.warn('[Reports]', e); }
     finally { setLoading(false); setRefreshing(false); }
-  }, [activeTab, page, perPage, sortOrd, aFrom, aTo, aCust, aPay]);
+  }, [activeTab, page, perPage, sortOrd, aFrom, aTo, aCust, aPay, aPayStatus]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -691,16 +835,58 @@ export default function ReportsScreen() {
   function apply() {
     setAFrom(startDate); setATo(endDate);
     setACust(custId);    setAPay(payMethod);
+    setAPayStatus(payStatus);
     setPage(1);
   }
   function reset() {
-    setStartDate(TODAY); setEndDate(TODAY); setCustId(''); setPayMethod('');
-    setAFrom(TODAY);     setATo(TODAY);     setACust(''); setAPay('');
+    setStartDate(TODAY); setEndDate(TODAY); setCustId(''); setPayMethod(''); setPayStatus('');
+    setAFrom(TODAY);     setATo(TODAY);     setACust(''); setAPay('');       setAPayStatus('');
     setPage(1);
   }
 
-  const fromE = totalCount > 0 ? (page - 1) * perPage + 1 : 0;
-  const toE   = Math.min(page * perPage, totalCount);
+  const tabLabel = TABS[activeTab]?.label ?? 'Report';
+
+  function handleExportCsv() {
+    const headers = ['Order #', 'Date', 'Customer', 'Type', 'Payment Method', 'Status', 'Total'];
+    const csvRows = rows.map(o => [
+      o.order_number ?? String(o.id),
+      fmtDate(o.created_at ?? o.date),
+      o.customer?.name ?? o.customer_name ?? '',
+      fmtType(o.order_type ?? o.type),
+      o.payment_method ?? '',
+      o.status ?? '',
+      Number(o.grand_total ?? o.total ?? o.final_total ?? 0).toFixed(2),
+    ]);
+    const filename = `${tabLabel.replace(/\s+/g, '_')}_${aFrom}_to_${aTo}.csv`;
+    downloadCsv(filename, buildCsv(headers, csvRows));
+  }
+
+  function handleExportPdf() {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.print();
+    } else {
+      Alert.alert('Export PDF', 'PDF export is available on the web version.');
+    }
+  }
+
+  const isGst = TABS[activeTab]?.key === 'gst';
+
+  // GST summary computed from current page data
+  const gstSummary = useMemo(() => {
+    if (!isGst) return null;
+    const totalTaxable  = orders.reduce((acc, o) =>
+      acc + Math.max(0, (o.subtotal ?? 0) - (o.discount_amount ?? 0)), 0);
+    const totalGst      = orders.reduce((acc, o) => acc + (o.tax_amount ?? 0), 0);
+    const totalAmount   = orders.reduce((acc, o) =>
+      acc + Number(o.grand_total ?? o.total ?? 0), 0);
+    return {
+      totalTaxable, totalGst,
+      totalCgst:  Math.round(totalGst / 2 * 100) / 100,
+      totalSgst:  Math.round(totalGst / 2 * 100) / 100,
+      totalAmount,
+      count: orders.length,
+    };
+  }, [isGst, orders]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -720,23 +906,31 @@ export default function ReportsScreen() {
         </ScrollView>
       </View>
 
-      {/* ══ Filters (no header label — matches web) ══════════════════════════
-            Row 1: Start Date | End Date
-            Row 2: Customer ▼ | Payment Method ▼
-            Row 3: Apply · Reset                                              */}
+      {/* ══ Filters ══════════════════════════════════════════════════════════ */}
       <View style={s.filterSection}>
-        {/* Row 1 — dates (calendar picker) */}
+        {/* Row 1 — dates */}
         <View style={s.row2}>
           <DateField value={startDate} onChange={setStartDate} label="Start Date" c={c} s={s} />
           <DateField value={endDate}   onChange={setEndDate}   label="End Date"   c={c} s={s} />
         </View>
 
-        {/* Row 2 — dropdowns */}
+        {/* Row 2 — dropdowns (GST tab gets Payment Status instead of Customer) */}
         <View style={s.row2}>
-          <Dropdown value={custId}    onChange={setCustId}    options={custOpts}
-            label="Customer" placeholder="All Customers" c={c} s={s} />
-          <Dropdown value={payMethod} onChange={setPayMethod} options={PAYMENT_METHODS}
-            label="Payment Method" placeholder="All Methods" c={c} s={s} />
+          {isGst ? (
+            <>
+              <Dropdown value={payMethod} onChange={setPayMethod} options={PAYMENT_METHODS}
+                label="Payment Method" placeholder="All Methods" c={c} s={s} />
+              <Dropdown value={payStatus} onChange={setPayStatus} options={PAYMENT_STATUSES}
+                label="Payment Status" placeholder="All Status" c={c} s={s} />
+            </>
+          ) : (
+            <>
+              <Dropdown value={custId}    onChange={setCustId}    options={custOpts}
+                label="Customer" placeholder="All Customers" c={c} s={s} />
+              <Dropdown value={payMethod} onChange={setPayMethod} options={PAYMENT_METHODS}
+                label="Payment Method" placeholder="All Methods" c={c} s={s} />
+            </>
+          )}
         </View>
 
         {/* Row 3 — action buttons */}
@@ -755,7 +949,7 @@ export default function ReportsScreen() {
         <View style={s.searchBox}>
           <Ionicons name="search-outline" size={15} color={c.textMuted} />
           <TextInput style={s.searchIn} value={search} onChangeText={setSearch}
-            placeholder="Search by order # or customer…"
+            placeholder={isGst ? 'Search by invoice #…' : 'Search by order # or customer…'}
             placeholderTextColor={c.textMuted} />
           {search.length > 0 && (
             <Pressable onPress={() => setSearch('')} hitSlop={10}>
@@ -770,13 +964,147 @@ export default function ReportsScreen() {
         </Pressable>
       </View>
 
-      {/* ══ Table / Cards ════════════════════════════════════════════════════ */}
+      {/* ══ Content ══════════════════════════════════════════════════════════ */}
       {loading ? (
         <View style={s.center}>
           <ActivityIndicator size="large" color={c.primary} />
         </View>
+      ) : isGst ? (
+        /* ─────────── GST Report view ─────────── */
+        <ScrollView
+          style={s.tableWrap}
+          contentContainerStyle={{ paddingBottom: 16 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); load(true); }}
+              tintColor={c.primary} />
+          }>
+
+          {/* Summary cards */}
+          {gstSummary && gstSummary.count > 0 && (
+            <View style={s.gstCardsWrap}>
+              {[
+                { label: 'Invoices',      val: String(gstSummary.count),                         color: c.heading    },
+                { label: 'Taxable Value', val: rupee2(gstSummary.totalTaxable),                  color: c.heading    },
+                { label: 'CGST',          val: rupee2(gstSummary.totalCgst),                     color: '#d97706'    },
+                { label: 'SGST',          val: rupee2(gstSummary.totalSgst),                     color: '#d97706'    },
+                { label: 'Total GST',     val: rupee2(gstSummary.totalGst),                      color: '#dc2626'    },
+                { label: 'Grand Total',   val: rupee2(gstSummary.totalAmount),                   color: '#16a34a'    },
+              ].map(card => (
+                <View key={card.label} style={s.gstCard}>
+                  <Text style={s.gstCardLbl}>{card.label}</Text>
+                  <Text style={[s.gstCardVal, { color: card.color }]}>{card.val}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Invoice cards (mobile) / table (web) */}
+          {isMobile ? (
+            rows.length === 0 ? (
+              <View style={s.center}>
+                <Ionicons name="receipt-outline" size={48} color={c.border} />
+                <Text style={s.emptyTxt}>No tax invoices found</Text>
+              </View>
+            ) : (
+              <>
+                {rows.map(order => (
+                  <GstInvoiceCard key={order.id} order={order} isDark={isDark} c={c} s={s} />
+                ))}
+                {/* CA note */}
+                <View style={s.gstNoteBanner}>
+                  <Text style={s.gstNoteTxt}>
+                    ℹ️  CGST & SGST = 50% each of total GST (intrastate).
+                    Taxable Value = Subtotal − Discount. Verify with your CA before GST filing.
+                  </Text>
+                </View>
+              </>
+            )
+          ) : (
+            /* Web: horizontal scrollable GST table */
+            <ScrollView horizontal showsHorizontalScrollIndicator>
+              <View style={{ minWidth: 950 }}>
+                <View style={s.thead}>
+                  <Text style={[s.th, s.gCInv]}>Invoice #</Text>
+                  <Text style={[s.th, s.gCDate]}>Date</Text>
+                  <Text style={[s.th, s.gCType]}>Type</Text>
+                  <Text style={[s.th, s.gCPay]}>Payment</Text>
+                  <Text style={[s.th, s.gCSt]}>Status</Text>
+                  <Text style={[s.th, s.gCTax, { textAlign: 'right' }]}>Taxable</Text>
+                  <Text style={[s.th, s.gCRate, { textAlign: 'right' }]}>GST%</Text>
+                  <Text style={[s.th, s.gCCgst, { textAlign: 'right' }]}>CGST</Text>
+                  <Text style={[s.th, s.gCSgst, { textAlign: 'right' }]}>SGST</Text>
+                  <Text style={[s.th, s.gCGst,  { textAlign: 'right' }]}>Total GST</Text>
+                  <Text style={[s.th, s.gCGrand, { textAlign: 'right' }]}>Grand Total</Text>
+                </View>
+                {rows.length === 0 ? (
+                  <View style={s.center}>
+                    <Ionicons name="receipt-outline" size={48} color={c.border} />
+                    <Text style={s.emptyTxt}>No tax invoices found</Text>
+                  </View>
+                ) : rows.map(order => {
+                  const taxable = Math.max(0, (order.subtotal ?? 0) - (order.discount_amount ?? 0));
+                  const gst     = order.tax_amount ?? 0;
+                  const cgst    = Math.round(gst / 2 * 100) / 100;
+                  const sgst    = Math.round(gst / 2 * 100) / 100;
+                  const grand   = Number(order.grand_total ?? order.total ?? 0);
+                  const rate    = taxable > 0 && gst > 0 ? `${Math.round(gst / taxable * 10000) / 100}%` : '—';
+                  const psc     = statusClr(order.payment_status ?? order.status, isDark);
+                  const pm      = order.payment_method ?? 'Other';
+                  return (
+                    <View key={order.id} style={s.trow}>
+                      <Text style={[s.td, s.gCInv, { fontWeight: '700', color: c.primary }]} numberOfLines={1}>
+                        #{order.order_number ?? order.id}
+                      </Text>
+                      <Text style={[s.td, s.gCDate, { fontSize: 12 }]} numberOfLines={1}>
+                        {fmtDate(order.created_at ?? order.date)}
+                      </Text>
+                      <Text style={[s.td, s.gCType, { fontSize: 12 }]} numberOfLines={1}>
+                        {fmtType(order.order_type ?? order.type)}
+                      </Text>
+                      <Text style={[s.td, s.gCPay, { fontSize: 12 }]} numberOfLines={1}>
+                        {pm.charAt(0).toUpperCase() + pm.slice(1)}
+                      </Text>
+                      <View style={s.gCSt}>
+                        <View style={[s.pill, { backgroundColor: psc.bg }]}>
+                          <Text style={[s.pillTxt, { color: psc.fg }]}>
+                            {(order.payment_status ?? order.status).replace('_', ' ')}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[s.td, s.gCTax, { textAlign: 'right' }]}>{rupee2(taxable)}</Text>
+                      <Text style={[s.td, s.gCRate, { textAlign: 'right', color: c.textMuted, fontSize: 12 }]}>{rate}</Text>
+                      <Text style={[s.td, s.gCCgst, { textAlign: 'right' }]}>{rupee2(cgst)}</Text>
+                      <Text style={[s.td, s.gCSgst, { textAlign: 'right' }]}>{rupee2(sgst)}</Text>
+                      <Text style={[s.td, s.gCGst,  { textAlign: 'right', fontWeight: '700', color: '#dc2626' }]}>{rupee2(gst)}</Text>
+                      <Text style={[s.td, s.gCGrand, { textAlign: 'right', fontWeight: '800' }]}>{rupee2(grand)}</Text>
+                    </View>
+                  );
+                })}
+                {/* Grand total footer row */}
+                {gstSummary && gstSummary.count > 0 && (
+                  <View style={[s.trow, { backgroundColor: c.surfaceAlt }]}>
+                    <Text style={[s.td, s.gCInv, { fontWeight: '800' }]}>Grand Total</Text>
+                    <Text style={[s.td, s.gCDate]} />
+                    <Text style={[s.td, s.gCType]} />
+                    <Text style={[s.td, s.gCPay]} />
+                    <Text style={[s.td, s.gCSt, { fontSize: 12, color: c.textMuted }]}>
+                      {gstSummary.count} invoice{gstSummary.count !== 1 ? 's' : ''}
+                    </Text>
+                    <Text style={[s.td, s.gCTax,  { textAlign: 'right', fontWeight: '700' }]}>{rupee2(gstSummary.totalTaxable)}</Text>
+                    <Text style={[s.td, s.gCRate]} />
+                    <Text style={[s.td, s.gCCgst, { textAlign: 'right', fontWeight: '700' }]}>{rupee2(gstSummary.totalCgst)}</Text>
+                    <Text style={[s.td, s.gCSgst, { textAlign: 'right', fontWeight: '700' }]}>{rupee2(gstSummary.totalSgst)}</Text>
+                    <Text style={[s.td, s.gCGst,  { textAlign: 'right', fontWeight: '800', color: '#dc2626' }]}>{rupee2(gstSummary.totalGst)}</Text>
+                    <Text style={[s.td, s.gCGrand, { textAlign: 'right', fontWeight: '800', color: '#16a34a' }]}>{rupee2(gstSummary.totalAmount)}</Text>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+          )}
+        </ScrollView>
       ) : isMobile ? (
-        /* ── Mobile: card list ── */
+        /* ─────────── Mobile: order card list ─────────── */
         <ScrollView
           style={s.tableWrap}
           contentContainerStyle={{ paddingBottom: 12 }}
@@ -795,7 +1123,7 @@ export default function ReportsScreen() {
           ))}
         </ScrollView>
       ) : (
-        /* ── Web: table ── */
+        /* ─────────── Web: order table ─────────── */
         <ScrollView style={s.tableWrap}
           refreshControl={
             <RefreshControl refreshing={refreshing}
@@ -920,10 +1248,24 @@ export default function ReportsScreen() {
           <Text style={s.periodLbl}>
             Period total:{' '}
             <Text style={{ fontWeight: '700', color: c.text }}>
-              {rows.length} order{rows.length !== 1 ? 's' : ''}
+              {rows.length} {isGst ? 'invoice' : 'order'}{rows.length !== 1 ? 's' : ''}
             </Text>
           </Text>
           <Text style={s.periodVal}>{rupee2(periodTotal)}</Text>
+        </View>
+
+        {/* Export row */}
+        <View style={s.exportRow}>
+          <Pressable style={({ pressed }) => [s.exportBtn, pressed && { opacity: 0.7 }]}
+            onPress={handleExportCsv}>
+            <Ionicons name="download-outline" size={14} color={c.text} />
+            <Text style={s.exportTxt}>Export Excel</Text>
+          </Pressable>
+          <Pressable style={({ pressed }) => [s.exportBtn, pressed && { opacity: 0.7 }]}
+            onPress={handleExportPdf}>
+            <Ionicons name="document-text-outline" size={14} color={c.text} />
+            <Text style={s.exportTxt}>Export PDF</Text>
+          </Pressable>
         </View>
 
       </View>

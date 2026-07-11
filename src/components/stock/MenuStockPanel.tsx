@@ -876,7 +876,6 @@ export default function MenuStockPanel({
         stock_status: filter === 'all' ? 'all' : filter,
         category_id: categoryId ?? undefined,
         tracking: tracking === 'all' ? undefined : tracking,
-        q: search || undefined,
       });
       setData(res.data);
     } catch (e: any) {
@@ -886,7 +885,7 @@ export default function MenuStockPanel({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filter, categoryId, tracking, search]);
+  }, [filter, categoryId, tracking]);
 
   const loadHistory = useCallback(async (page = 1, append = false) => {
     setHistoryLoading(true);
@@ -938,7 +937,11 @@ export default function MenuStockPanel({
   const historyItems = history?.items ?? items.map(i => ({ id: i.id, name: i.name }));
   const historyTypes = history?.types ?? ['purchase', 'sale', 'waste', 'adjustment', 'reversal'];
 
-  const displayed = items;
+  const displayed = useMemo(() => {
+    if (!search) return items;
+    const q = search.toLowerCase();
+    return items.filter(i => i.name.toLowerCase().includes(q));
+  }, [items, search]);
 
   const statItems = [
     { icon: 'fast-food-outline', val: summary?.menu_item_count ?? 0, lbl: 'Items', color: '#2563eb' },
@@ -1024,7 +1027,7 @@ export default function MenuStockPanel({
             <View style={[s.tableToolbar, isMobile && { flexDirection: 'column', alignItems: 'stretch' }]}>
               <View style={s.searchWrap}>
                 <Ionicons name="search" size={14} color={c.textMuted} />
-                <TextInput style={s.searchInput} value={search} onChangeText={setSearch} placeholder="Search menu item..." placeholderTextColor={c.textMuted} onSubmitEditing={() => load()} />
+                <TextInput style={s.searchInput} value={search} onChangeText={setSearch} placeholder="Search menu item..." placeholderTextColor={c.textMuted} />
               </View>
               {categories.length > 0 && (
                 <View style={s.filterChips}>

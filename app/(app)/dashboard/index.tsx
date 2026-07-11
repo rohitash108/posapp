@@ -330,11 +330,14 @@ function SectionHeader({ title, action, onAction }: { title: string; action?: st
   const D = colors.dashboard;
   return (
     <View style={sh.row}>
-      <Text style={[sh.title, { color: D.text }]}>{title}</Text>
+      <View style={sh.titleWrap}>
+        <View style={[sh.accent, { backgroundColor: S.primary }]} />
+        <Text style={[sh.title, { color: D.text }]}>{title}</Text>
+      </View>
       {action && (
         <TouchableOpacity onPress={onAction} style={sh.actionBtn} activeOpacity={0.7}>
           <Text style={sh.actionText}>{action}</Text>
-          <Ionicons name="chevron-forward" size={13} color={S.primary} />
+          <Ionicons name="chevron-forward" size={12} color={S.primary} />
         </TouchableOpacity>
       )}
     </View>
@@ -344,22 +347,22 @@ function SectionHeader({ title, action, onAction }: { title: string; action?: st
 // Colorful circular blob icon — csPos glowing orb style
 function BlobIcon({ color, icon, size = 64 }: { color: string; icon: any; size?: number }) {
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color + '1A', alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ position: 'absolute', width: size * 0.65, height: size * 0.65, borderRadius: size / 2, backgroundColor: color + '28' }} />
-      <Ionicons name={icon} size={size * 0.38} color={color} />
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color + '14', alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ position: 'absolute', width: size * 0.68, height: size * 0.68, borderRadius: size / 2, backgroundColor: color + '22' }} />
+      <Ionicons name={icon} size={size * 0.4} color={color} />
     </View>
   );
 }
 
 function cardSurface(D: DashboardColors, isDark: boolean) {
   return {
-    backgroundColor: isDark ? S.cardBg : D.white,
-    borderColor: isDark ? '#1e1e1e' : D.border,
-    shadowColor: '#000',
-    shadowOpacity: isDark ? 0.25 : 0.07,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: isDark ? 2 : 3,
+    backgroundColor: isDark ? '#161616' : D.white,
+    borderColor: isDark ? '#252525' : D.border,
+    shadowColor: isDark ? '#000' : '#64748b',
+    shadowOpacity: isDark ? 0.35 : 0.09,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: isDark ? 3 : 4,
   };
 }
 
@@ -1374,8 +1377,8 @@ export default function DashboardScreen() {
   const st       = summary;
   const paidCount = Math.max(0, (st?.total_orders ?? 0) - (st?.unpaid_count ?? 0));
   const cardS    = isDark
-    ? { backgroundColor: S.cardBg, borderColor: '#1e1e1e', shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 }
-    : { backgroundColor: D.white, borderColor: D.border, shadowColor: D.cardShadow, shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 2 }, elevation: 2 };
+    ? { backgroundColor: '#161616', borderColor: '#252525', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 3 }, elevation: 3 }
+    : { backgroundColor: D.white, borderColor: D.border, shadowColor: '#64748b', shadowOpacity: 0.09, shadowRadius: 16, shadowOffset: { width: 0, height: 3 }, elevation: 3 };
   const netProfit = (st?.total_sales ?? 0) - expenses.total;
   const dividerColor = isDark ? 'rgba(255,255,255,0.04)' : colors.surfaceAlt;
 
@@ -1649,75 +1652,6 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ── Royalty Management — full section on dashboard (csPos parity) ── */}
-        {isRestaurantAdmin && (
-        <View style={s.section}>
-          <SectionHeader title="Royalty Management" action="View All" onAction={() => go('/(app)/royalties')} />
-          <View style={[s.card, cardS, royaltyMeta?.highlight_red && { borderColor: S.danger, borderWidth: 1.5 }]}>
-            <View style={ry.summaryRow}>
-              <View style={ry.summaryItem}>
-                <Text style={[ry.summaryLabel, { color: D.muted }]}>Royalty rate</Text>
-                <Text style={[ry.summaryValue, { color: isDark ? '#fff' : D.text }]}>
-                  {(royaltyMeta?.effective_percentage ?? 0).toFixed(2)}%
-                </Text>
-              </View>
-              <View style={[ry.summaryDivider, { backgroundColor: dividerColor }]} />
-              <View style={ry.summaryItem}>
-                <Text style={[ry.summaryLabel, { color: D.muted }]}>Calculation basis</Text>
-                <Text style={[ry.basisTxt, { color: S.primary }]}>
-                  {royaltyMeta?.calculation_basis_label ?? 'Price (incl. tax)'}
-                </Text>
-              </View>
-              <View style={[ry.summaryDivider, { backgroundColor: dividerColor }]} />
-              <View style={[ry.summaryItem, { flex: 1.3 }]}>
-                <Text style={[ry.summaryLabel, { color: D.muted }]}>This month (calculated)</Text>
-                <Text style={[ry.summaryValue, { color: royaltyMeta?.highlight_red ? S.danger : (isDark ? '#fff' : D.text) }]}>
-                  {royaltySym}{(royaltyMeta?.current_preview?.royalty_amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </Text>
-                <Text style={[ry.summaryHint, { color: D.muted }]}>
-                  from {royaltySym}{(royaltyMeta?.current_preview?.sales_base ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} sales
-                </Text>
-              </View>
-            </View>
-
-            {recentRoyalties.length === 0 ? (
-              <View style={ry.empty}>
-                <Ionicons name="ribbon-outline" size={28} color={D.muted} />
-                <Text style={[ry.emptyTxt, { color: D.muted }]}>No royalty requests yet.</Text>
-                <Pressable style={ry.ctaBtn} onPress={() => go('/(app)/royalties')}>
-                  <Ionicons name="add-circle-outline" size={14} color="#fff" />
-                  <Text style={ry.ctaBtnTxt}>Submit Royalty Request</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <View style={{ marginTop: 12 }}>
-                {recentRoyalties.map((req, idx) => {
-                  const stColor = req.status === 'approved' ? S.success : req.status === 'rejected' ? S.danger : S.warning;
-                  return (
-                    <View key={req.id} style={[ry.reqRow, idx < recentRoyalties.length - 1 && { borderBottomWidth: 1, borderBottomColor: dividerColor }]}>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={[ry.reqPeriod, { color: isDark ? '#fff' : D.text }]}>{req.period_label}</Text>
-                        <Text style={[ry.reqMeta, { color: D.muted }]}>
-                          {royaltySym}{req.reference_sales_amount.toFixed(2)} sales · {req.royalty_percentage.toFixed(2)}%
-                        </Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                        <Text style={[ry.reqAmount, { color: isDark ? '#fff' : D.text }]}>
-                          {royaltySym}{req.royalty_amount.toFixed(2)}
-                        </Text>
-                        <View style={[ry.statusPill, { backgroundColor: stColor + '22' }]}>
-                          <Text style={[ry.statusPillTxt, { color: stColor }]}>{req.status_label}</Text>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
-          </View>
-        </View>
-        )}
-
         {/* ── Sale Analysis + Payment Types ── */}
         <View style={s.section}>
           <View style={[s.row, { gap: 12, alignItems: 'flex-start' }]}>
@@ -1763,7 +1697,7 @@ export default function DashboardScreen() {
         <View style={s.section}>
           {isWide ? (
             /* Desktop: side by side */
-            <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+            <View style={{ flexDirection: 'row', gap: 12, alignItems: 'stretch' }}>
               <View style={[s.card, cardS, { flex: 2 }]}>
                 <View style={s.cardHeader}>
                   <View>
@@ -1891,7 +1825,7 @@ export default function DashboardScreen() {
         <View style={s.section}>
           {isWide ? (
             /* Desktop: side by side */
-            <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+            <View style={{ flexDirection: 'row', gap: 12, alignItems: 'stretch' }}>
               <View style={[s.card, cardS, { flex: 2 }]}>
                 <Text style={[s.cardTitle, { color: D.text }]}>Top Selling Items</Text>
                 <Text style={[s.cardSub, { color: D.muted }]}>By quantity ordered</Text>
@@ -1932,7 +1866,7 @@ export default function DashboardScreen() {
                 </View>
                 {activeOrders.length > 0 ? (
                   <View style={{ gap: 1, marginTop: 8 }}>
-                    {activeOrders.map(o => <ActiveOrderRow key={o.id} order={o} />)}
+                    {activeOrders.slice(0, 5).map(o => <ActiveOrderRow key={o.id} order={o} />)}
                   </View>
                 ) : (
                   <View style={s.emptyBox}>
@@ -1993,7 +1927,7 @@ export default function DashboardScreen() {
                 </View>
                 {activeOrders.length > 0 ? (
                   <View style={{ gap: 1, marginTop: 8 }}>
-                    {activeOrders.map(o => <ActiveOrderRow key={o.id} order={o} />)}
+                    {activeOrders.slice(0, 5).map(o => <ActiveOrderRow key={o.id} order={o} />)}
                   </View>
                 ) : (
                   <View style={s.emptyBox}>
@@ -2111,37 +2045,37 @@ const s = StyleSheet.create({
   body:     { padding: 16 },
   row:      { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   grid:     { flexDirection: 'row', flexWrap: 'wrap', width: '100%' },
-  section:  { marginBottom: 16 },
+  section:  { marginBottom: 20 },
   card:     {
-    borderRadius: 16, padding: 16,
+    borderRadius: 18, padding: 16,
     borderWidth: 1,
-    shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 3 },
     elevation: 3, marginBottom: 0,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
-  cardTitle:  { fontSize: 16, fontWeight: '700' },
-  cardSub:    { fontSize: 14, marginTop: 2 },
+  cardTitle:  { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  cardSub:    { fontSize: 12, marginTop: 2 },
   emptyBox:   { alignItems: 'center', gap: 10, paddingVertical: 32 },
-  emptyText:  { fontSize: 14 },
-  viewAllBtn: { borderWidth: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
-  viewAllText:{ fontSize: 14, fontWeight: '700' },
+  emptyText:  { fontSize: 13 },
+  viewAllBtn: { borderWidth: 1, borderRadius: 12, paddingVertical: 9, alignItems: 'center' },
+  viewAllText:{ fontSize: 13, fontWeight: '700' },
 
   dashHeader:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                   paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, flexWrap: 'wrap', gap: 10 },
-  dashTitle:    { fontSize: 28, fontWeight: '800', letterSpacing: -0.4 },
-  dashDate:     { fontSize: 16, fontWeight: '600' },
-  datePillHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1 },
-  todayBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1.5, borderColor: S.accent, backgroundColor: 'transparent' },
+                   paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, flexWrap: 'wrap', gap: 10 },
+  dashTitle:    { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  dashDate:     { fontSize: 12.5, fontWeight: '600' },
+  datePillHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  todayBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, borderColor: S.accent, backgroundColor: 'transparent' },
   todayBtnActive: { backgroundColor: 'rgba(255,152,0,0.08)' },
   todayBtnTxt:  { fontSize: 12, fontWeight: '700', color: S.accent },
   onlinePill:   { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   onlineDot:    { width: 6, height: 6, borderRadius: 3 },
   onlineText:   { fontSize: 11.5, fontWeight: '700' },
 
-  filterBar:        { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1 },
-  filterChip:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, paddingVertical: 7, borderRadius: 8, borderWidth: 1.5 },
-  filterChipText:   { fontSize: 12 },
-  filterRefreshBtn: { width: 34, height: 34, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  filterBar:        { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1 },
+  filterChip:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5 },
+  filterChipText:   { fontSize: 12, letterSpacing: 0.1 },
+  filterRefreshBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   filterRefresh:        { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
   filterRefreshText:    { fontSize: 12, fontWeight: '600' },
 
@@ -2156,219 +2090,221 @@ const s = StyleSheet.create({
 });
 
 const sh = StyleSheet.create({
-  row:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  title:     { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  actionText:{ fontSize: 14, fontWeight: '600', color: S.primary },
+  row:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  titleWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  accent:    { width: 3, height: 16, borderRadius: 2 },
+  title:     { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, backgroundColor: S.primary + '12' },
+  actionText:{ fontSize: 12, fontWeight: '600', color: S.primary },
 });
 
 const bc = StyleSheet.create({
-  wrap:        { flex: 1, borderRadius: 16, minHeight: 118,
-                 paddingTop: 16, paddingBottom: 16, paddingLeft: 16, paddingRight: 16,
+  wrap:        { flex: 1, borderRadius: 18, minHeight: 110,
+                 paddingTop: 15, paddingBottom: 15, paddingLeft: 15, paddingRight: 15,
                  borderWidth: 1, minWidth: 150, overflow: 'hidden' },
   growthBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  growthText:  { fontSize: 12, fontWeight: '800' },
-  value:       { fontSize: 28, fontWeight: '900', letterSpacing: -1, marginTop: 4, marginBottom: 0 },
-  label:       { fontSize: 12, fontWeight: '600', letterSpacing: 0.4 },
-  sub:         { fontSize: 14, fontWeight: '600' },
+  growthText:  { fontSize: 11.5, fontWeight: '800' },
+  value:       { fontSize: 24, fontWeight: '800', letterSpacing: -0.8, marginTop: 4, marginBottom: 0 },
+  label:       { fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
+  sub:         { fontSize: 12, fontWeight: '600' },
   royaltyBadge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, backgroundColor: 'rgba(255,152,0,0.14)' },
   royaltyBadgeTxt: { fontSize: 12, fontWeight: '700', color: S.accent },
   submitBtn:       { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: S.primary },
-  submitBtnTxt:    { fontSize: 14, fontWeight: '700', color: S.primary },
+  submitBtnTxt:    { fontSize: 13, fontWeight: '700', color: S.primary },
 });
 
 const smc = StyleSheet.create({
-  wrap:        { borderRadius: 14, minHeight: 92,
-                 paddingTop: 14, paddingBottom: 14, paddingLeft: 13, paddingRight: 13,
+  wrap:        { borderRadius: 16, minHeight: 86,
+                 paddingTop: 13, paddingBottom: 13, paddingLeft: 12, paddingRight: 12,
                  overflow: 'hidden', borderWidth: 1 },
-  value:       { fontSize: 20, fontWeight: '900', letterSpacing: -0.4, marginTop: 3, marginBottom: 1 },
-  label:       { fontSize: 12, fontWeight: '600', letterSpacing: 0.2 },
-  sub:         { fontSize: 14, fontWeight: '600', marginTop: 2, color: S.accent },
+  value:       { fontSize: 18, fontWeight: '800', letterSpacing: -0.3, marginTop: 3, marginBottom: 1 },
+  label:       { fontSize: 11, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
+  sub:         { fontSize: 11.5, fontWeight: '600', marginTop: 2, color: S.accent },
 });
 
 const ry = StyleSheet.create({
   summaryRow:    { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, paddingBottom: 4 },
   summaryItem:   { minWidth: 100 },
-  summaryDivider:{ width: 1, height: 32 },
-  summaryLabel:  { fontSize: 12, marginBottom: 4 },
-  summaryValue:  { fontSize: 20, fontWeight: '800' },
-  summaryHint:   { fontSize: 14, marginTop: 2 },
-  basisTxt:      { fontSize: 14, fontWeight: '700' },
+  summaryDivider:{ width: 1, height: 30 },
+  summaryLabel:  { fontSize: 11.5, marginBottom: 4 },
+  summaryValue:  { fontSize: 18, fontWeight: '800' },
+  summaryHint:   { fontSize: 12, marginTop: 2 },
+  basisTxt:      { fontSize: 13, fontWeight: '700' },
   empty:         { alignItems: 'center', paddingVertical: 24, gap: 8 },
-  emptyTxt:      { fontSize: 14 },
-  ctaBtn:        { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: S.primary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
-  ctaBtnTxt:     { color: '#fff', fontWeight: '700', fontSize: 16 },
+  emptyTxt:      { fontSize: 13 },
+  ctaBtn:        { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: S.primary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
+  ctaBtnTxt:     { color: '#fff', fontWeight: '700', fontSize: 14 },
   reqRow:        { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
-  reqPeriod:     { fontSize: 14, fontWeight: '800' },
-  reqMeta:       { fontSize: 12, marginTop: 2 },
-  reqAmount:     { fontSize: 14, fontWeight: '800' },
+  reqPeriod:     { fontSize: 13.5, fontWeight: '800' },
+  reqMeta:       { fontSize: 11.5, marginTop: 2 },
+  reqAmount:     { fontSize: 13.5, fontWeight: '800' },
   statusPill:    { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  statusPillTxt: { fontSize: 12, fontWeight: '700' },
+  statusPillTxt: { fontSize: 11.5, fontWeight: '700' },
 });
 
 const ch = StyleSheet.create({
   wrap:      { marginTop: 8 },
-  dayLabel:  { fontSize: 12, fontWeight: '600', textAlign: 'center' },
-  yLabel:    { position: 'absolute', fontSize: 11, fontWeight: '600' },
+  dayLabel:  { fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  yLabel:    { position: 'absolute', fontSize: 10, fontWeight: '600' },
   legend:    { flexDirection: 'row', gap: 14, justifyContent: 'flex-end', marginBottom: 8 },
   legendItem:{ flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText:{ fontSize: 14 },
+  legendDot: { width: 7, height: 7, borderRadius: 3.5 },
+  legendText:{ fontSize: 12 },
 });
 
 const donut = StyleSheet.create({
   wrap:        { alignItems: 'center', paddingVertical: 8 },
-  ringWrap:    { width: 130, height: 130, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  ringWrap:    { width: 120, height: 120, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   ring:        { position: 'absolute' },
   center:      { alignItems: 'center', justifyContent: 'center' },
-  totalLabel:  { fontSize: 14, fontWeight: '600', marginBottom: 2 },
-  totalValue:  { fontSize: 20, fontWeight: '800' },
-  noData:      { fontSize: 14, fontWeight: '600', marginTop: 4, marginBottom: 8 },
-  note:        { fontSize: 12, textAlign: 'center', paddingHorizontal: 8, marginTop: 4, lineHeight: 16 },
-  legend:      { width: '100%', marginTop: 4, gap: 8 },
+  totalLabel:  { fontSize: 11, fontWeight: '600', marginBottom: 2 },
+  totalValue:  { fontSize: 15, fontWeight: '800' },
+  noData:      { fontSize: 13, fontWeight: '600', marginTop: 4, marginBottom: 8 },
+  note:        { fontSize: 11.5, textAlign: 'center', paddingHorizontal: 8, marginTop: 4, lineHeight: 16 },
+  legend:      { width: '100%', marginTop: 4, gap: 7 },
   legendRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  legendDot:   { width: 10, height: 10, borderRadius: 5, flexShrink: 0, marginTop: 2 },
-  legendLabel: { fontSize: 16, fontWeight: '600' },
-  legendSub:   { fontSize: 14, marginTop: 1 },
-  legendValue: { fontSize: 16, fontWeight: '700' },
-  legendPct:   { fontSize: 12, fontWeight: '700', marginTop: 1 },
+  legendDot:   { width: 9, height: 9, borderRadius: 4.5, flexShrink: 0, marginTop: 2 },
+  legendLabel: { fontSize: 13, fontWeight: '600' },
+  legendSub:   { fontSize: 11, marginTop: 1 },
+  legendValue: { fontSize: 13, fontWeight: '700' },
+  legendPct:   { fontSize: 11, fontWeight: '700', marginTop: 1 },
 });
 
 const pi = StyleSheet.create({
   wrap:     { gap: 6 },
   top:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  left:     { flexDirection: 'row', alignItems: 'center', gap: 9, flex: 1, minWidth: 0 },
-  icon:     { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  label:    { fontSize: 16, fontWeight: '600' },
-  sub:      { fontSize: 14 },
+  left:     { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 },
+  icon:     { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  label:    { fontSize: 13.5, fontWeight: '600' },
+  sub:      { fontSize: 11.5 },
   right:    { flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 0 },
-  value:    { fontSize: 14, fontWeight: '800' },
+  value:    { fontSize: 13, fontWeight: '800' },
   pctBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20 },
-  pctText:  { fontSize: 12, fontWeight: '800' },
-  track:    { height: 7, borderRadius: 4, overflow: 'hidden' },
-  fill:     { height: '100%', borderRadius: 4 },
+  pctText:  { fontSize: 11, fontWeight: '800' },
+  track:    { height: 5, borderRadius: 3, overflow: 'hidden' },
+  fill:     { height: '100%', borderRadius: 3 },
 });
 
 const pmc = StyleSheet.create({
-  wrap:    { borderRadius: 14, padding: 14, borderWidth: 1, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
-  top:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  iconWrap:{ width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  label:   { fontSize: 16, fontWeight: '700' },
-  sub:     { fontSize: 14, marginTop: 1 },
-  amount:  { fontSize: 20, fontWeight: '800', marginBottom: 10 },
-  track:   { height: 7, borderRadius: 4, overflow: 'hidden', marginBottom: 5 },
-  fill:    { height: '100%', borderRadius: 4 },
-  pct:     { fontSize: 14 },
+  wrap:    { borderRadius: 16, padding: 13, borderWidth: 1, shadowOpacity: 0.07, shadowRadius: 12, elevation: 2 },
+  top:     { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 9 },
+  iconWrap:{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  label:   { fontSize: 13.5, fontWeight: '700' },
+  sub:     { fontSize: 11.5, marginTop: 1 },
+  amount:  { fontSize: 17, fontWeight: '800', marginBottom: 9 },
+  track:   { height: 5, borderRadius: 3, overflow: 'hidden', marginBottom: 5 },
+  fill:    { height: '100%', borderRadius: 3 },
+  pct:     { fontSize: 11.5 },
 });
 
 const btc = StyleSheet.create({
-  wrap:      { borderRadius: 14, padding: 16, borderWidth: 1, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
-  top:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  icon:      { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  badgeText: { fontSize: 12, fontWeight: '800' },
-  label:     { fontSize: 12, fontWeight: '600', marginBottom: 5 },
-  amount:    { fontSize: 20, fontWeight: '800' },
+  wrap:      { borderRadius: 16, padding: 14, borderWidth: 1, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
+  top:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
+  icon:      { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  badge:     { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20 },
+  badgeText: { fontSize: 11.5, fontWeight: '800' },
+  label:     { fontSize: 11.5, fontWeight: '600', marginBottom: 4 },
+  amount:    { fontSize: 17, fontWeight: '800' },
 });
 
 const bsR = StyleSheet.create({
-  row:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13 },
-  avatar:    { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  label:     { flex: 1, fontSize: 16, fontWeight: '600' },
-  badge:     { paddingHorizontal: 11, paddingVertical: 4, borderRadius: 20 },
-  badgeText: { fontSize: 12, fontWeight: '800', color: '#fff' },
+  row:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11 },
+  avatar:    { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  label:     { flex: 1, fontSize: 14, fontWeight: '600' },
+  badge:     { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
+  badgeText: { fontSize: 11.5, fontWeight: '800', color: '#fff' },
 });
 
 const moB = StyleSheet.create({
-  banner: { flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginTop: 10, borderWidth: 1 },
-  text:   { fontSize: 12.5, fontWeight: '600', flex: 1 },
+  banner: { flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 7, marginTop: 10, borderWidth: 1 },
+  text:   { fontSize: 12, fontWeight: '600', flex: 1 },
   name:   { fontWeight: '800' },
 });
 
 const ti = StyleSheet.create({
-  wrap:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  rank:    { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  rankText:{ fontSize: 12, fontWeight: '800' },
+  wrap:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rank:    { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  rankText:{ fontSize: 11, fontWeight: '800' },
   nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  name:    { fontSize: 16, fontWeight: '600', flex: 1 },
-  qty:     { fontSize: 14, fontWeight: '800', marginLeft: 4 },
-  track:   { height: 8, borderRadius: 4, overflow: 'hidden' },
-  fill:    { height: '100%', borderRadius: 4 },
+  name:    { fontSize: 13.5, fontWeight: '600', flex: 1 },
+  qty:     { fontSize: 13, fontWeight: '800', marginLeft: 4 },
+  track:   { height: 5, borderRadius: 3, overflow: 'hidden' },
+  fill:    { height: '100%', borderRadius: 3 },
 });
 
 const ar = StyleSheet.create({
-  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
-  avatar:   { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  num:      { fontSize: 14, fontWeight: '700' },
-  meta:     { fontSize: 16, marginTop: 2 },
-  amount:   { fontSize: 14, fontWeight: '800' },
-  badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  badgeText:{ fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
+  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 11, borderBottomWidth: 1 },
+  avatar:   { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  num:      { fontSize: 13.5, fontWeight: '700' },
+  meta:     { fontSize: 12.5, marginTop: 2 },
+  amount:   { fontSize: 13.5, fontWeight: '800' },
+  badge:    { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
+  badgeText:{ fontSize: 11.5, fontWeight: '700', textTransform: 'capitalize' },
 });
 
 const rr = StyleSheet.create({
-  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
-  avatar:   { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  num:      { fontSize: 14, fontWeight: '700' },
+  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 11, borderBottomWidth: 1 },
+  avatar:   { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  num:      { fontSize: 13.5, fontWeight: '700' },
   srcBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
-  srcText:  { fontSize: 11, fontWeight: '800' },
-  meta:     { fontSize: 16, marginTop: 2 },
-  time:     { fontSize: 16, marginTop: 2 },
-  amount:   { fontSize: 14, fontWeight: '800' },
-  badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  badgeText:{ fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
+  srcText:  { fontSize: 10.5, fontWeight: '800' },
+  meta:     { fontSize: 12.5, marginTop: 2 },
+  time:     { fontSize: 11, marginTop: 2 },
+  amount:   { fontSize: 13.5, fontWeight: '800' },
+  badge:    { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
+  badgeText:{ fontSize: 11.5, fontWeight: '700', textTransform: 'capitalize' },
 });
 
 const resR = StyleSheet.create({
-  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
-  avatar:   { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  name:     { fontSize: 16, fontWeight: '700' },
-  meta:     { fontSize: 14, marginTop: 2 },
-  time:     { fontSize: 14, marginTop: 2 },
+  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 11, borderBottomWidth: 1 },
+  avatar:   { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  name:     { fontSize: 14, fontWeight: '700' },
+  meta:     { fontSize: 12, marginTop: 2 },
+  time:     { fontSize: 11, marginTop: 2 },
   badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
-  badgeText:{ fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
+  badgeText:{ fontSize: 11.5, fontWeight: '700', textTransform: 'capitalize' },
 });
 
 const qlS = StyleSheet.create({
-  card:  { borderRadius: 16, padding: 18, alignItems: 'center', borderWidth: 1, gap: 11, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, minHeight: 85 },
-  icon:  { width: 52, height: 52, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  label: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  card:  { borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, gap: 9, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2, minHeight: 78 },
+  icon:  { width: 46, height: 46, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  label: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
 });
 
 // ── Tables Available card (matches CSPos web design) ─────────────────────────
 const tablC = StyleSheet.create({
-  wrap:        { borderRadius: 14, borderWidth: 1.5, overflow: 'hidden',
-                 shadowOpacity: 0.10, shadowRadius: 10, elevation: 3 },
+  wrap:        { borderRadius: 16, borderWidth: 1.5, overflow: 'hidden',
+                 shadowOpacity: 0.09, shadowRadius: 12, elevation: 3 },
   iconArea:    { alignItems: 'center', justifyContent: 'center',
-                 paddingTop: 22, paddingBottom: 18 },
-  info:        { paddingHorizontal: 12, paddingBottom: 16, alignItems: 'center', gap: 5 },
-  name:        { fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  cap:         { fontSize: 14, textAlign: 'center' },
-  statusLabel: { fontSize: 12.5, fontWeight: '700', marginTop: 2 },
+                 paddingTop: 18, paddingBottom: 14 },
+  info:        { paddingHorizontal: 10, paddingBottom: 12, alignItems: 'center', gap: 4 },
+  name:        { fontSize: 13.5, fontWeight: '700', textAlign: 'center' },
+  cap:         { fontSize: 12, textAlign: 'center' },
+  statusLabel: { fontSize: 11.5, fontWeight: '700', marginTop: 2 },
 });
 
 // ── Trending Menus card ───────────────────────────────────────────────────────
 const tmc = StyleSheet.create({
-  wrap:       { borderRadius: 16, padding: 15, borderWidth: 1, borderTopWidth: 3,
-                shadowOpacity: 0.10, shadowRadius: 12, elevation: 3 },
-  rankBadge:  { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, alignSelf: 'flex-start' },
-  rankText:   { fontSize: 11, fontWeight: '800' },
+  wrap:       { borderRadius: 16, padding: 13, borderWidth: 1, borderTopWidth: 3,
+                shadowOpacity: 0.09, shadowRadius: 12, elevation: 3 },
+  rankBadge:  { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20, alignSelf: 'flex-start' },
+  rankText:   { fontSize: 10.5, fontWeight: '800' },
   trendBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20 },
   trendText:  { fontSize: 10, fontWeight: '800' },
-  name:       { fontSize: 16, fontWeight: '700', lineHeight: 21, marginTop: 8, marginBottom: 4 },
-  qty:        { fontSize: 14, fontWeight: '800' },
-  track:      { height: 6, borderRadius: 3, overflow: 'hidden' },
+  name:       { fontSize: 13, fontWeight: '700', lineHeight: 18, marginTop: 7, marginBottom: 3 },
+  qty:        { fontSize: 12, fontWeight: '800' },
+  track:      { height: 5, borderRadius: 3, overflow: 'hidden' },
   fill:       { height: '100%', borderRadius: 3 },
 });
 
 // ── Notification row ──────────────────────────────────────────────────────────
 const nr = StyleSheet.create({
-  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 13, borderBottomWidth: 1 },
-  iconWrap: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
-  title:    { fontSize: 14, lineHeight: 20, fontWeight: '500' },
-  msg:      { fontSize: 14, marginTop: 2, lineHeight: 20 },
-  time:     { fontSize: 14 },
-  dot:      { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
+  row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 11, borderBottomWidth: 1 },
+  iconWrap: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
+  title:    { fontSize: 13.5, lineHeight: 19, fontWeight: '500' },
+  msg:      { fontSize: 12.5, marginTop: 2, lineHeight: 18 },
+  time:     { fontSize: 11 },
+  dot:      { width: 7, height: 7, borderRadius: 3.5, marginTop: 4 },
 });
 
 // ── Custom date modal ─────────────────────────────────────────────────────────
