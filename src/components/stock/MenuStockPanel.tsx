@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Modal, ActivityIndicator, RefreshControl, useWindowDimensions,
+  TextInput, Modal, ActivityIndicator, RefreshControl, useWindowDimensions, Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { stockApi } from '@/api/stock';
 import { useTheme } from '@/store/themeStore';
 import type { ThemeColors } from '@/theme/tokens';
-import type { MenuStockData, MenuStockItem, StockHistoryData, StockHistoryRow } from '@/types';
+import type { MenuStockData, MenuStockItem, MenuStockMovement, StockHistoryData, StockHistoryRow, StockItemDetail, StockItemMovement } from '@/types';
 
 import {
   STOCK_BRAND,
@@ -331,6 +331,511 @@ function HistoryMovementRow({ mv, isDark, c, s }: { mv: StockHistoryRow | MenuSt
   );
 }
 
+// ─── Stock Item Manage Modal (parity with web stock/edit.blade.php) ───────────
+
+type ManageTab = 'stockin' | 'adjust' | 'waste' | 'history';
+
+function mkManage(c: ThemeColors, isDark: boolean) {
+  const tabActive = stockTabActiveBg(isDark);
+  return StyleSheet.create({
+    overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+    sheet:       { backgroundColor: c.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, maxHeight: '92%', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 28, shadowOffset: { width: 0, height: -6 }, elevation: 20 },
+    handle:      { width: 40, height: 4, borderRadius: 2, backgroundColor: c.border, alignSelf: 'center', marginTop: 10, marginBottom: 6 },
+    hdr:         { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingHorizontal: 18, paddingTop: 4, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: c.border },
+    hdrLeft:     { flex: 1 },
+    hdrTitle:    { fontSize: 17, fontWeight: '800', color: c.heading },
+    hdrSub:      { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    closeBtn:    { width: 30, height: 30, borderRadius: 8, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+    summaryRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: c.surfaceAlt, borderBottomWidth: 1, borderBottomColor: c.border, flexWrap: 'wrap' },
+    onHandPill:  { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+    onHandVal:   { fontSize: 16, fontWeight: '900' },
+    onHandLbl:   { fontSize: 11, fontWeight: '600', color: c.textMuted },
+    trackRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 'auto' },
+    trackLbl:    { fontSize: 12.5, fontWeight: '600', color: c.text },
+    threshRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border, backgroundColor: c.surface },
+    threshLbl:   { fontSize: 12.5, fontWeight: '600', color: c.text, flex: 1 },
+    threshInput: { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, fontSize: 14, color: c.heading, width: 90, textAlign: 'center' },
+    saveThreshBtn:{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: BRAND },
+    saveThreshTxt:{ fontSize: 12.5, fontWeight: '700', color: '#fff' },
+    tabBar:      { flexDirection: 'row', gap: 0, borderBottomWidth: 1, borderBottomColor: c.border },
+    tabBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 11, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+    tabBtnActive:{ borderBottomColor: BRAND },
+    tabTxt:      { fontSize: 12.5, fontWeight: '600', color: c.textMuted },
+    body:        { padding: 16, gap: 14 },
+    field:       { gap: 5 },
+    label:       { fontSize: 12, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.3 },
+    input:       { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 11, fontSize: 14.5, color: c.heading },
+    modeRow:     { flexDirection: 'row', gap: 8 },
+    modeBtn:     { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 8, borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surfaceAlt },
+    modeTxt:     { fontSize: 12.5, fontWeight: '600', color: c.text },
+    hint:        { fontSize: 11.5, color: c.textMuted, marginTop: 2 },
+    err:         { fontSize: 12.5, color: '#dc2626', fontWeight: '600' },
+    footer:      { flexDirection: 'row', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: c.border },
+    cancelBtn:   { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: c.border },
+    cancelTxt:   { fontSize: 14, fontWeight: '600', color: c.text },
+    saveBtn:     { flex: 2, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: BRAND },
+    dangerBtn:   { flex: 2, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#dc2626' },
+    saveTxt:     { fontSize: 14, fontWeight: '800', color: '#fff' },
+    movRow:      { paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: c.border, gap: 4 },
+    movTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+    movType:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' },
+    movTypeTxt:  { fontSize: 11, fontWeight: '700' },
+    movMeta:     { fontSize: 11.5, color: c.textMuted },
+    movQty:      { fontSize: 15, fontWeight: '900' },
+    movRange:    { fontSize: 12, color: c.textMuted },
+    emptyTxt:    { textAlign: 'center', padding: 24, color: c.textMuted, fontSize: 13 },
+    loadWrap:    { paddingVertical: 20, alignItems: 'center' },
+  });
+}
+
+function MOVE_CFG_LOCAL(type: string, isDark: boolean) {
+  const map: Record<string, { color: string; label: string }> = {
+    purchase:   { color: '#059669', label: 'Purchase' },
+    sale:       { color: isDark ? '#888' : '#6b7280', label: 'Sale' },
+    waste:      { color: '#dc2626', label: 'Waste' },
+    adjustment: { color: '#d97706', label: 'Adjustment' },
+    reversal:   { color: '#3b82f6', label: 'Reversal' },
+  };
+  return map[type] ?? { color: isDark ? '#888' : '#6b7280', label: type };
+}
+
+function fmt(iso?: string | null) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function StockItemManageModal({
+  visible, itemId, onSave, onClose,
+}: {
+  visible: boolean;
+  itemId: number | null;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  const { colors: c, isDark } = useTheme();
+  const mg = useMemo(() => mkManage(c, isDark), [c, isDark]);
+
+  const [detail, setDetail]     = useState<StockItemDetail | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [tab, setTab]           = useState<ManageTab>('stockin');
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState('');
+
+  // Track / threshold
+  const [trackStock, setTrackStock]       = useState(false);
+  const [threshold, setThreshold]         = useState('0');
+  const [savingTrack, setSavingTrack]     = useState(false);
+
+  // Stock-in
+  const [siMode, setSiMode]     = useState<'add' | 'set'>('add');
+  const [siQty, setSiQty]       = useState('');
+  const [siRef, setSiRef]       = useState('');
+  const [siNotes, setSiNotes]   = useState('');
+
+  // Adjust
+  const [adjQty, setAdjQty]     = useState('');
+  const [adjNotes, setAdjNotes] = useState('');
+
+  // Waste
+  const [wQty, setWQty]         = useState('');
+  const [wNotes, setWNotes]     = useState('');
+
+  const resetForms = () => {
+    setSiMode('add'); setSiQty(''); setSiRef(''); setSiNotes('');
+    setAdjQty(''); setAdjNotes('');
+    setWQty(''); setWNotes('');
+    setError('');
+  };
+
+  useEffect(() => {
+    if (!visible || !itemId) return;
+    setTab('stockin');
+    resetForms();
+    setDetail(null);
+    setLoading(true);
+    stockApi.show(itemId)
+      .then(res => {
+        const d = res.data as StockItemDetail;
+        setDetail(d);
+        setTrackStock(d.stock.track_stock);
+        setThreshold(String(d.stock.low_stock_threshold));
+      })
+      .catch(() => setError('Failed to load item details'))
+      .finally(() => setLoading(false));
+  }, [visible, itemId]);
+
+  async function saveTrackingSettings() {
+    if (!itemId) return;
+    setSavingTrack(true);
+    setError('');
+    try {
+      await stockApi.update(itemId, {
+        mode: 'add',
+        quantity: 0,
+        track_stock: trackStock,
+        low_stock_threshold: parseInt(threshold, 10) || 0,
+      });
+      const res = await stockApi.show(itemId);
+      setDetail(res.data as StockItemDetail);
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Failed to save settings');
+    } finally { setSavingTrack(false); }
+  }
+
+  async function doStockIn() {
+    if (!itemId) return;
+    const q = parseInt(siQty, 10);
+    if (!siQty || isNaN(q) || q < 0) { setError('Enter a valid quantity (0 or more)'); return; }
+    setSaving(true); setError('');
+    try {
+      await stockApi.update(itemId, {
+        mode: siMode,
+        quantity: q,
+        track_stock: trackStock,
+        low_stock_threshold: parseInt(threshold, 10) || 0,
+        notes: siNotes || undefined,
+        reference: siRef || undefined,
+      });
+      const res = await stockApi.show(itemId);
+      setDetail(res.data as StockItemDetail);
+      resetForms();
+      onSave();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Stock update failed');
+    } finally { setSaving(false); }
+  }
+
+  async function doAdjust() {
+    if (!itemId) return;
+    const q = parseInt(adjQty, 10);
+    if (!adjQty || isNaN(q) || q === 0) { setError('Enter a non-zero quantity change (e.g. 5 or -2)'); return; }
+    setSaving(true); setError('');
+    try {
+      await stockApi.adjust(itemId, { quantity_change: q, notes: adjNotes || undefined });
+      const res = await stockApi.show(itemId);
+      setDetail(res.data as StockItemDetail);
+      resetForms();
+      onSave();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Adjustment failed');
+    } finally { setSaving(false); }
+  }
+
+  async function doWaste() {
+    if (!itemId) return;
+    const q = parseInt(wQty, 10);
+    if (!wQty || isNaN(q) || q < 1) { setError('Enter a valid quantity (min: 1)'); return; }
+    setSaving(true); setError('');
+    try {
+      await stockApi.waste(itemId, { quantity: q, notes: wNotes || undefined });
+      const res = await stockApi.show(itemId);
+      setDetail(res.data as StockItemDetail);
+      resetForms();
+      onSave();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Waste record failed');
+    } finally { setSaving(false); }
+  }
+
+  const onHand = detail?.stock.quantity_on_hand ?? 0;
+  const tracked = detail?.stock.track_stock ?? false;
+  const st = trackedStockTone(tracked, onHand, detail?.stock.low_stock_threshold ?? 0, isDark);
+
+  const TABS: { key: ManageTab; label: string; icon: string }[] = [
+    { key: 'stockin',  label: 'Stock In',   icon: 'arrow-down-circle-outline' },
+    { key: 'adjust',   label: 'Adjust',     icon: 'swap-horizontal-outline' },
+    { key: 'waste',    label: 'Waste',      icon: 'trash-outline' },
+    { key: 'history',  label: 'History',    icon: 'time-outline' },
+  ];
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={mg.overlay}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={mg.sheet}>
+          <View style={mg.handle} />
+
+          {/* Header */}
+          <View style={mg.hdr}>
+            <View style={mg.hdrLeft}>
+              <Text style={mg.hdrTitle} numberOfLines={1}>
+                {detail?.item.name ?? 'Manage Stock'}
+              </Text>
+              <Text style={mg.hdrSub}>{detail?.item.category_name ?? ''}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={mg.closeBtn}>
+              <Ionicons name="close" size={18} color={c.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          {loading ? (
+            <View style={{ paddingVertical: 48, alignItems: 'center' }}>
+              <ActivityIndicator color={BRAND} size="large" />
+            </View>
+          ) : (
+            <>
+              {/* On-hand summary */}
+              <View style={mg.summaryRow}>
+                <View style={[mg.onHandPill, { borderColor: st.color + '60', backgroundColor: st.bg }]}>
+                  <Text style={[mg.onHandVal, { color: st.color }]}>{onHand}</Text>
+                  <Text style={mg.onHandLbl}>on hand</Text>
+                </View>
+                <View style={[mg.onHandPill, { borderColor: c.border, backgroundColor: c.surfaceAlt }]}>
+                  <Text style={[{ fontSize: 12.5, fontWeight: '600', color: st.color }]}>{st.label}</Text>
+                </View>
+                <View style={mg.trackRow}>
+                  <Text style={mg.trackLbl}>Track</Text>
+                  <Switch
+                    value={trackStock}
+                    onValueChange={v => setTrackStock(v)}
+                    trackColor={{ false: c.border, true: BRAND }}
+                    thumbColor="#fff"
+                  />
+                </View>
+              </View>
+
+              {/* Threshold */}
+              <View style={mg.threshRow}>
+                <Text style={mg.threshLbl}>Low stock threshold</Text>
+                <TextInput
+                  style={mg.threshInput}
+                  value={threshold}
+                  onChangeText={setThreshold}
+                  keyboardType="number-pad"
+                  placeholder="0"
+                  placeholderTextColor={c.textMuted}
+                />
+                <TouchableOpacity
+                  style={[mg.saveThreshBtn, savingTrack && { opacity: 0.6 }]}
+                  onPress={saveTrackingSettings}
+                  disabled={savingTrack}
+                >
+                  {savingTrack
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={mg.saveThreshTxt}>Save</Text>}
+                </TouchableOpacity>
+              </View>
+
+              {/* Tab bar */}
+              <View style={mg.tabBar}>
+                {TABS.map(t => (
+                  <TouchableOpacity
+                    key={t.key}
+                    style={[mg.tabBtn, tab === t.key && mg.tabBtnActive]}
+                    onPress={() => { setTab(t.key); setError(''); }}
+                  >
+                    <Ionicons name={t.icon as any} size={13} color={tab === t.key ? BRAND : c.textMuted} />
+                    <Text style={[mg.tabTxt, tab === t.key && { color: BRAND, fontWeight: '700' }]}>
+                      {t.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+                {/* Stock In tab */}
+                {tab === 'stockin' && (
+                  <View style={mg.body}>
+                    <View style={mg.field}>
+                      <Text style={mg.label}>Mode</Text>
+                      <View style={mg.modeRow}>
+                        {([['add', 'Add quantity'], ['set', 'Set exact quantity']] as const).map(([m, lbl]) => (
+                          <TouchableOpacity
+                            key={m}
+                            style={[mg.modeBtn, siMode === m && { backgroundColor: BRAND, borderColor: BRAND }]}
+                            onPress={() => setSiMode(m)}
+                          >
+                            <Text style={[mg.modeTxt, siMode === m && { color: '#fff', fontWeight: '700' }]}>{lbl}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                    <View style={mg.field}>
+                      <Text style={mg.label}>Quantity *</Text>
+                      <TextInput
+                        style={mg.input}
+                        value={siQty}
+                        onChangeText={setSiQty}
+                        placeholder="0"
+                        placeholderTextColor={c.textMuted}
+                        keyboardType="number-pad"
+                      />
+                      <Text style={mg.hint}>Current on hand: {onHand}</Text>
+                    </View>
+                    <View style={mg.field}>
+                      <Text style={mg.label}>Reference (optional)</Text>
+                      <TextInput
+                        style={mg.input}
+                        value={siRef}
+                        onChangeText={setSiRef}
+                        placeholder="GRN / invoice no."
+                        placeholderTextColor={c.textMuted}
+                        maxLength={128}
+                      />
+                    </View>
+                    <View style={mg.field}>
+                      <Text style={mg.label}>Notes</Text>
+                      <TextInput
+                        style={[mg.input, { height: 72, textAlignVertical: 'top' }]}
+                        value={siNotes}
+                        onChangeText={setSiNotes}
+                        placeholder="Optional note..."
+                        placeholderTextColor={c.textMuted}
+                        multiline
+                        maxLength={2000}
+                      />
+                    </View>
+                    {error ? <Text style={mg.err}>{error}</Text> : null}
+                    <View style={mg.footer}>
+                      <TouchableOpacity style={mg.cancelBtn} onPress={onClose}>
+                        <Text style={mg.cancelTxt}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[mg.saveBtn, saving && { opacity: 0.6 }]}
+                        onPress={doStockIn}
+                        disabled={saving}
+                      >
+                        {saving
+                          ? <ActivityIndicator color="#fff" size="small" />
+                          : <Text style={mg.saveTxt}>Save stock</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* Adjust tab */}
+                {tab === 'adjust' && (
+                  <View style={mg.body}>
+                    <View style={mg.field}>
+                      <Text style={mg.label}>Quantity change (+ or −) *</Text>
+                      <TextInput
+                        style={mg.input}
+                        value={adjQty}
+                        onChangeText={setAdjQty}
+                        placeholder="e.g. 5 or -2"
+                        placeholderTextColor={c.textMuted}
+                        keyboardType="numbers-and-punctuation"
+                      />
+                      <Text style={mg.hint}>Current on hand: {onHand}</Text>
+                    </View>
+                    <View style={mg.field}>
+                      <Text style={mg.label}>Notes</Text>
+                      <TextInput
+                        style={[mg.input, { height: 72, textAlignVertical: 'top' }]}
+                        value={adjNotes}
+                        onChangeText={setAdjNotes}
+                        placeholder="Optional note..."
+                        placeholderTextColor={c.textMuted}
+                        multiline
+                        maxLength={2000}
+                      />
+                    </View>
+                    {error ? <Text style={mg.err}>{error}</Text> : null}
+                    <View style={mg.footer}>
+                      <TouchableOpacity style={mg.cancelBtn} onPress={onClose}>
+                        <Text style={mg.cancelTxt}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[mg.saveBtn, saving && { opacity: 0.6 }]}
+                        onPress={doAdjust}
+                        disabled={saving}
+                      >
+                        {saving
+                          ? <ActivityIndicator color="#fff" size="small" />
+                          : <Text style={mg.saveTxt}>Adjust</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* Waste tab */}
+                {tab === 'waste' && (
+                  <View style={mg.body}>
+                    <View style={mg.field}>
+                      <Text style={mg.label}>Quantity wasted *</Text>
+                      <TextInput
+                        style={mg.input}
+                        value={wQty}
+                        onChangeText={setWQty}
+                        placeholder="Min: 1"
+                        placeholderTextColor={c.textMuted}
+                        keyboardType="number-pad"
+                      />
+                      <Text style={mg.hint}>Current on hand: {onHand}</Text>
+                    </View>
+                    <View style={mg.field}>
+                      <Text style={mg.label}>Notes</Text>
+                      <TextInput
+                        style={[mg.input, { height: 72, textAlignVertical: 'top' }]}
+                        value={wNotes}
+                        onChangeText={setWNotes}
+                        placeholder="Optional note..."
+                        placeholderTextColor={c.textMuted}
+                        multiline
+                        maxLength={2000}
+                      />
+                    </View>
+                    {error ? <Text style={mg.err}>{error}</Text> : null}
+                    <View style={mg.footer}>
+                      <TouchableOpacity style={mg.cancelBtn} onPress={onClose}>
+                        <Text style={mg.cancelTxt}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[mg.dangerBtn, saving && { opacity: 0.6 }]}
+                        onPress={doWaste}
+                        disabled={saving}
+                      >
+                        {saving
+                          ? <ActivityIndicator color="#fff" size="small" />
+                          : <Text style={mg.saveTxt}>Record waste</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* History tab */}
+                {tab === 'history' && (
+                  detail?.movements.length === 0 ? (
+                    <Text style={mg.emptyTxt}>No movements for this item yet.</Text>
+                  ) : (
+                    <>
+                      {(detail?.movements ?? []).map((mv: StockItemMovement) => {
+                        const cfg = MOVE_CFG_LOCAL(mv.type, isDark);
+                        const delta = mv.quantity_change;
+                        const deltaColor = delta > 0 ? (isDark ? '#14B51D' : '#059669') : delta < 0 ? (isDark ? '#FF3636' : '#dc2626') : c.textMuted;
+                        return (
+                          <View key={mv.id} style={mg.movRow}>
+                            <View style={mg.movTop}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={mg.movMeta}>{fmt(mv.created_at)}</Text>
+                              </View>
+                              <View style={[mg.movType, { backgroundColor: moveBadgeBg(cfg.color, isDark) }]}>
+                                <Text style={[mg.movTypeTxt, { color: cfg.color }]}>{cfg.label}</Text>
+                              </View>
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 3 }}>
+                              <Text style={[mg.movQty, { color: deltaColor }]}>
+                                {delta > 0 ? '+' : ''}{delta}
+                              </Text>
+                              <Text style={mg.movRange}>{mv.quantity_before} → {mv.quantity_after}</Text>
+                            </View>
+                            {mv.notes ? <Text style={mg.movMeta}>Notes: {mv.notes}</Text> : null}
+                            <Text style={mg.movMeta}>By {mv.user_name}</Text>
+                          </View>
+                        );
+                      })}
+                    </>
+                  )
+                )}
+              </ScrollView>
+            </>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function MenuStockPanel({
   onOpenStockIn, onOpenWaste,
 }: {
@@ -360,6 +865,8 @@ export default function MenuStockPanel({
   const [showOp, setShowOp] = useState(false);
   const [opItemId, setOpItemId] = useState<number | undefined>();
   const [opType, setOpType] = useState<OpType>('stock-in');
+  const [showManage, setShowManage]   = useState(false);
+  const [manageItemId, setManageItemId] = useState<number | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -582,12 +1089,18 @@ export default function MenuStockPanel({
                     </View>
                     {row.tracked && row.threshold > 0 && <Text style={s.minTxt}>Min: {row.threshold}</Text>}
                   </View>
-                  <View style={[s.cAct, { flexDirection: 'row', gap: 6, justifyContent: 'flex-end' }]}>
+                  <View style={[s.cAct, { flexDirection: 'row', gap: 5, justifyContent: 'flex-end' }]}>
+                    <TouchableOpacity
+                      style={[s.actBtn, { borderColor: BRAND + '60' }]}
+                      onPress={() => { setManageItemId(row.id); setShowManage(true); }}
+                    >
+                      <Ionicons name="settings-outline" size={14} color={BRAND} />
+                    </TouchableOpacity>
                     <TouchableOpacity style={s.actBtn} onPress={() => openStockIn(row)}>
-                      <Ionicons name="arrow-down-circle-outline" size={15} color={BRAND} />
+                      <Ionicons name="arrow-down-circle-outline" size={14} color={BRAND} />
                     </TouchableOpacity>
                     <TouchableOpacity style={[s.actBtn, { borderColor: wasteBorder }]} onPress={() => openWaste(row)}>
-                      <Ionicons name="trash-outline" size={15} color="#dc2626" />
+                      <Ionicons name="trash-outline" size={14} color="#dc2626" />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -653,6 +1166,12 @@ export default function MenuStockPanel({
         defaultOp={opType}
         onSave={() => { setShowOp(false); load(true); }}
         onClose={() => setShowOp(false)}
+      />
+      <StockItemManageModal
+        visible={showManage}
+        itemId={manageItemId}
+        onSave={() => load(true)}
+        onClose={() => { setShowManage(false); setManageItemId(null); }}
       />
     </View>
   );

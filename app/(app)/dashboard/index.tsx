@@ -344,12 +344,9 @@ function SectionHeader({ title, action, onAction }: { title: string; action?: st
 // Colorful circular blob icon — csPos glowing orb style
 function BlobIcon({ color, icon, size = 64 }: { color: string; icon: any; size?: number }) {
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ position: 'absolute', width: size * 1.05, height: size * 1.05, borderRadius: size / 2, backgroundColor: color + '0a' }} />
-      <View style={{ position: 'absolute', width: size * 0.88, height: size * 0.88, borderRadius: size / 2, backgroundColor: color + '14', right: 0, bottom: 0 }} />
-      <View style={{ position: 'absolute', width: size * 0.68, height: size * 0.68, borderRadius: size / 2, backgroundColor: color + '24', left: 2, top: 4 }} />
-      <View style={{ position: 'absolute', width: size * 0.48, height: size * 0.48, borderRadius: size / 2, backgroundColor: color + '38' }} />
-      <Ionicons name={icon} size={size * 0.36} color={color} />
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color + '1A', alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ position: 'absolute', width: size * 0.65, height: size * 0.65, borderRadius: size / 2, backgroundColor: color + '28' }} />
+      <Ionicons name={icon} size={size * 0.38} color={color} />
     </View>
   );
 }
@@ -359,8 +356,8 @@ function cardSurface(D: DashboardColors, isDark: boolean) {
     backgroundColor: isDark ? S.cardBg : D.white,
     borderColor: isDark ? '#1e1e1e' : D.border,
     shadowColor: '#000',
-    shadowOpacity: isDark ? 0.35 : 0.06,
-    shadowRadius: isDark ? 8 : 12,
+    shadowOpacity: isDark ? 0.25 : 0.07,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 2 },
     elevation: isDark ? 2 : 3,
   };
@@ -1715,12 +1712,6 @@ export default function DashboardScreen() {
                     </View>
                   );
                 })}
-                <Pressable style={[ry.ctaBtn, { marginTop: 12, alignSelf: 'flex-start' }]} onPress={() => go('/(app)/royalties')}>
-                  <Text style={ry.ctaBtnTxt}>
-                    {royaltyMeta?.current_month_request ? 'Manage Royalties' : 'Submit Royalty Request'}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={14} color="#fff" />
-                </Pressable>
               </View>
             )}
           </View>
@@ -2122,10 +2113,10 @@ const s = StyleSheet.create({
   grid:     { flexDirection: 'row', flexWrap: 'wrap', width: '100%' },
   section:  { marginBottom: 16 },
   card:     {
-    borderRadius: 12, padding: 16,
+    borderRadius: 16, padding: 16,
     borderWidth: 1,
-    shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 2 },
-    elevation: 2, marginBottom: 0,
+    shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 3 },
+    elevation: 3, marginBottom: 0,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
   cardTitle:  { fontSize: 14, fontWeight: '700' },
@@ -2172,13 +2163,13 @@ const sh = StyleSheet.create({
 });
 
 const bc = StyleSheet.create({
-  wrap:        { flex: 1, borderRadius: 12, minHeight: 118,
+  wrap:        { flex: 1, borderRadius: 16, minHeight: 118,
                  paddingTop: 16, paddingBottom: 16, paddingLeft: 16, paddingRight: 16,
                  borderWidth: 1, minWidth: 150, overflow: 'hidden' },
   growthBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   growthText:  { fontSize: 11, fontWeight: '800' },
-  value:       { fontSize: 26, fontWeight: '900', letterSpacing: -0.8, marginTop: 4, marginBottom: 0 },
-  label:       { fontSize: 11, fontWeight: '600', letterSpacing: 0.2 },
+  value:       { fontSize: 28, fontWeight: '900', letterSpacing: -1, marginTop: 4, marginBottom: 0 },
+  label:       { fontSize: 11.5, fontWeight: '600', letterSpacing: 0.4 },
   sub:         { fontSize: 12, fontWeight: '600' },
   royaltyBadge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, backgroundColor: 'rgba(255,152,0,0.14)' },
   royaltyBadgeTxt: { fontSize: 10, fontWeight: '700', color: S.accent },
@@ -2187,7 +2178,7 @@ const bc = StyleSheet.create({
 });
 
 const smc = StyleSheet.create({
-  wrap:        { borderRadius: 12, minHeight: 92,
+  wrap:        { borderRadius: 14, minHeight: 92,
                  paddingTop: 14, paddingBottom: 14, paddingLeft: 13, paddingRight: 13,
                  overflow: 'hidden', borderWidth: 1 },
   value:       { fontSize: 20, fontWeight: '900', letterSpacing: -0.4, marginTop: 3, marginBottom: 1 },

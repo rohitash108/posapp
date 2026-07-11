@@ -89,7 +89,7 @@ export function useGlobalOrderPolling() {
         const data = raw.map(normalizeOrder);
 
         const pendingCount = data.filter(o => o.status === 'pending').length;
-        const kitchenCount = data.filter(o => ['preparing', 'confirmed'].includes(o.status)).length;
+        const kitchenCount = data.filter(o => ['pending', 'confirmed', 'preparing', 'ready'].includes(o.status)).length;
         useOrderBadgeStore.getState().update(pendingCount, kitchenCount);
         useOrderBadgeStore.getState().bumpRefresh();
 

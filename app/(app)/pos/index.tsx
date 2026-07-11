@@ -1874,7 +1874,7 @@ export default function POSScreen() {
                   <View style={[sh.railIcon, active && sh.railIconActive]}>
                     <Ionicons name={c.id === null ? 'grid-outline' : 'pricetag-outline'} size={13} color={active ? '#0D76E1' : '#9ca3af'} />
                   </View>
-                  <Text style={[sh.railLabel, active && sh.railLabelActive]} numberOfLines={1}>{c.name}</Text>
+                  <Text style={[sh.railLabel, active && sh.railLabelActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{c.name}</Text>
                   <View style={[sh.railBadge, active && sh.railBadgeActive]}>
                     <Text style={[sh.railBadgeText, active && sh.railBadgeTextActive]}>{c.count}</Text>
                   </View>
@@ -2272,7 +2272,7 @@ export default function POSScreen() {
             style={[mb.catChip, activeCatId === c.id && mb.catChipActive]}
             onPress={() => setActiveCatId(c.id)}
           >
-            <Text style={[mb.catChipText, activeCatId === c.id && mb.catChipTextActive]} numberOfLines={1}>
+            <Text style={[mb.catChipText, activeCatId === c.id && mb.catChipTextActive]}>
               {c.name}
             </Text>
           </Pressable>
@@ -2424,7 +2424,7 @@ function mkSh(c: _TC) { return StyleSheet.create({
   posBackText:{ fontSize: 13, fontWeight: '600', color: c.text },
   posTitle:   { fontSize: 18, fontWeight: '800', color: c.heading, letterSpacing: 0.2 },
 
-  rail:       { width: 170, backgroundColor: c.surface, borderRightWidth: 1, borderRightColor: c.border },
+  rail:       { width: 200, backgroundColor: c.surface, borderRightWidth: 1, borderRightColor: c.border },
   railHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingTop: 14, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: c.border },
   backBtn:    { width: 28, height: 28, borderRadius: 8, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   railTitle:  { flex: 1, fontSize: 11, fontWeight: '800', color: c.text, letterSpacing: 1, textTransform: 'uppercase' },

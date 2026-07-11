@@ -424,6 +424,34 @@ export interface MenuStockData {
   recent_movements: MenuStockMovement[];
 }
 
+/** Per-item detail from GET /stock/items/{id} */
+export interface StockItemMovement {
+  id: number;
+  type: string;
+  quantity_change: number;
+  quantity_before: number;
+  quantity_after: number;
+  notes?: string | null;
+  user_name: string;
+  created_at?: string | null;
+}
+
+export interface StockItemDetail {
+  item: {
+    id: number;
+    name: string;
+    category_id?: number;
+    category_name: string;
+    is_master: boolean;
+  };
+  stock: {
+    track_stock: boolean;
+    quantity_on_hand: number;
+    low_stock_threshold: number;
+  };
+  movements: StockItemMovement[];
+}
+
 /** Packing / consumable supplies (csPos /stock/supplies) */
 export interface SupplySku {
   id: number;

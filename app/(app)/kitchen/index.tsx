@@ -8,7 +8,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ordersApi } from '@/api/orders';
-import { useAppStore } from '@/store/appStore';
 import { useOrderBadgeStore } from '@/store/orderBadgeStore';
 import { useTheme } from '@/store/themeStore';
 import type { ThemeColors } from '@/theme/tokens';
@@ -52,16 +51,16 @@ const STAT_CARDS = [
 
 function getNextAction(
   order: Order,
-  isAdmin: boolean,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _isAdmin: boolean,
 ): { status: OrderStatus; label: string; color: string } | null {
-  if (order.status === 'pending') return null;
+  const isAgg = order.source === 'zomato' || order.source === 'swiggy';
+  // Aggregator pending: handled by Accept/Reject buttons; non-agg skips confirmed entirely
+  if (order.status === 'pending')   return isAgg ? null : { status: 'preparing', label: 'Start Preparing', color: '#0D76E1' };
   if (order.status === 'confirmed') return { status: 'preparing', label: 'Start Preparing', color: '#0D76E1' };
   if (order.status === 'preparing') return { status: 'ready',     label: 'Mark Ready',      color: '#10b981' };
-  if (order.status === 'ready') {
-    if (isAdmin) return { status: 'completed', label: 'Mark Completed', color: '#16a34a' };
-    return { status: 'served', label: 'Mark Served', color: '#06b6d4' };
-  }
-  if (order.status === 'served') return { status: 'completed', label: 'Mark Completed', color: '#16a34a' };
+  if (order.status === 'ready')     return { status: 'completed', label: 'Mark Completed',  color: '#16a34a' };
+  if (order.status === 'served')    return { status: 'completed', label: 'Mark Completed',  color: '#16a34a' };
   return null;
 }
 
@@ -200,8 +199,6 @@ export default function KitchenScreen() {
   const [tick, setTick] = useState(0);
   const [completedToday, setCompletedToday] = useState(0);
   const { width } = useWindowDimensions();
-  const user = useAppStore((s) => s.user);
-  const isAdmin = user?.role === 'restaurant_admin' || user?.role === 'admin';
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshVersion = useOrderBadgeStore((s) => s.refreshVersion);
@@ -269,12 +266,21 @@ export default function KitchenScreen() {
       } else {
         await ordersApi.updateStatus(order.id, newStatus);
       }
+      let next: Order[];
       if (newStatus === 'completed' || newStatus === 'cancelled') {
-        setOrders(prev => prev.filter(o => o.id !== order.id));
+        next = orders.filter(o => o.id !== order.id);
+        setOrders(next);
         if (newStatus === 'completed') setCompletedToday(c => c + 1);
       } else {
-        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus } : o));
+        next = orders.map(o => o.id === order.id ? { ...o, status: newStatus } : o);
+        setOrders(next);
       }
+      // Push updated counts to badge store immediately (don't wait for next poll)
+      const KDS_ACTIVE: OrderStatus[] = ['pending', 'confirmed', 'preparing', 'ready'];
+      useOrderBadgeStore.getState().update(
+        next.filter(o => o.status === 'pending').length,
+        next.filter(o => KDS_ACTIVE.includes(o.status)).length,
+      );
     } catch (e: any) {
       setError(e?.response?.data?.message ?? e?.message ?? 'Failed to update status');
       setTimeout(() => setError(''), 4000);
@@ -436,7 +442,6 @@ export default function KitchenScreen() {
           <KitchenCard
             order={item}
             numCols={numCols}
-            isAdmin={isAdmin}
             isLoading={!!actionLoading[item.id]}
             onAction={handleStatus}
             s={s}
@@ -462,10 +467,9 @@ export default function KitchenScreen() {
 
 // ─── KitchenCard ─────────────────────────────────────────────────────────────
 
-function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
+function KitchenCard({ order, numCols, isLoading, onAction, s }: {
   order: Order;
   numCols: number;
-  isAdmin: boolean;
   isLoading: boolean;
   onAction: (order: Order, status: OrderStatus) => void;
   s: ReturnType<typeof createStyles>;
@@ -478,8 +482,8 @@ function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
   const isUrgent = elapsed >= 15;
   const statusColor = STATUS_COLORS[order.status] ?? '#6b7280';
   const statusLabel = STATUS_LABELS[order.status] ?? order.status;
-  const nextAction = getNextAction(order, isAdmin);
-  const showAcceptReject = order.status === 'pending';
+  const nextAction = getNextAction(order, false);
+  const showAcceptReject = order.status === 'pending' && isAgg;
   const orderTotal = (order.items ?? []).reduce((s, i) => s + (Number(i.unit_price) || 0) * (i.quantity || 1), 0);
   const hasTotal = isAgg && orderTotal > 0;
 
@@ -613,22 +617,12 @@ function KitchenCard({ order, numCols, isAdmin, isLoading, onAction, s }: {
               )}
             </>
           ) : nextAction ? (
-            <>
-              {isAdmin && order.status === 'ready' && (
-                <Pressable
-                  style={({ pressed }) => [s.actionBtn, { backgroundColor: '#06b6d4' }, pressed && { opacity: 0.75 }]}
-                  onPress={() => onAction(order, 'served')}
-                >
-                  <Text style={s.actionBtnTxt}>Served</Text>
-                </Pressable>
-              )}
-              <Pressable
-                style={({ pressed }) => [s.actionBtn, { backgroundColor: nextAction.color }, pressed && { opacity: 0.75 }]}
-                onPress={() => onAction(order, nextAction.status)}
-              >
-                <Text style={s.actionBtnTxt}>{nextAction.label}</Text>
-              </Pressable>
-            </>
+            <Pressable
+              style={({ pressed }) => [s.actionBtn, { backgroundColor: nextAction.color }, pressed && { opacity: 0.75 }]}
+              onPress={() => onAction(order, nextAction.status)}
+            >
+              <Text style={s.actionBtnTxt}>{nextAction.label}</Text>
+            </Pressable>
           ) : null}
         </View>
       </View>

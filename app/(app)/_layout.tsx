@@ -30,8 +30,8 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'MENU',
     items: [
-      { name: 'inventory/index',  route: '/(app)/inventory',  label: 'Stock',  icon: 'cube-outline' as const },
-      { name: 'coupons/index',    route: '/(app)/coupons',    label: 'Coupons',    icon: 'pricetag-outline'      as const },
+      { name: 'inventory/index',  route: '/(app)/inventory',  label: 'Stock Inventory', icon: 'cube-outline' as const },
+      { name: 'coupons/index',    route: '/(app)/coupons',    label: 'Coupons',         icon: 'pricetag-outline'  as const },
     ],
   },
   {
@@ -166,7 +166,6 @@ function Sidebar() {
   const { pendingCount, kitchenCount } = useOrderBadgeStore();
   const { unreadCount: ticketUnread } = useTicketBadgeStore();
   const navCounts: Record<string, number> = {
-    'orders/index':  pendingCount,
     'kitchen/index': kitchenCount,
     'tickets/index': ticketUnread,
   };
@@ -297,8 +296,8 @@ const MORE_SECTIONS: { title: string; links: MoreLink[] }[] = [
   {
     title: 'MENU',
     links: [
-      { label: 'Stock',  route: '/(app)/inventory',  icon: 'cube-outline',          color: '#64748b' },
-      { label: 'Coupons',    route: '/(app)/coupons',    icon: 'pricetag-outline',      color: '#db2777' },
+      { label: 'Stock Inventory', route: '/(app)/inventory', icon: 'cube-outline',     color: '#64748b' },
+      { label: 'Coupons',         route: '/(app)/coupons',   icon: 'pricetag-outline', color: '#db2777' },
     ],
   },
   {
