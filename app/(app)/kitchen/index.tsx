@@ -212,14 +212,15 @@ export default function KitchenScreen() {
     if (!silent) setLoading(true);
     if (!silent) setError('');
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      const res = await ordersApi.list({ per_page: 100, status: KDS_STATUSES.join(','), from: today, to: today });
+      // No date filter — web kitchen shows all active orders regardless of creation date
+      const res = await ordersApi.list({ per_page: 200, status: KDS_STATUSES.join(',') });
       const raw = res.data?.data ?? res.data ?? [];
       const kitchen: Order[] = (Array.isArray(raw) ? raw : []).sort(
         (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
       );
       setOrders(kitchen);
       try {
+        const today = new Date().toISOString().slice(0, 10);
         const doneRes = await ordersApi.list({ per_page: 1, status: 'completed', from: today, to: today });
         setCompletedToday(doneRes.data?.total ?? 0);
       } catch { /* non-critical */ }

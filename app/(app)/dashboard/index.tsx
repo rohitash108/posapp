@@ -2119,17 +2119,17 @@ const s = StyleSheet.create({
     elevation: 3, marginBottom: 0,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
-  cardTitle:  { fontSize: 14, fontWeight: '700' },
-  cardSub:    { fontSize: 12, marginTop: 2 },
+  cardTitle:  { fontSize: 16, fontWeight: '700' },
+  cardSub:    { fontSize: 14, marginTop: 2 },
   emptyBox:   { alignItems: 'center', gap: 10, paddingVertical: 32 },
-  emptyText:  { fontSize: 13 },
+  emptyText:  { fontSize: 14 },
   viewAllBtn: { borderWidth: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
-  viewAllText:{ fontSize: 13, fontWeight: '700' },
+  viewAllText:{ fontSize: 14, fontWeight: '700' },
 
   dashHeader:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
                    paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, flexWrap: 'wrap', gap: 10 },
-  dashTitle:    { fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
-  dashDate:     { fontSize: 12, fontWeight: '600' },
+  dashTitle:    { fontSize: 28, fontWeight: '800', letterSpacing: -0.4 },
+  dashDate:     { fontSize: 16, fontWeight: '600' },
   datePillHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1 },
   todayBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1.5, borderColor: S.accent, backgroundColor: 'transparent' },
   todayBtnActive: { backgroundColor: 'rgba(255,152,0,0.08)' },
@@ -2157,9 +2157,9 @@ const s = StyleSheet.create({
 
 const sh = StyleSheet.create({
   row:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  title:     { fontSize: 15, fontWeight: '700', letterSpacing: -0.3 },
+  title:     { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  actionText:{ fontSize: 12.5, fontWeight: '600', color: S.primary },
+  actionText:{ fontSize: 14, fontWeight: '600', color: S.primary },
 });
 
 const bc = StyleSheet.create({
@@ -2167,14 +2167,14 @@ const bc = StyleSheet.create({
                  paddingTop: 16, paddingBottom: 16, paddingLeft: 16, paddingRight: 16,
                  borderWidth: 1, minWidth: 150, overflow: 'hidden' },
   growthBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  growthText:  { fontSize: 11, fontWeight: '800' },
+  growthText:  { fontSize: 12, fontWeight: '800' },
   value:       { fontSize: 28, fontWeight: '900', letterSpacing: -1, marginTop: 4, marginBottom: 0 },
-  label:       { fontSize: 11.5, fontWeight: '600', letterSpacing: 0.4 },
-  sub:         { fontSize: 12, fontWeight: '600' },
+  label:       { fontSize: 12, fontWeight: '600', letterSpacing: 0.4 },
+  sub:         { fontSize: 14, fontWeight: '600' },
   royaltyBadge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, backgroundColor: 'rgba(255,152,0,0.14)' },
-  royaltyBadgeTxt: { fontSize: 10, fontWeight: '700', color: S.accent },
+  royaltyBadgeTxt: { fontSize: 12, fontWeight: '700', color: S.accent },
   submitBtn:       { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: S.primary },
-  submitBtnTxt:    { fontSize: 11, fontWeight: '700', color: S.primary },
+  submitBtnTxt:    { fontSize: 14, fontWeight: '700', color: S.primary },
 });
 
 const smc = StyleSheet.create({
@@ -2182,38 +2182,38 @@ const smc = StyleSheet.create({
                  paddingTop: 14, paddingBottom: 14, paddingLeft: 13, paddingRight: 13,
                  overflow: 'hidden', borderWidth: 1 },
   value:       { fontSize: 20, fontWeight: '900', letterSpacing: -0.4, marginTop: 3, marginBottom: 1 },
-  label:       { fontSize: 10, fontWeight: '600', letterSpacing: 0.2 },
-  sub:         { fontSize: 11, fontWeight: '600', marginTop: 2, color: S.accent },
+  label:       { fontSize: 12, fontWeight: '600', letterSpacing: 0.2 },
+  sub:         { fontSize: 14, fontWeight: '600', marginTop: 2, color: S.accent },
 });
 
 const ry = StyleSheet.create({
   summaryRow:    { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, paddingBottom: 4 },
   summaryItem:   { minWidth: 100 },
   summaryDivider:{ width: 1, height: 32 },
-  summaryLabel:  { fontSize: 11, marginBottom: 4 },
-  summaryValue:  { fontSize: 16, fontWeight: '800' },
-  summaryHint:   { fontSize: 11, marginTop: 2 },
-  basisTxt:      { fontSize: 12, fontWeight: '700' },
+  summaryLabel:  { fontSize: 12, marginBottom: 4 },
+  summaryValue:  { fontSize: 20, fontWeight: '800' },
+  summaryHint:   { fontSize: 14, marginTop: 2 },
+  basisTxt:      { fontSize: 14, fontWeight: '700' },
   empty:         { alignItems: 'center', paddingVertical: 24, gap: 8 },
-  emptyTxt:      { fontSize: 13 },
+  emptyTxt:      { fontSize: 14 },
   ctaBtn:        { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: S.primary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
-  ctaBtnTxt:     { color: '#fff', fontWeight: '700', fontSize: 13 },
+  ctaBtnTxt:     { color: '#fff', fontWeight: '700', fontSize: 16 },
   reqRow:        { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
-  reqPeriod:     { fontSize: 13, fontWeight: '800' },
-  reqMeta:       { fontSize: 11, marginTop: 2 },
-  reqAmount:     { fontSize: 13, fontWeight: '800' },
+  reqPeriod:     { fontSize: 14, fontWeight: '800' },
+  reqMeta:       { fontSize: 12, marginTop: 2 },
+  reqAmount:     { fontSize: 14, fontWeight: '800' },
   statusPill:    { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  statusPillTxt: { fontSize: 10, fontWeight: '700' },
+  statusPillTxt: { fontSize: 12, fontWeight: '700' },
 });
 
 const ch = StyleSheet.create({
   wrap:      { marginTop: 8 },
-  dayLabel:  { fontSize: 10.5, fontWeight: '600', textAlign: 'center' },
-  yLabel:    { position: 'absolute', fontSize: 9.5, fontWeight: '600' },
+  dayLabel:  { fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  yLabel:    { position: 'absolute', fontSize: 11, fontWeight: '600' },
   legend:    { flexDirection: 'row', gap: 14, justifyContent: 'flex-end', marginBottom: 8 },
   legendItem:{ flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText:{ fontSize: 11 },
+  legendText:{ fontSize: 14 },
 });
 
 const donut = StyleSheet.create({
@@ -2221,17 +2221,17 @@ const donut = StyleSheet.create({
   ringWrap:    { width: 130, height: 130, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   ring:        { position: 'absolute' },
   center:      { alignItems: 'center', justifyContent: 'center' },
-  totalLabel:  { fontSize: 11, fontWeight: '600', marginBottom: 2 },
-  totalValue:  { fontSize: 14, fontWeight: '800' },
-  noData:      { fontSize: 12, fontWeight: '600', marginTop: 4, marginBottom: 8 },
-  note:        { fontSize: 10.5, textAlign: 'center', paddingHorizontal: 8, marginTop: 4, lineHeight: 15 },
+  totalLabel:  { fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  totalValue:  { fontSize: 20, fontWeight: '800' },
+  noData:      { fontSize: 14, fontWeight: '600', marginTop: 4, marginBottom: 8 },
+  note:        { fontSize: 12, textAlign: 'center', paddingHorizontal: 8, marginTop: 4, lineHeight: 16 },
   legend:      { width: '100%', marginTop: 4, gap: 8 },
   legendRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
   legendDot:   { width: 10, height: 10, borderRadius: 5, flexShrink: 0, marginTop: 2 },
-  legendLabel: { fontSize: 12, fontWeight: '600' },
-  legendSub:   { fontSize: 10.5, marginTop: 1 },
-  legendValue: { fontSize: 12, fontWeight: '700' },
-  legendPct:   { fontSize: 10.5, fontWeight: '700', marginTop: 1 },
+  legendLabel: { fontSize: 16, fontWeight: '600' },
+  legendSub:   { fontSize: 14, marginTop: 1 },
+  legendValue: { fontSize: 16, fontWeight: '700' },
+  legendPct:   { fontSize: 12, fontWeight: '700', marginTop: 1 },
 });
 
 const pi = StyleSheet.create({
@@ -2239,12 +2239,12 @@ const pi = StyleSheet.create({
   top:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   left:     { flexDirection: 'row', alignItems: 'center', gap: 9, flex: 1, minWidth: 0 },
   icon:     { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  label:    { fontSize: 13, fontWeight: '600' },
-  sub:      { fontSize: 11 },
+  label:    { fontSize: 16, fontWeight: '600' },
+  sub:      { fontSize: 14 },
   right:    { flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 0 },
-  value:    { fontSize: 13.5, fontWeight: '800' },
+  value:    { fontSize: 14, fontWeight: '800' },
   pctBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20 },
-  pctText:  { fontSize: 11, fontWeight: '800' },
+  pctText:  { fontSize: 12, fontWeight: '800' },
   track:    { height: 7, borderRadius: 4, overflow: 'hidden' },
   fill:     { height: '100%', borderRadius: 4 },
 });
@@ -2253,12 +2253,12 @@ const pmc = StyleSheet.create({
   wrap:    { borderRadius: 14, padding: 14, borderWidth: 1, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
   top:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   iconWrap:{ width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  label:   { fontSize: 13, fontWeight: '700' },
-  sub:     { fontSize: 11, marginTop: 1 },
-  amount:  { fontSize: 17, fontWeight: '800', marginBottom: 10 },
+  label:   { fontSize: 16, fontWeight: '700' },
+  sub:     { fontSize: 14, marginTop: 1 },
+  amount:  { fontSize: 20, fontWeight: '800', marginBottom: 10 },
   track:   { height: 7, borderRadius: 4, overflow: 'hidden', marginBottom: 5 },
   fill:    { height: '100%', borderRadius: 4 },
-  pct:     { fontSize: 11 },
+  pct:     { fontSize: 14 },
 });
 
 const btc = StyleSheet.create({
@@ -2267,16 +2267,16 @@ const btc = StyleSheet.create({
   icon:      { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   badgeText: { fontSize: 12, fontWeight: '800' },
-  label:     { fontSize: 12.5, fontWeight: '600', marginBottom: 5 },
-  amount:    { fontSize: 17, fontWeight: '800' },
+  label:     { fontSize: 12, fontWeight: '600', marginBottom: 5 },
+  amount:    { fontSize: 20, fontWeight: '800' },
 });
 
 const bsR = StyleSheet.create({
   row:       { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13 },
   avatar:    { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  label:     { flex: 1, fontSize: 13.5, fontWeight: '600' },
+  label:     { flex: 1, fontSize: 16, fontWeight: '600' },
   badge:     { paddingHorizontal: 11, paddingVertical: 4, borderRadius: 20 },
-  badgeText: { fontSize: 12.5, fontWeight: '800', color: '#fff' },
+  badgeText: { fontSize: 12, fontWeight: '800', color: '#fff' },
 });
 
 const moB = StyleSheet.create({
@@ -2290,8 +2290,8 @@ const ti = StyleSheet.create({
   rank:    { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   rankText:{ fontSize: 12, fontWeight: '800' },
   nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  name:    { fontSize: 13, fontWeight: '600', flex: 1 },
-  qty:     { fontSize: 12.5, fontWeight: '800', marginLeft: 4 },
+  name:    { fontSize: 16, fontWeight: '600', flex: 1 },
+  qty:     { fontSize: 14, fontWeight: '800', marginLeft: 4 },
   track:   { height: 8, borderRadius: 4, overflow: 'hidden' },
   fill:    { height: '100%', borderRadius: 4 },
 });
@@ -2299,40 +2299,40 @@ const ti = StyleSheet.create({
 const ar = StyleSheet.create({
   row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
   avatar:   { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  num:      { fontSize: 13.5, fontWeight: '700' },
-  meta:     { fontSize: 11.5, marginTop: 2 },
-  amount:   { fontSize: 13.5, fontWeight: '800' },
+  num:      { fontSize: 14, fontWeight: '700' },
+  meta:     { fontSize: 16, marginTop: 2 },
+  amount:   { fontSize: 14, fontWeight: '800' },
   badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  badgeText:{ fontSize: 10.5, fontWeight: '700', textTransform: 'capitalize' },
+  badgeText:{ fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
 });
 
 const rr = StyleSheet.create({
   row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
   avatar:   { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  num:      { fontSize: 13.5, fontWeight: '700' },
+  num:      { fontSize: 14, fontWeight: '700' },
   srcBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
-  srcText:  { fontSize: 9.5, fontWeight: '800' },
-  meta:     { fontSize: 11.5, marginTop: 2 },
-  time:     { fontSize: 10.5, marginTop: 2 },
-  amount:   { fontSize: 13.5, fontWeight: '800' },
+  srcText:  { fontSize: 11, fontWeight: '800' },
+  meta:     { fontSize: 16, marginTop: 2 },
+  time:     { fontSize: 16, marginTop: 2 },
+  amount:   { fontSize: 14, fontWeight: '800' },
   badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  badgeText:{ fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
+  badgeText:{ fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
 });
 
 const resR = StyleSheet.create({
   row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
   avatar:   { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  name:     { fontSize: 13.5, fontWeight: '700' },
-  meta:     { fontSize: 11.5, marginTop: 2 },
-  time:     { fontSize: 10.5, marginTop: 2 },
+  name:     { fontSize: 16, fontWeight: '700' },
+  meta:     { fontSize: 14, marginTop: 2 },
+  time:     { fontSize: 14, marginTop: 2 },
   badge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
-  badgeText:{ fontSize: 10.5, fontWeight: '700', textTransform: 'capitalize' },
+  badgeText:{ fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
 });
 
 const qlS = StyleSheet.create({
   card:  { borderRadius: 16, padding: 18, alignItems: 'center', borderWidth: 1, gap: 11, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, minHeight: 85 },
   icon:  { width: 52, height: 52, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  label: { fontSize: 12.5, fontWeight: '700', textAlign: 'center' },
+  label: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
 });
 
 // ── Tables Available card (matches CSPos web design) ─────────────────────────
@@ -2342,8 +2342,8 @@ const tablC = StyleSheet.create({
   iconArea:    { alignItems: 'center', justifyContent: 'center',
                  paddingTop: 22, paddingBottom: 18 },
   info:        { paddingHorizontal: 12, paddingBottom: 16, alignItems: 'center', gap: 5 },
-  name:        { fontSize: 14, fontWeight: '700', textAlign: 'center' },
-  cap:         { fontSize: 12, textAlign: 'center' },
+  name:        { fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  cap:         { fontSize: 14, textAlign: 'center' },
   statusLabel: { fontSize: 12.5, fontWeight: '700', marginTop: 2 },
 });
 
@@ -2355,8 +2355,8 @@ const tmc = StyleSheet.create({
   rankText:   { fontSize: 11, fontWeight: '800' },
   trendBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 20 },
   trendText:  { fontSize: 10, fontWeight: '800' },
-  name:       { fontSize: 13, fontWeight: '700', lineHeight: 17.5, marginTop: 8, marginBottom: 4 },
-  qty:        { fontSize: 12.5, fontWeight: '800' },
+  name:       { fontSize: 16, fontWeight: '700', lineHeight: 21, marginTop: 8, marginBottom: 4 },
+  qty:        { fontSize: 14, fontWeight: '800' },
   track:      { height: 6, borderRadius: 3, overflow: 'hidden' },
   fill:       { height: '100%', borderRadius: 3 },
 });
@@ -2365,9 +2365,9 @@ const tmc = StyleSheet.create({
 const nr = StyleSheet.create({
   row:      { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 13, borderBottomWidth: 1 },
   iconWrap: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
-  title:    { fontSize: 13, lineHeight: 18.5, fontWeight: '500' },
-  msg:      { fontSize: 12, marginTop: 2, lineHeight: 16.5 },
-  time:     { fontSize: 11 },
+  title:    { fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  msg:      { fontSize: 14, marginTop: 2, lineHeight: 20 },
+  time:     { fontSize: 14 },
   dot:      { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
 });
 
@@ -2376,8 +2376,8 @@ const cdm = StyleSheet.create({
   backdrop:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   box:        { width: '100%', maxWidth: 380, borderRadius: 20, padding: 24, shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
   header:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
-  title:      { fontSize: 17, fontWeight: '800', letterSpacing: -0.3 },
-  label:      { fontSize: 12, fontWeight: '700', letterSpacing: 0.3, marginBottom: 6 },
+  title:      { fontSize: 24, fontWeight: '800', letterSpacing: -0.3 },
+  label:      { fontSize: 14, fontWeight: '700', letterSpacing: 0.3, marginBottom: 6 },
   input:      { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, fontWeight: '600', marginBottom: 14 },
   hint:       { fontSize: 11.5, marginBottom: 20, lineHeight: 16, textAlign: 'center' },
   actions:    { flexDirection: 'row', gap: 10 },

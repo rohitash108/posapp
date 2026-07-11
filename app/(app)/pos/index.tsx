@@ -1344,7 +1344,9 @@ export default function POSScreen() {
   );
 
   // ── Item card renderer ─────────────────────────────────────────────────────
-  function renderItemCard({ item }: { item: Item }) {
+  function renderItemCard({ item }: { item: Item | null }) {
+    // Spacer — fills empty cells in the last row so cards don't stretch
+    if (!item) return <View style={{ flex: 1 }} />;
     const qty    = getCartQty(item);
     const imgUrl = itemImageUrl(item.image);
     const ft     = item.food_type;
@@ -1874,10 +1876,7 @@ export default function POSScreen() {
                   <View style={[sh.railIcon, active && sh.railIconActive]}>
                     <Ionicons name={c.id === null ? 'grid-outline' : 'pricetag-outline'} size={13} color={active ? '#0D76E1' : '#9ca3af'} />
                   </View>
-                  <Text style={[sh.railLabel, active && sh.railLabelActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{c.name}</Text>
-                  <View style={[sh.railBadge, active && sh.railBadgeActive]}>
-                    <Text style={[sh.railBadgeText, active && sh.railBadgeTextActive]}>{c.count}</Text>
-                  </View>
+                  <Text style={[sh.railLabel, active && sh.railLabelActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{c.name}</Text>
                 </Pressable>
               );
             })}
@@ -1917,8 +1916,12 @@ export default function POSScreen() {
           <Text style={sh.itemCountText}>{displayItems.length} items</Text>
 
           <FlatList
-            data={displayItems}
-            keyExtractor={i => String(i.id)}
+            data={(() => {
+              const rem = displayItems.length % cols;
+              if (rem === 0) return displayItems as (Item | null)[];
+              return [...displayItems, ...Array(cols - rem).fill(null)] as (Item | null)[];
+            })()}
+            keyExtractor={(i, idx) => i ? String(i.id) : `__sp${idx}`}
             numColumns={cols}
             key={`grid-${cols}`}
             columnWrapperStyle={{ gap: 10, paddingHorizontal: 12 }}
@@ -2422,19 +2425,19 @@ function mkSh(c: _TC) { return StyleSheet.create({
   posHeader:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, gap: 12 },
   posBackBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
   posBackText:{ fontSize: 13, fontWeight: '600', color: c.text },
-  posTitle:   { fontSize: 18, fontWeight: '800', color: c.heading, letterSpacing: 0.2 },
+  posTitle:   { fontSize: 28, fontWeight: '800', color: c.heading, letterSpacing: 0.2 },
 
   rail:       { width: 200, backgroundColor: c.surface, borderRightWidth: 1, borderRightColor: c.border },
   railHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingTop: 14, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: c.border },
   backBtn:    { width: 28, height: 28, borderRadius: 8, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  railTitle:  { flex: 1, fontSize: 11, fontWeight: '800', color: c.text, letterSpacing: 1, textTransform: 'uppercase' },
-  railCount:  { fontSize: 10, color: c.textMuted, fontWeight: '600' },
+  railTitle:  { flex: 1, fontSize: 14, fontWeight: '800', color: c.text, letterSpacing: 1, textTransform: 'uppercase' },
+  railCount:  { fontSize: 14, color: c.textMuted, fontWeight: '600' },
   railItem:   { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 10, paddingVertical: 10, marginHorizontal: 6, marginBottom: 1, borderRadius: 9, position: 'relative', overflow: 'hidden' },
   railItemActive: { backgroundColor: 'rgba(13,118,225,0.08)' },
   railActiveBar:  { position: 'absolute', left: 0, top: 6, bottom: 6, width: 3, backgroundColor: '#0D76E1', borderRadius: 2 },
   railIcon:       { width: 26, height: 26, borderRadius: 7, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   railIconActive: { backgroundColor: 'rgba(13,118,225,0.12)' },
-  railLabel:      { flex: 1, fontSize: 12.5, fontWeight: '500', color: c.text },
+  railLabel:      { flex: 1, fontSize: 11, fontWeight: '500', color: c.text },
   railLabelActive:{ color: '#0D76E1', fontWeight: '700' },
   railBadge:      { backgroundColor: c.surfaceAlt, borderRadius: 999, paddingHorizontal: 5, paddingVertical: 1 },
   railBadgeActive:{ backgroundColor: 'rgba(13,118,225,0.12)' },
@@ -2444,23 +2447,23 @@ function mkSh(c: _TC) { return StyleSheet.create({
   grid:       { flex: 1, flexDirection: 'column' },
   posTopBar:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: c.sidebar, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   navBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.06)' },
-  navBtnText: { fontSize: 11.5, fontWeight: '600', color: c.brandMuted },
+  navBtnText: { fontSize: 16, fontWeight: '600', color: c.brandMuted },
   toolbar:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, flexWrap: 'wrap' },
   searchBox:  { flex: 1, minWidth: 140, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
-  searchInput:{ flex: 1, fontSize: 13.5, color: c.heading },
+  searchInput:{ flex: 1, fontSize: 16, color: c.heading },
   foodFilters:{ flexDirection: 'row', gap: 5 },
   foodChip:   { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
   foodChipActive: { backgroundColor: 'rgba(13,118,225,0.1)', borderColor: '#93c5fd' },
   foodDot:    { width: 7, height: 7, borderRadius: 4 },
-  foodChipText: { fontSize: 11.5, fontWeight: '500', color: c.text },
+  foodChipText: { fontSize: 12.5, fontWeight: '500', color: c.text },
   foodChipTextActive: { color: '#1d4ed8' },
-  itemCountText: { fontSize: 11, color: c.textMuted, fontWeight: '500', paddingHorizontal: 14, marginBottom: 2 },
+  itemCountText: { fontSize: 14, color: c.textMuted, fontWeight: '500', paddingHorizontal: 14, marginBottom: 2 },
   emptyGrid:  { alignItems: 'center', paddingTop: 70, gap: 10 },
   emptyGridText: { color: c.textMuted, fontSize: 14 },
 
   cartPanel:  { width: 340, backgroundColor: c.surface, borderLeftWidth: 1, borderLeftColor: c.border, flexDirection: 'column' },
   cartHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: c.sidebar },
-  cartHeaderTitle: { fontSize: 13.5, fontWeight: '700', color: '#fff', flex: 1 },
+  cartHeaderTitle: { fontSize: 16, fontWeight: '700', color: '#fff', flex: 1 },
   cartBadge:  { backgroundColor: c.brand, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   cartBadgeText: { color: c.brandDark, fontSize: 11, fontWeight: '800' },
 
@@ -2468,8 +2471,8 @@ function mkSh(c: _TC) { return StyleSheet.create({
   recentLabel:  { fontSize: 9.5, fontWeight: '800', color: c.textMuted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 },
   recentCard:   { backgroundColor: c.surfaceAlt, borderRadius: 8, padding: 8, minWidth: 110, borderTopWidth: 3, borderWidth: 1, borderColor: c.border },
   recentNum:    { fontSize: 12, fontWeight: '800', color: c.heading, marginBottom: 2 },
-  recentCust:   { fontSize: 10.5, color: c.textMuted, marginBottom: 2 },
-  recentStatus: { fontSize: 9.5, fontWeight: '700', textTransform: 'capitalize', marginBottom: 2 },
+  recentCust:   { fontSize: 14, color: c.textMuted, marginBottom: 2 },
+  recentStatus: { fontSize: 12, fontWeight: '700', textTransform: 'capitalize', marginBottom: 2 },
   recentAmt:    { fontSize: 12, fontWeight: '800', color: c.brand },
 }); }
 
@@ -2481,13 +2484,13 @@ function mkIc(c: _TC) { return StyleSheet.create({
   badge:      { position: 'absolute', top: 7, left: 7, zIndex: 4, backgroundColor: '#0D76E1', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
   badgeText:  { color: '#fff', fontSize: 10, fontWeight: '800' },
   foodDot:    { position: 'absolute', top: 9, right: 9, zIndex: 4, width: 16, height: 16, borderRadius: 3, alignItems: 'center', justifyContent: 'center' },
-  foodDotLabel: { color: '#fff', fontSize: 8, fontWeight: '800' },
+  foodDotLabel: { color: '#fff', fontSize: 10, fontWeight: '800' },
   imgWrap:    { aspectRatio: 4 / 3, backgroundColor: c.surfaceAlt, borderRadius: 7, marginBottom: 7, overflow: 'hidden' },
   img:        { width: '100%', height: '100%' },
   imgPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   name:       { fontSize: 12.5, fontWeight: '600', color: c.heading, marginBottom: 5, lineHeight: 16 },
   bottom:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  price:      { fontSize: 13, fontWeight: '800', color: '#0D76E1' },
+  price:      { fontSize: 16, fontWeight: '800', color: '#0D76E1' },
   varTag:     { fontSize: 9.5, color: c.textMuted, backgroundColor: c.surfaceAlt, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
   unavailOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
   unavailText: { fontSize: 10, fontWeight: '700', color: '#fca5a5' },
@@ -2501,25 +2504,25 @@ function mkCp(c: _TC) { return StyleSheet.create({
   orderTypes:       { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: c.border, backgroundColor: c.surfaceAlt },
   typeBtn:          { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 9 },
   typeBtnActive:    { backgroundColor: '#0D76E1', borderRadius: 0 },
-  typeBtnText:      { fontSize: 11, fontWeight: '600', color: c.textMuted },
+  typeBtnText:      { fontSize: 16, fontWeight: '600', color: c.textMuted },
   typeBtnTextActive:{ color: '#fff', fontWeight: '700' },
 
   // ── Selector rows (Customer / Waiter / Table) ─────────────────────────────
   selectorSection:  { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 8 },
   selectorLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 5 },
-  selectorLabel:    { fontSize: 10, fontWeight: '800', color: c.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' },
-  fieldLabel:       { fontSize: 10, fontWeight: '700', color: c.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' },
+  selectorLabel:    { fontSize: 14, fontWeight: '800', color: c.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' },
+  fieldLabel:       { fontSize: 14, fontWeight: '700', color: c.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' },
   fieldRow:         { flexDirection: 'row', gap: 6, alignItems: 'center' },
   fieldBox:         { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: c.surfaceAlt, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 9, borderWidth: 1, borderColor: c.border, flex: 1 },
-  fieldBoxText:     { fontSize: 13, color: c.textMuted },
+  fieldBoxText:     { fontSize: 16, color: c.textMuted },
   iconSmBtn:        { width: 30, height: 30, borderRadius: 8, backgroundColor: c.sidebar, alignItems: 'center', justifyContent: 'center' },
   iconBtn:          { width: 34, height: 34, borderRadius: 8, backgroundColor: 'rgba(13,118,225,0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#93c5fd' },
   // Selected state pill
   selectedPill:     { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: c.surface, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1.5, borderColor: '#bfdbfe', flex: 1 },
   selectedAvatar:   { width: 30, height: 30, borderRadius: 15, backgroundColor: '#0D76E1', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   selectedAvatarText: { fontSize: 13, fontWeight: '800', color: '#fff' },
-  selectedName:     { fontSize: 13, fontWeight: '700', color: c.heading },
-  selectedSub:      { fontSize: 10.5, color: c.textMuted, marginTop: 1 },
+  selectedName:     { fontSize: 16, fontWeight: '700', color: c.heading },
+  selectedSub:      { fontSize: 14, color: c.textMuted, marginTop: 1 },
   // Clear X button
   clearBtn:         { width: 28, height: 28, borderRadius: 8, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fca5a5', alignItems: 'center', justifyContent: 'center' },
   // Picker open button
@@ -2527,7 +2530,7 @@ function mkCp(c: _TC) { return StyleSheet.create({
   // Table required empty state
   tableEmpty:       { borderColor: '#fde68a', backgroundColor: 'rgba(253,230,138,0.12)' },
   tableRequiredBadge: { backgroundColor: 'rgba(253,230,138,0.2)', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
-  tableRequiredText:  { fontSize: 9.5, fontWeight: '700', color: '#d97706' },
+  tableRequiredText:  { fontSize: 12, fontWeight: '700', color: '#d97706' },
   // Required star
   requiredDot:      { width: 14, height: 14, borderRadius: 7, backgroundColor: 'rgba(239,68,68,0.1)', alignItems: 'center', justifyContent: 'center' },
   requiredStar:     { fontSize: 11, color: '#ef4444', fontWeight: '800' },
@@ -2538,25 +2541,25 @@ function mkCp(c: _TC) { return StyleSheet.create({
   tableLabelRow:    { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 5 },
   tableChip:        { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
   tableChipActive:     { backgroundColor: 'rgba(13,118,225,0.1)', borderColor: '#93c5fd' },
-  tableChipText:       { fontSize: 11.5, color: c.text, fontWeight: '500' },
+  tableChipText:       { fontSize: 14, color: c.text, fontWeight: '500' },
   tableChipTextActive: { color: '#0D76E1', fontWeight: '700' },
 
   // ── Ordered Menus header ─────────────────────────────────────────────────
   orderedHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 6, backgroundColor: c.surfaceAlt, borderBottomWidth: 1, borderBottomColor: c.border },
-  orderedTitle:   { fontSize: 11.5, fontWeight: '800', color: c.heading, textTransform: 'uppercase', letterSpacing: 0.5 },
+  orderedTitle:   { fontSize: 16, fontWeight: '800', color: c.heading, textTransform: 'uppercase', letterSpacing: 0.5 },
   addCustomBtn:   { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
-  addCustomText:  { fontSize: 11, fontWeight: '600', color: c.text },
-  totalMenus:     { fontSize: 11, fontWeight: '700', color: '#0D76E1' },
+  addCustomText:  { fontSize: 14, fontWeight: '600', color: c.text },
+  totalMenus:     { fontSize: 16, fontWeight: '700', color: '#0D76E1' },
 
   // ── Cart items ───────────────────────────────────────────────────────────
   itemList:       { flex: 1 },
   emptyCart:      { alignItems: 'center', paddingTop: 32, gap: 8 },
-  emptyCartText:  { fontSize: 13.5, fontWeight: '600', color: c.text },
-  emptyCartSub:   { fontSize: 11.5, color: c.textMuted },
+  emptyCartText:  { fontSize: 16, fontWeight: '600', color: c.text },
+  emptyCartSub:   { fontSize: 14, color: c.textMuted },
   cartItemBox:    { paddingHorizontal: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: c.border },
   cartItemBoxWarn: { backgroundColor: 'rgba(217,119,6,0.10)', borderLeftWidth: 2, borderLeftColor: '#d97706' },
   cartItemRow:    { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-  cartName:       { fontSize: 12.5, fontWeight: '600', color: c.heading, lineHeight: 16 },
+  cartName:       { fontSize: 16, fontWeight: '600', color: c.heading, lineHeight: 21 },
   cartVar:        { fontSize: 10.5, color: c.brand, marginTop: 1 },
   cartNeedsPriceBadge: { fontSize: 10, fontWeight: '700', color: '#d97706', marginTop: 1 },
   qtyRow:         { flexDirection: 'row', alignItems: 'center', gap: 2 },
@@ -2565,8 +2568,8 @@ function mkCp(c: _TC) { return StyleSheet.create({
   removeBtn:      { width: 22, height: 22, borderRadius: 5, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center', marginLeft: 2 },
   cartItemMeta:   { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: c.surfaceAlt, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
   cartMetaCol:    { flex: 1 },
-  cartMetaLabel:  { fontSize: 9.5, color: c.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  cartMetaVal:    { fontSize: 12, fontWeight: '700', color: c.text, marginTop: 1 },
+  cartMetaLabel:  { fontSize: 14, color: c.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
+  cartMetaVal:    { fontSize: 14, fontWeight: '700', color: c.text, marginTop: 1 },
   cartPriceInput: {
     fontSize: 12, fontWeight: '700', color: '#d97706', marginTop: 1, padding: 0,
     borderBottomWidth: 1, borderBottomColor: '#d97706', minWidth: 50,
@@ -2575,10 +2578,10 @@ function mkCp(c: _TC) { return StyleSheet.create({
 
   // ── Payment Summary ──────────────────────────────────────────────────────
   paymentSummary: { paddingHorizontal: 8, paddingTop: 8, paddingBottom: 4, borderTopWidth: 1, borderTopColor: c.border, gap: 5 },
-  sectionTitle:   { fontSize: 11, fontWeight: '800', color: c.heading, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  sectionTitle:   { fontSize: 16, fontWeight: '800', color: c.heading, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
   sumRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sumLabel:       { fontSize: 12.5, color: c.textMuted },
-  sumVal:         { fontSize: 12.5, fontWeight: '600', color: c.text },
+  sumLabel:       { fontSize: 14, color: c.textMuted },
+  sumVal:         { fontSize: 14, fontWeight: '600', color: c.text },
   divider:        { height: 1, backgroundColor: c.border, marginVertical: 4 },
 
   // Coupon
@@ -2586,9 +2589,9 @@ function mkCp(c: _TC) { return StyleSheet.create({
   couponActiveText: { flex: 1, fontSize: 12.5, fontWeight: '700', color: '#16a34a' },
   couponRow:        { flexDirection: 'row', gap: 6 },
   couponInput:      { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: c.border },
-  couponInputText:  { flex: 1, fontSize: 12.5, color: c.heading },
+  couponInputText:  { flex: 1, fontSize: 16, color: c.heading },
   couponApplyBtn:   { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: '#0D76E1', alignItems: 'center', justifyContent: 'center' },
-  couponApplyText:  { fontSize: 12, fontWeight: '700', color: '#fff' },
+  couponApplyText:  { fontSize: 14, fontWeight: '700', color: '#fff' },
 
   // Quick discount %
   quickDiscLabel:    { fontSize: 10.5, fontWeight: '700', color: c.textMuted },
@@ -2610,9 +2613,9 @@ function mkCp(c: _TC) { return StyleSheet.create({
 
   // Discount ₹ row
   discRupeeRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  discRupeeLabel: { fontSize: 12.5, color: c.textMuted },
+  discRupeeLabel: { fontSize: 16, color: c.textMuted },
   discRupeeInput: { backgroundColor: c.surfaceAlt, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: c.border, minWidth: 80, alignItems: 'flex-end' },
-  discRupeeText:  { fontSize: 12.5, fontWeight: '600', color: c.heading, textAlign: 'right' },
+  discRupeeText:  { fontSize: 16, fontWeight: '600', color: c.heading, textAlign: 'right' },
 
   // Amount to Pay
   amountToPayRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
@@ -2627,29 +2630,29 @@ function mkCp(c: _TC) { return StyleSheet.create({
 
   // Change / Balance due
   changeDueRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  changeDueLabel: { fontSize: 12.5, color: c.textMuted },
-  changeDueVal:   { fontSize: 13, fontWeight: '800' },
+  changeDueLabel: { fontSize: 14, color: c.textMuted },
+  changeDueVal:   { fontSize: 14, fontWeight: '800' },
 
   // ── Payment Method ───────────────────────────────────────────────────────
   payMethodSection: { paddingHorizontal: 8, paddingTop: 8, paddingBottom: 4, borderTopWidth: 1, borderTopColor: c.border, gap: 6 },
   payRow:     { flexDirection: 'row', gap: 5 },
   payBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 8, borderRadius: 8, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
   payBtnActive:  { backgroundColor: c.sidebar, borderColor: c.sidebar },
-  payText:       { fontSize: 11.5, fontWeight: '600', color: c.text },
+  payText:       { fontSize: 14, fontWeight: '600', color: c.text },
   payTextActive: { color: c.brand, fontWeight: '700' },
 
   // ── Order Notes ──────────────────────────────────────────────────────────
   notesSection:   { paddingHorizontal: 8, paddingTop: 8, paddingBottom: 4, borderTopWidth: 1, borderTopColor: c.border, gap: 5 },
   notesLabelRow:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  notesMeta:      { fontSize: 10.5, color: c.textMuted, fontStyle: 'italic' },
-  notesInput:     { backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: c.border, fontSize: 12.5, color: c.heading, minHeight: 50 },
+  notesMeta:      { fontSize: 13, color: c.textMuted, fontStyle: 'italic' },
+  notesInput:     { backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: c.border, fontSize: 16, color: c.heading, minHeight: 50 },
 
   // ── Bottom action buttons ────────────────────────────────────────────────
   btnSection:    { padding: 8, gap: 6, borderTopWidth: 1, borderTopColor: c.border },
   placeBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 13, borderRadius: 10, backgroundColor: c.sidebar, gap: 8 },
-  placeBtnLabel: { fontSize: 14, fontWeight: '800', color: c.brand },
+  placeBtnLabel: { fontSize: 16, fontWeight: '800', color: c.brand },
   kotBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,0.08)', gap: 6, position: 'relative' },
-  kotBtnText:    { fontSize: 13, fontWeight: '700', color: '#16a34a' },
+  kotBtnText:    { fontSize: 16, fontWeight: '700', color: '#16a34a' },
   kotDot:        { position: 'absolute', top: 4, right: 8, width: 7, height: 7, borderRadius: 4, backgroundColor: '#7c3aed' },
   btnRow3:       { flexDirection: 'row', gap: 5 },
   btn3:          { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 9, borderRadius: 8, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
@@ -2667,12 +2670,12 @@ function mkVm(c: _TC) { return StyleSheet.create({
   overlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   sheet:    { backgroundColor: c.surface, borderRadius: 18, width: '100%', maxWidth: 380, maxHeight: '70%', overflow: 'hidden' },
   header:   { flexDirection: 'row', alignItems: 'flex-start', padding: 16, backgroundColor: c.sidebar, gap: 10 },
-  title:    { fontSize: 16, fontWeight: '800', color: c.brand },
-  sub:      { fontSize: 11.5, color: 'rgba(201,165,42,0.7)', marginTop: 2 },
+  title:    { fontSize: 24, fontWeight: '800', color: c.brand },
+  sub:      { fontSize: 14, color: 'rgba(201,165,42,0.7)', marginTop: 2 },
   closeBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   row:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: c.border },
   dot:      { width: 8, height: 8, borderRadius: 4, backgroundColor: c.brand },
-  varName:  { flex: 1, fontSize: 14.5, fontWeight: '600', color: c.heading },
+  varName:  { flex: 1, fontSize: 16, fontWeight: '600', color: c.heading },
   varPrice: { fontSize: 15, fontWeight: '800', color: '#0D76E1', marginRight: 6 },
 }); }
 
@@ -2684,21 +2687,21 @@ function mkCpm(c: _TC) { return StyleSheet.create({
 
   // ── Header (forest-green chrome with white text) ──────────────────────────
   header:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: c.sidebar },
-  title:      { fontSize: 16, fontWeight: '800', color: c.brand },
-  subtitle:   { fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 2 },
+  title:      { fontSize: 24, fontWeight: '800', color: c.brand },
+  subtitle:   { fontSize: 14, color: 'rgba(255,255,255,0.55)', marginTop: 2 },
   closeBtn:   { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
 
   // ── Search ────────────────────────────────────────────────────────────────
   search:     { flexDirection: 'row', alignItems: 'center', gap: 9, marginHorizontal: 10, marginVertical: 8, backgroundColor: c.surfaceAlt, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
-  searchInput:{ flex: 1, fontSize: 13.5, color: c.heading },
+  searchInput:{ flex: 1, fontSize: 16, color: c.heading },
 
   // ── Walk-in name entry (customer picker) ──────────────────────────────────
   walkInSection: { marginHorizontal: 12, marginBottom: 4, backgroundColor: c.surface, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: c.border },
   walkInLabel:   { fontSize: 10.5, fontWeight: '700', color: c.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 },
   walkInRow:     { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  walkInInput:   { flex: 1, backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: c.heading, borderWidth: 1, borderColor: c.border },
+  walkInInput:   { flex: 1, backgroundColor: c.surfaceAlt, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: c.heading, borderWidth: 1, borderColor: c.border },
   walkInConfirm: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#0D76E1', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 },
-  walkInConfirmText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  walkInConfirmText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 
   // ── Divider ───────────────────────────────────────────────────────────────
   dividerRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 4 },
