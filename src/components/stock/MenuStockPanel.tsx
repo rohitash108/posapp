@@ -849,6 +849,7 @@ export default function MenuStockPanel({
   const isMobile = width < 640;
 
   const [data, setData] = useState<MenuStockData | null>(null);
+  const [totalSummary, setTotalSummary] = useState<MenuStockData['summary'] | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -878,6 +879,9 @@ export default function MenuStockPanel({
         tracking: tracking === 'all' ? undefined : tracking,
       });
       setData(res.data);
+      if (filter === 'all' && categoryId === null && tracking === 'all') {
+        setTotalSummary(res.data.summary);
+      }
     } catch (e: any) {
       const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to load menu stock';
       if (!silent) setError(msg);
@@ -943,11 +947,12 @@ export default function MenuStockPanel({
     return items.filter(i => i.name.toLowerCase().includes(q));
   }, [items, search]);
 
+  const ts = totalSummary ?? summary;
   const statItems = [
-    { icon: 'fast-food-outline', val: summary?.menu_item_count ?? 0, lbl: 'Items', color: '#2563eb' },
-    { icon: 'checkbox-outline', val: summary?.tracked_count ?? 0, lbl: 'Tracked', color: '#0f8f73' },
-    { icon: 'warning-outline', val: summary?.low_stock_count ?? 0, lbl: 'Low', color: '#d97706' },
-    { icon: 'close-circle-outline', val: summary?.out_of_stock_count ?? 0, lbl: 'Out', color: '#dc2626' },
+    { icon: 'fast-food-outline', val: ts?.menu_item_count ?? 0, lbl: 'Items', color: '#2563eb' },
+    { icon: 'checkbox-outline', val: ts?.tracked_count ?? 0, lbl: 'Tracked', color: '#0f8f73' },
+    { icon: 'warning-outline', val: ts?.low_stock_count ?? 0, lbl: 'Low', color: '#d97706' },
+    { icon: 'close-circle-outline', val: ts?.out_of_stock_count ?? 0, lbl: 'Out', color: '#dc2626' },
   ] as const;
 
   if (loading && !data) {
